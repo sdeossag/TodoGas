@@ -1,0 +1,14 @@
+Django>=5.0,<5.2
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+psycopg2-binary
+celery
+redis
+python-decouple
+WeasyPrint
+Pillow
+qrcode[pil]
+django-debug-toolbar
+django-storages[s3]
+boto3

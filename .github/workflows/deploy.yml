@@ -1,0 +1,30 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy a produccion
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      # ─────────────────────────────────────────────────────────
+      # Deploy a AWS se configura en Sprint 9 (diciembre 2026)
+      # antes del MVP Web.
+      #
+      # Lo que va aqui:
+      #   - Build de imagen Docker
+      #   - Push a AWS ECR
+      #   - Deploy a ECS (rolling update)
+      #   - Correr migraciones en produccion
+      #   - Notificar al equipo
+      # ─────────────────────────────────────────────────────────
+
+      - name: Placeholder deploy
+        run: echo "Deploy a AWS pendiente de configurar en Sprint 9"

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Trafico en claro bloqueado hacia la API y el bucket de evidencia: las fotos
+  y firmas viajan con datos de paciente y ubicacion.
+
+  debug-overrides solo aplica a builds debuggables, asi que el APK de release
+  no confia en CAs de usuario aunque el bloque siga en el archivo.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.todogas.com.co</domain>
+        <domain includeSubdomains="true">todogas-media-dev.s3.us-east-2.amazonaws.com</domain>
+    </domain-config>
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

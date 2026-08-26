@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer components {
+  .input-field {
+    @apply w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-800
+      placeholder:text-gray-400
+      focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent
+      disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm
+      font-medium bg-brand text-white transition-colors hover:bg-brand-light
+      focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm
+      font-medium bg-white text-gray-700 border border-gray-300 transition-colors
+      hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-400
+      focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm
+      font-medium bg-red-600 text-white transition-colors hover:bg-red-700
+      focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+}
+
+@layer utilities {
+  /* Scroll funcional pero sin barra visible (sidebar). */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

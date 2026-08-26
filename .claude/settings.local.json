@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd C:\\\\Users\\\\ASUS\\\\Downloads\\\\TodoGas\\\\backend; $env:PYTHONUTF8 = \"1\"; python manage.py makemigrations users 2>&1)",
+      "PowerShell(\\(Get-ItemProperty \"HKLM:\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\postgresql-x64-18\"\\).ImagePath)",
+      "PowerShell(Restart-Service *)",
+      "PowerShell(cd C:\\\\Users\\\\ASUS\\\\Downloads\\\\TodoGas\\\\backend; $env:LC_ALL = \"C\"; $env:LANG = \"C\"; python manage.py migrate 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -c \"ALTER USER todogas_user CREATEDB;\" 2>&1)",
+      "PowerShell(Receive-Job *)"
+    ]
+  }
+}

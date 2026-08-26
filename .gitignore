@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Django
+*.sqlite3
+/media/
+/staticfiles/
+
+# Node
+node_modules/
+dist/
+.cache/
+
+# Environments
+.env
+.env.local
+.env.*.local
+
+# IDEs and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Docker
+postgres_data/
+
+# Firma del APK. El keystore es irrecuperable: respaldarlo fuera del repo.
+frontend/android/todogas-release.keystore
+*.keystore
+*.jks

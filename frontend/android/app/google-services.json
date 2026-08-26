@@ -1,0 +1,24 @@
+{
+  "project_info": {
+    "project_id": "todogas-cmms-placeholder",
+    "project_number": "000000000000"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:placeholder",
+        "android_client_info": {
+          "package_name": "com.todogas.cmms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "placeholder"
+        }
+      ],
+      "services": {}
+    }
+  ],
+  "configuration_version": "1"
+}

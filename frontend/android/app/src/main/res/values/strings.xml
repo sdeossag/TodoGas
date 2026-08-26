@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TodoGas</string>
+    <string name="title_activity_main">TodoGas</string>
+    <string name="package_name">com.todogas.cmms</string>
+    <string name="custom_url_scheme">com.todogas.cmms</string>
+</resources>

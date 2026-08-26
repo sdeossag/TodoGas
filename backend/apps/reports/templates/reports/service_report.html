@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Acta de Servicio OT-{{ work_order.wo_number }}</title>
+<style>
+  @page {
+    size: letter;
+    margin: 2cm;
+    @bottom-left {
+      content: "TodoGas CMMS \2014 Documento generado automaticamente";
+      font-size: 8pt;
+      color: #666;
+    }
+    @bottom-center {
+      content: counter(page) " de " counter(pages);
+      font-size: 8pt;
+      color: #666;
+    }
+    @bottom-right {
+      content: "Hash: {{ report_hash|slice:':16' }}...";
+      font-size: 8pt;
+      color: #666;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #222; }
+  h2 { font-size: 12pt; color: #1e3a5f; margin-bottom: 8px; margin-top: 16px; border-bottom: 1px solid #1e3a5f; padding-bottom: 4px; }
+  h3 { font-size: 10pt; font-weight: bold; color: #333; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  td, th { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; font-size: 9pt; }
+  th { background-color: #e8edf3; font-weight: bold; text-align: left; }
+  .header { background-color: #1e3a5f; color: white; padding: 16px 20px; margin-bottom: 20px; }
+  .header-title { font-size: 18pt; font-weight: bold; letter-spacing: 1px; }
+  .header-sub { font-size: 10pt; margin-top: 4px; opacity: 0.9; }
+  .header-table td { border: none; background: transparent; color: white; padding: 2px 0; }
+  .section { page-break-inside: avoid; margin-bottom: 20px; }
+  .group-header td { background-color: #f0f0f0; font-weight: bold; font-size: 9pt; }
+  .out-of-range { background-color: #fff9c4; }
+  .photo-grid td { border: none; padding: 8px; vertical-align: top; text-align: center; }
+  .photo-grid img { max-width: 100%; max-height: 200px; border: 1px solid #ddd; }
+  .photo-caption { font-size: 8pt; color: #555; margin-top: 4px; }
+  .sig-table td { border: 1px solid #ccc; padding: 12px; text-align: center; vertical-align: top; width: 50%; }
+  .sig-table img { max-width: 200px; max-height: 100px; border: 1px solid #ddd; background: white; }
+  .label { font-size: 8pt; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+  .no-data { color: #888; font-style: italic; font-size: 9pt; padding: 8px 0; }
+  .meta-row { font-size: 8pt; color: #666; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<!-- ENCABEZADO -->
+<div class="header">
+  <table class="header-table">
+    <tr>
+      {% if logo_base64 %}
+      <td style="width:20%; vertical-align:middle">
+        <img src="data:image/png;base64,{{ logo_base64 }}"
+             style="height:46px; width:auto;" />
+      </td>
+      {% endif %}
+      <td style="vertical-align:middle">
+        <div class="header-title">ACTA DE SERVICIO</div>
+        <div class="header-sub">{{ work_order.get_task_type_display }}</div>
+      </td>
+      <td style="width:38%; text-align:right; vertical-align:middle">
+        <div style="font-size:14pt; font-weight:bold">OT-{{ work_order.wo_number }}</div>
+        <div class="header-sub">Emitido: {{ generated_at|date:"d/m/Y H:i" }}</div>
+        <div class="header-sub">Estado: {{ work_order.get_status_display }}</div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<!-- SECCION 1: Datos del activo -->
+<div class="section">
+  <h2>1. Datos del activo y la intervencion</h2>
+  <table>
+    <tr>
+      <th style="width:50%">Informacion del activo</th>
+      <th style="width:50%">Informacion de la intervencion</th>
+    </tr>
+    <tr>
+      <td>
+        <table style="border:none; margin:0">
+          <tr><td style="border:none; padding:2px 0"><span class="label">Hospital / Cliente</span><br><strong>{{ asset.hospital.name }}</strong></td></tr>
+          {% if asset.node %}<tr><td style="border:none; padding:2px 0"><span class="label">Area / Ubicacion</span><br>{{ asset.node.name }}</td></tr>{% endif %}
+          {% if asset.equipment_location %}<tr><td style="border:none; padding:2px 0"><span class="label">Ubicacion</span><br>{{ asset.equipment_location }}</td></tr>{% endif %}
+          <tr><td style="border:none; padding:2px 0"><span class="label">Nombre del activo</span><br><strong>{{ asset.name }}</strong></td></tr>
+          <tr><td style="border:none; padding:2px 0"><span class="label">Codigo interno</span><br>{{ asset.code }}</td></tr>
+          {% if asset.asset_type %}<tr><td style="border:none; padding:2px 0"><span class="label">Tipo de activo</span><br>{{ asset.asset_type }}</td></tr>{% endif %}
+        </table>
+      </td>
+      <td>
+        <table style="border:none; margin:0">
+          {% if asset.manufacturer %}<tr><td style="border:none; padding:2px 0"><span class="label">Fabricante</span><br>{{ asset.manufacturer }}</td></tr>{% endif %}
+          {% if asset.model %}<tr><td style="border:none; padding:2px 0"><span class="label">Modelo</span><br>{{ asset.model }}</td></tr>{% endif %}
+          {% if asset.serial_number %}<tr><td style="border:none; padding:2px 0"><span class="label">Numero de serie</span><br>{{ asset.serial_number }}</td></tr>{% endif %}
+          {% if work_order.completed_at %}<tr><td style="border:none; padding:2px 0"><span class="label">Fecha de intervencion</span><br>{{ work_order.completed_at|date:"d/m/Y H:i" }}</td></tr>{% endif %}
+          {% if work_order.scheduled_date %}<tr><td style="border:none; padding:2px 0"><span class="label">Fecha programada</span><br>{{ work_order.scheduled_date|date:"d/m/Y" }}</td></tr>{% endif %}
+          <tr><td style="border:none; padding:2px 0"><span class="label">Tecnico responsable</span><br><strong>{% if technician %}{{ technician.first_name }} {{ technician.last_name }}{% else %}No asignado{% endif %}</strong></td></tr>
+          {% if work_order.actual_duration %}<tr><td style="border:none; padding:2px 0"><span class="label">Duracion real</span><br>{{ work_order.actual_duration }}</td></tr>{% endif %}
+        </table>
+      </td>
+    </tr>
+  </table>
+  {% if work_order.description %}
+  <table><tr><th>Descripcion de la intervencion</th></tr><tr><td>{{ work_order.description }}</td></tr></table>
+  {% endif %}
+  {% if work_order.notes %}
+  <table><tr><th>Notas</th></tr><tr><td>{{ work_order.notes }}</td></tr></table>
+  {% endif %}
+</div>
+
+<!-- SECCION 2: Checklist -->
+<div class="section">
+  <h2>2. Checklist ejecutado</h2>
+  {% if checklist_response %}
+    {% regroup checklist_response.field_responses.all by field.group as groups %}
+    {% for group in groups %}
+      <table>
+        <tr class="group-header"><td colspan="3">{% if group.grouper %}{{ group.grouper }}{% else %}General{% endif %}</td></tr>
+        <tr><th style="width:35%">Campo</th><th style="width:35%">Respuesta</th><th style="width:30%">Observaciones</th></tr>
+        {% for fr in group.list %}
+        <tr>
+          <td>{{ fr.field.label }}</td>
+          <td>{{ fr.value|default:"—" }}</td>
+          <td>{{ fr.notes|default:"" }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    {% endfor %}
+    <div class="meta-row">
+      {% if checklist_response.started_at %}Inicio: {{ checklist_response.started_at|date:"d/m/Y H:i" }}{% endif %}
+      {% if checklist_response.completed_at %} &nbsp;|&nbsp; Fin: {{ checklist_response.completed_at|date:"d/m/Y H:i" }}{% endif %}
+    </div>
+  {% else %}
+    <p class="no-data">Esta OT no tenia checklist asociado.</p>
+  {% endif %}
+</div>
+
+<!-- SECCION 3: Evidencia fotografica -->
+<div class="section">
+  <h2>3. Evidencia fotografica</h2>
+  {% if photos %}
+    {% with photos_list=photos|slice:":10" %}
+    <table class="photo-grid">
+      {% for photo in photos_list %}
+        {% if forloop.counter0|divisibleby:2 %}<tr>{% endif %}
+        <td style="width:50%">
+          <img src="{{ photo.file_url }}" alt="Foto {{ forloop.counter }}">
+          {% if photo.caption %}<div class="photo-caption">{{ photo.caption }}</div>{% endif %}
+          <div class="photo-caption">{{ photo.taken_at|date:"d/m/Y H:i" }}</div>
+          {% if photo.latitude and photo.longitude %}
+          <div class="photo-caption">GPS: {{ photo.latitude }}, {{ photo.longitude }}</div>
+          {% endif %}
+        </td>
+        {% if forloop.counter|divisibleby:2 or forloop.last %}</tr>{% endif %}
+      {% endfor %}
+    </table>
+    {% endwith %}
+    {% if photos|length > 10 %}
+    <p class="no-data">Nota: Se muestran las primeras 10 fotos. Ver fotos adicionales en el sistema CMMS.</p>
+    {% endif %}
+  {% else %}
+    <p class="no-data">No se registraron fotos de evidencia.</p>
+  {% endif %}
+</div>
+
+<!-- SECCION 4: Materiales -->
+<div class="section">
+  <h2>4. Materiales utilizados</h2>
+  {% if stock_movements %}
+    <table>
+      <tr><th>Repuesto / Insumo</th><th>Cantidad</th><th>Unidad</th></tr>
+      {% for mov in stock_movements %}
+      <tr>
+        <td>{{ mov.item.name }} ({{ mov.item.code }})</td>
+        <td>{{ mov.quantity }}</td>
+        <td>{{ mov.item.unit_of_measure }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p class="no-data">No se registraron materiales utilizados.</p>
+  {% endif %}
+</div>
+
+<!-- SECCION 5: Firmas -->
+<div class="section">
+  <h2>5. Firmas</h2>
+  {% with tech_sig=None client_sig=None %}
+  {% for sig in signatures %}{% if sig.signature_type == "TECHNICIAN" %}{% with tech_sig=sig %}{% endwith %}{% endif %}{% endfor %}
+  {% for sig in signatures %}{% if sig.signature_type == "CLIENT" %}{% with client_sig=sig %}{% endwith %}{% endif %}{% endfor %}
+  <table class="sig-table">
+    <tr>
+      <td>
+        <div class="label">Firma del tecnico</div>
+        {% for sig in signatures %}{% if sig.signature_type == "TECHNICIAN" %}
+          <br><img src="{{ sig.file_url }}" alt="Firma tecnico">
+          <br><strong>{{ sig.signer_name }}</strong>
+          {% if sig.signer_role %}<br><span class="label">{{ sig.signer_role }}</span>{% endif %}
+          <br><span class="label">{{ sig.signed_at|date:"d/m/Y H:i" }}</span>
+          <br><span class="label" style="font-size:7pt">SHA-256: {{ sig.file_hash|slice:":16" }}...</span>
+        {% endif %}{% endfor %}
+        {% if not signatures %}<br><span class="no-data">No registrada</span>{% endif %}
+      </td>
+      <td>
+        <div class="label">Firma del receptor / cliente</div>
+        {% for sig in signatures %}{% if sig.signature_type == "CLIENT" %}
+          <br><img src="{{ sig.file_url }}" alt="Firma cliente">
+          <br><strong>{{ sig.signer_name }}</strong>
+          {% if sig.signer_role %}<br><span class="label">{{ sig.signer_role }}</span>{% endif %}
+          <br><span class="label">{{ sig.signed_at|date:"d/m/Y H:i" }}</span>
+        {% endif %}{% endfor %}
+        {% with has_client=False %}
+        {% for sig in signatures %}{% if sig.signature_type == "CLIENT" %}{% with has_client=True %}{% endwith %}{% endif %}{% endfor %}
+        {% endwith %}
+      </td>
+    </tr>
+  </table>
+  {% endwith %}
+</div>
+
+</body>
+</html>
