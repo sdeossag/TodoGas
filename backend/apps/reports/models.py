@@ -25,7 +25,13 @@ class GeneratedReport(models.Model):
     report_type = models.CharField(max_length=15, choices=ReportType.choices)
     title = models.CharField(max_length=255)
     file_url = models.CharField(max_length=500)
+    # sha256 de los bytes del PDF: prueba que el archivo entregado no cambio.
     file_hash = models.CharField(max_length=64)
+    # sha256 del contenido probatorio de la OT (apps.work_orders.integrity):
+    # prueba que el registro en base de datos sigue diciendo lo mismo. Vacio en
+    # reportes que no son de una OT concreta, como el consolidado por periodo.
+    content_hash = models.CharField(max_length=64, blank=True, default="")
+    integrity_version = models.CharField(max_length=8, blank=True, default="")
     generated_by = models.ForeignKey(
         "users.User", on_delete=models.PROTECT,
         null=True, blank=True,

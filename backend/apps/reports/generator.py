@@ -10,6 +10,10 @@ from apps.checklists.models import ChecklistResponse
 from apps.evidence.models import Photo, Signature
 from apps.inventory.models import StockMovement
 from apps.reports.utils import get_logo_base64
+from apps.work_orders.integrity import (
+    INTEGRITY_ALGORITHM_VERSION,
+    compute_wo_content_hash,
+)
 
 from .models import GeneratedReport
 
@@ -55,8 +59,10 @@ def generate_service_report_pdf(work_order):
     for s in signatures:
         s.file_url = _resolve_url(s.file_url)
 
-    contenido = f"{work_order.id}{work_order.wo_number}{work_order.completed_at}"
-    report_hash = hashlib.sha256(contenido.encode()).hexdigest()
+    # Hash del contenido probatorio: checklist, fotos, firmas, tecnico y
+    # observaciones. Es el que se imprime en el PDF y contra el que verifica
+    # /api/work-orders/{id}/integrity/.
+    report_hash = compute_wo_content_hash(work_order)
     generated_at = timezone.now()
 
     context = {
@@ -86,6 +92,8 @@ def generate_service_report_pdf(work_order):
         title=f"Acta de Servicio OT-{work_order.wo_number}",
         file_url=s3_key,
         file_hash=pdf_hash,
+        content_hash=report_hash,
+        integrity_version=INTEGRITY_ALGORITHM_VERSION,
         generated_by=None,
         generated_at=generated_at,
     )

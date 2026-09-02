@@ -56,6 +56,52 @@ class ChecklistTemplateVersion(models.Model):
             )
         ]
 
+    # `is_current` es el unico campo mutable: al publicar una version nueva hay
+    # que bajar la bandera de la anterior. Todo lo demas define QUE preguntaba
+    # el checklist, y editarlo reescribiria retroactivamente el contenido de
+    # OTs ya cerradas contra esta version. Editar un template crea una version
+    # nueva (ver ChecklistTemplateVersionCreateSerializer), nunca modifica esta.
+    _MUTABLE_FIELDS = frozenset({"is_current"})
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            return super().save(*args, **kwargs)
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            forbidden = set(update_fields) - self._MUTABLE_FIELDS
+            if forbidden:
+                raise ValueError(
+                    "ChecklistTemplateVersion es inmutable. Campos no "
+                    f"modificables: {sorted(forbidden)}. Publica una version "
+                    "nueva en lugar de editar esta."
+                )
+            return super().save(*args, **kwargs)
+
+        # Sin update_fields hay que comparar contra lo almacenado, porque un
+        # save() completo reescribiria toda la fila.
+        stored = type(self).objects.filter(pk=self.pk).values().first()
+        if stored is not None:
+            changed = {
+                name
+                for name, value in stored.items()
+                if getattr(self, name, value) != value
+            }
+            forbidden = changed - self._MUTABLE_FIELDS
+            if forbidden:
+                raise ValueError(
+                    "ChecklistTemplateVersion es inmutable. Campos no "
+                    f"modificables: {sorted(forbidden)}. Publica una version "
+                    "nueva en lugar de editar esta."
+                )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError(
+            "ChecklistTemplateVersion no se elimina: las OTs cerradas quedan "
+            "ancladas a la version que usaron."
+        )
+
     def __str__(self):
         return f"{self.template.name} v{self.version_number}"
 
@@ -97,6 +143,24 @@ class ChecklistField(models.Model):
     class Meta:
         db_table = "checklists_checklistfield"
         ordering = ["version", "sort_order"]
+
+    def save(self, *args, **kwargs):
+        # Un campo pertenece a una version publicada y define la pregunta que
+        # respondio el tecnico. Editar el label de un campo cambiaria, sobre
+        # una OT ya cerrada, que se le pregunto: la respuesta seguiria ahi pero
+        # contra otro enunciado. Los campos se crean junto con su version.
+        if not self._state.adding:
+            raise ValueError(
+                "ChecklistField es inmutable. Publica una version nueva del "
+                "template en lugar de editar sus campos."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError(
+            "ChecklistField no se elimina: las respuestas de OTs cerradas "
+            "apuntan a el."
+        )
 
     def __str__(self):
         return f"{self.version} → {self.label[:60]}"

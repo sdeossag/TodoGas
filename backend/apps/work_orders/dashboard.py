@@ -1,4 +1,3 @@
-import hashlib
 from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
@@ -171,9 +170,3 @@ def calculate_assets_without_maintenance(days=90, hospital_id=None):
             }
         )
     return result
-
-
-def compute_wo_integrity_hash(work_order):
-    """Same algorithm used in reports/generator.py when a WO is completed."""
-    content = f"{work_order.id}{work_order.wo_number}{work_order.completed_at}"
-    return hashlib.sha256(content.encode()).hexdigest()

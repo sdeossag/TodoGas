@@ -12,7 +12,7 @@ from apps.audit.models import AuditLog
 from apps.users.models import User
 from apps.users.permissions import IsAdmin, IsAdminOrSup
 
-from .dashboard import compute_wo_integrity_hash
+from .integrity import INTEGRITY_ALGORITHM_VERSION, compute_wo_content_hash
 from .models import WorkOrder, WorkOrderStatusHistory
 from .serializers import (
     WorkOrderCreateSerializer,
@@ -37,6 +37,28 @@ def _get_client_ip(request):
     if x_forwarded_for:
         return x_forwarded_for.split(",")[0].strip()
     return request.META.get("REMOTE_ADDR")
+
+
+# Estados terminales: la OT ya es un registro con valor probatorio y no admite
+# mas cambios (RF-TR-03, RF-OT-03, RF-OT-07). El unico camino de salida seria
+# una OT nueva, nunca la edicion de la cerrada.
+_TERMINAL_STATUSES = (WorkOrder.Status.COMPLETED, WorkOrder.Status.CANCELLED)
+
+
+def _terminal_state_response(wo):
+    """403 con el motivo, o None si la OT todavia admite cambios."""
+    if wo.status not in _TERMINAL_STATUSES:
+        return None
+    return Response(
+        {
+            "detail": (
+                f"La OT {wo.wo_number} esta en estado {wo.status} y no admite "
+                "modificaciones. Los registros de una intervencion cerrada son "
+                "inmutables."
+            )
+        },
+        status=status.HTTP_403_FORBIDDEN,
+    )
 
 
 class WorkOrderViewSet(viewsets.ModelViewSet):
@@ -151,6 +173,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
                 {"detail": "Solo puedes editar tus propias OTs."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if blocked := _terminal_state_response(wo):
+            return blocked
         return super().partial_update(request, *args, **kwargs)
 
     # DELETE always returns 405 (http_method_names excludes 'delete', so this
@@ -187,6 +211,11 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if request.user.role != User.Role.ADMIN:
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
+        # Segunda via de mutacion: `assign` no pasa por partial_update, asi que
+        # necesita su propio guard o el tecnico de una OT cerrada seguiria
+        # siendo editable (RF-OT-06 solo permite reasignar en estados activos).
+        if blocked := _terminal_state_response(wo):
+            return blocked
         assigned_to_id = request.data.get("assigned_to")
         if not assigned_to_id:
             return Response(
@@ -217,6 +246,40 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         return Response(
             WorkOrderDetailSerializer(wo, context={"request": request}).data
         )
+
+    @action(detail=True, methods=["post"], url_path="regenerate-report")
+    def regenerate_report(self, request, pk=None):
+        """
+        Vuelve a lanzar la generacion del PDF de una OT ya completada.
+
+        El unico disparador normal es la transicion a COMPLETED. Si esa
+        ejecucion falla (worker caido, WeasyPrint sin librerias nativas), la OT
+        se queda sin reporte y no habia forma de recuperarla desde la interfaz.
+        """
+        if request.user.role != User.Role.ADMIN:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        wo = self.get_object()
+        if wo.status != WorkOrder.Status.COMPLETED:
+            return Response(
+                {"detail": "Solo se puede generar el reporte de una OT completada."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from apps.reports.tasks import generate_work_order_pdf
+
+        generate_work_order_pdf.delay(str(wo.id))
+
+        AuditLog.objects.create(
+            user=request.user,
+            action=AuditLog.Action.CREATE,
+            entity_type="GeneratedReport",
+            entity_id=wo.id,
+            changes={"action": "regenerate", "work_order": str(wo.id)},
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+        return Response({"status": "queued"})
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
@@ -296,14 +359,44 @@ class IntegrityCheckView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        recomputed = compute_wo_integrity_hash(wo)
-        stored_hash = report.file_hash
+        stored_hash = report.content_hash
+        if not stored_hash:
+            # Reporte anterior a la introduccion del hash de contenido: no se
+            # puede afirmar ni negar la integridad, y decir "verificado" seria
+            # peor que decir que no se sabe.
+            return Response(
+                {
+                    "verified": None,
+                    "message": (
+                        "El reporte se genero antes de que existiera el hash de "
+                        "contenido. Regenera el reporte para poder verificarlo."
+                    ),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if report.integrity_version != INTEGRITY_ALGORITHM_VERSION:
+            return Response(
+                {
+                    "verified": None,
+                    "message": (
+                        f"El hash se calculo con el algoritmo "
+                        f"{report.integrity_version or 'desconocido'} y el actual "
+                        f"es {INTEGRITY_ALGORITHM_VERSION}. Regenera el reporte."
+                    ),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        recomputed = compute_wo_content_hash(wo)
         verified = recomputed == stored_hash
 
         return Response(
             {
                 "verified": verified,
                 "stored_hash": stored_hash[:16] + "...",
+                "recomputed_hash": recomputed[:16] + "...",
+                "algorithm_version": INTEGRITY_ALGORITHM_VERSION,
                 "message": (
                     "Integridad verificada" if verified else "ALERTA: El documento fue modificado"
                 ),
