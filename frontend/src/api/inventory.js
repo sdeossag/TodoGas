@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
+import { fetchAllPages } from './pagination'
 
 export function useInventoryItems(filters = {}) {
   return useQuery({
     queryKey: ['inventory-items', filters],
-    queryFn: () => client.get('/api/inventory/items/', { params: filters }).then((r) => r.data),
+    queryFn: () => fetchAllPages(client, '/api/inventory/items/', filters),
   })
 }
 
@@ -45,7 +46,7 @@ export function useLowStockItems() {
 export function useStockMovements(filters = {}) {
   return useQuery({
     queryKey: ['stock-movements', filters],
-    queryFn: () => client.get('/api/inventory/movements/', { params: filters }).then((r) => r.data),
+    queryFn: () => fetchAllPages(client, '/api/inventory/movements/', filters),
     enabled: Object.values(filters).some(Boolean) || Object.keys(filters).length === 0,
   })
 }

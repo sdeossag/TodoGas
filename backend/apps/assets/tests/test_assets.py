@@ -93,7 +93,7 @@ class TestAssetCRUD:
         url = reverse("assets-list")
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        codes = [a["code"] for a in response.data]
+        codes = [a["code"] for a in response.data["results"]]
         assert "A001" in codes
         assert "B001" not in codes
 
@@ -104,7 +104,7 @@ class TestAssetCRUD:
         url = reverse("assets-list")
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        codes = [a["code"] for a in response.data]
+        codes = [a["code"] for a in response.data["results"]]
         assert "T001" in codes
         assert "T002" in codes
 
@@ -115,7 +115,7 @@ class TestAssetCRUD:
         url = reverse("assets-list") + "?search=Ventilador"
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        codes = [a["code"] for a in response.data]
+        codes = [a["code"] for a in response.data["results"]]
         assert "SRCH-01" in codes
         assert "SRCH-02" not in codes
 

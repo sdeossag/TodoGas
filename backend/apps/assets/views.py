@@ -153,11 +153,17 @@ class AssetViewSet(viewsets.ModelViewSet):
 
         search = self.request.query_params.get("search")
         if search:
+            # RF-AC-05: la busqueda cubre nombre, codigo interno, numero de
+            # serie, modelo, marca y nombre del hospital. Marca y hospital
+            # faltaban. Los seis campos tienen indice GIN trigram sobre
+            # Upper(campo), que es la forma en que Django compila icontains.
             qs = qs.filter(
                 Q(name__icontains=search)
                 | Q(code__icontains=search)
                 | Q(serial_number__icontains=search)
                 | Q(model__icontains=search)
+                | Q(manufacturer__icontains=search)
+                | Q(hospital__name__icontains=search)
             )
 
         return qs
@@ -233,14 +239,15 @@ class ClientPortalView(APIView):
         recent_wos = WorkOrder.objects.filter(
             asset__hospital=hospital,
             status=WorkOrder.Status.COMPLETED,
-        ).order_by('-completed_at')[:5]
+        ).select_related('asset').order_by('-completed_at')[:5]
 
         wo_data = [
             {
                 'id': str(wo.id),
                 'wo_number': wo.wo_number,
                 'title': wo.title,
-                'asset_name': wo.asset.name,
+                'status': wo.status,
+                'asset': {'id': str(wo.asset_id), 'name': wo.asset.name},
                 'completed_at': wo.completed_at.isoformat() if wo.completed_at else None,
             }
             for wo in recent_wos
@@ -260,8 +267,10 @@ class ClientPortalView(APIView):
                 url = r.file_url
             reports_data.append({
                 'id': str(r.id),
+                'title': r.title,
                 'generated_at': r.generated_at.isoformat(),
                 'download_url': url,
+                'file_hash': r.file_hash,
                 'wo_number': r.work_order.wo_number if r.work_order else None,
             })
 
@@ -270,9 +279,12 @@ class ClientPortalView(APIView):
                 'id': str(hospital.id),
                 'name': hospital.name,
                 'city': hospital.city,
+                'address': hospital.address,
             },
             'total_assets': total_assets,
             'assets_by_status': status_counts,
             'recent_work_orders': wo_data,
+            'recent_reports': reports_data,
+            # Alias historico: el APK publicado lee 'pending_reports'.
             'pending_reports': reports_data,
         })

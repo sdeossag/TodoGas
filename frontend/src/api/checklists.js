@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
+import { fetchAllPages } from './pagination'
 
 export function useChecklistTemplates(params = {}) {
   return useQuery({
     queryKey: ['checklist-templates', params],
-    queryFn: () => client.get('/api/checklists/templates/', { params }).then((r) => r.data),
+    queryFn: () => fetchAllPages(client, '/api/checklists/templates/', params),
   })
 }
 

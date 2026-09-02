@@ -130,7 +130,7 @@ class TestWorkOrderRoleFiltering:
         wo2 = make_wo(asset_b, admin, tec2)
         resp = auth_client(admin).get(reverse("work-orders-list"))
         assert resp.status_code == status.HTTP_200_OK
-        ids = [str(w["id"]) for w in resp.data]
+        ids = [str(w["id"]) for w in resp.data["results"]]
         assert str(wo1.id) in ids
         assert str(wo2.id) in ids
 
@@ -139,7 +139,7 @@ class TestWorkOrderRoleFiltering:
         wo_other = make_wo(asset_b, admin, tec2)
         resp = auth_client(tec).get(reverse("work-orders-list"))
         assert resp.status_code == status.HTTP_200_OK
-        ids = [str(w["id"]) for w in resp.data]
+        ids = [str(w["id"]) for w in resp.data["results"]]
         assert str(wo_mine.id) in ids
         assert str(wo_other.id) not in ids
 
@@ -151,7 +151,7 @@ class TestWorkOrderRoleFiltering:
         wo_other_hosp = make_wo(asset_b, admin, tec, wo_status=WorkOrder.Status.COMPLETED)
         resp = auth_client(cli_user).get(reverse("work-orders-list"))
         assert resp.status_code == status.HTTP_200_OK
-        ids = [str(w["id"]) for w in resp.data]
+        ids = [str(w["id"]) for w in resp.data["results"]]
         assert str(wo_completed.id) in ids
         assert str(wo_pending.id) not in ids
         assert str(wo_other_hosp.id) not in ids
@@ -211,7 +211,7 @@ class TestWorkOrderFilters:
         make_wo(asset, admin, tec, wo_status=WorkOrder.Status.COMPLETED)
         resp = auth_client(admin).get(reverse("work-orders-list") + "?status=PENDING")
         assert resp.status_code == status.HTTP_200_OK
-        assert all(w["status"] == "PENDING" for w in resp.data)
+        assert all(w["status"] == "PENDING" for w in resp.data["results"])
 
     def test_filter_is_overdue(self, admin, asset, tec):
         past = date.today() - timedelta(days=5)
@@ -219,7 +219,7 @@ class TestWorkOrderFilters:
         future = make_wo(asset, admin, tec, scheduled_date=date.today() + timedelta(days=5))
         resp = auth_client(admin).get(reverse("work-orders-list") + "?is_overdue=true")
         assert resp.status_code == status.HTTP_200_OK
-        ids = [str(w["id"]) for w in resp.data]
+        ids = [str(w["id"]) for w in resp.data["results"]]
         assert str(overdue.id) in ids
         assert str(future.id) not in ids
 
@@ -230,7 +230,7 @@ class TestWorkOrderFilters:
         make_wo(asset, admin, tec)  # titulo genérico "OT test"
         resp = auth_client(admin).get(reverse("work-orders-list") + "?search=Válvula")
         assert resp.status_code == status.HTTP_200_OK
-        ids = [str(w["id"]) for w in resp.data]
+        ids = [str(w["id"]) for w in resp.data["results"]]
         assert str(wo_match.id) in ids
 
     def test_ordering_high_priority_first(self, admin, asset, tec):
@@ -239,7 +239,7 @@ class TestWorkOrderFilters:
         make_wo(asset, admin, tec, priority=WorkOrder.Priority.MEDIUM)
         resp = auth_client(admin).get(reverse("work-orders-list"))
         assert resp.status_code == status.HTTP_200_OK
-        priorities = [w["priority"] for w in resp.data]
+        priorities = [w["priority"] for w in resp.data["results"]]
         assert priorities[0] == WorkOrder.Priority.HIGH
 
 
@@ -341,8 +341,8 @@ class TestWorkOrderHistory:
         history_url = reverse("work-order-history-list", kwargs={"work_order_pk": str(wo.id)})
         resp = auth_client(admin).get(history_url)
         assert resp.status_code == status.HTTP_200_OK
-        assert len(resp.data) == 1
-        assert resp.data[0]["to_status"] == WorkOrder.Status.IN_PROGRESS
+        assert resp.data["count"] == 1
+        assert resp.data["results"][0]["to_status"] == WorkOrder.Status.IN_PROGRESS
 
     def test_tec_cannot_see_history(self, tec, wo):
         history_url = reverse("work-order-history-list", kwargs={"work_order_pk": str(wo.id)})

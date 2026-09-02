@@ -54,7 +54,7 @@ def test_list_templates_authenticated(client_tec, template):
     baker.make(ChecklistTemplate, name="Otra Plantilla")
     resp = client_tec.get("/api/checklists/templates/")
     assert resp.status_code == 200
-    assert len(resp.data) >= 2
+    assert resp.data["count"] >= 2
 
 
 @pytest.mark.django_db
@@ -115,6 +115,8 @@ def test_set_current_version(client_admin, template, version, admin):
 def test_list_includes_current_version_info(client_admin, template, version):
     resp = client_admin.get("/api/checklists/templates/")
     assert resp.status_code == 200
-    t_data = next(t for t in resp.data if str(t["id"]) == str(template.id))
+    t_data = next(
+        t for t in resp.data["results"] if str(t["id"]) == str(template.id)
+    )
     assert t_data["current_version_number"] == 1
     assert t_data["fields_count"] == 2

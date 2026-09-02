@@ -1,9 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
+import { fetchAllPages } from './pagination'
 
-/** Fetcher suelto: lo comparten useWorkOrders y el hook offline. */
+/**
+ * Fetcher suelto: lo comparten useWorkOrders y el hook offline.
+ *
+ * Devuelve siempre un array. useOfflineWorkOrders se lo pasa tal cual a
+ * saveWorkOrdersOffline() para sembrar SQLite, asi que si aqui se colara la
+ * envoltura paginada la cache offline del tecnico se quedaria vacia sin dar
+ * ningun error.
+ */
 export function fetchWorkOrders(params = {}) {
-  return client.get('/api/work-orders/', { params }).then((r) => r.data)
+  return fetchAllPages(client, '/api/work-orders/', params)
 }
 
 export function useWorkOrders(params = {}, options = {}) {
@@ -77,7 +85,7 @@ export function useCancelWorkOrder(id) {
 export function useWorkOrderHistory(id, allowed = true) {
   return useQuery({
     queryKey: ['work-orders', id, 'history'],
-    queryFn: () => client.get(`/api/work-orders/${id}/history/`).then((r) => r.data),
+    queryFn: () => fetchAllPages(client, `/api/work-orders/${id}/history/`),
     enabled: !!id && allowed,
   })
 }

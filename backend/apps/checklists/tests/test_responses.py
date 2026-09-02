@@ -121,7 +121,7 @@ def test_tec_cannot_see_other_tec_response(client_tec, work_order, tec2, version
     ChecklistResponse.objects.create(work_order=wo2, version=version, completed_by=tec2)
     resp = client_tec.get("/api/checklists/responses/")
     assert resp.status_code == 200
-    assert len(resp.data) == 0
+    assert resp.data["count"] == 0
 
 
 @pytest.mark.django_db

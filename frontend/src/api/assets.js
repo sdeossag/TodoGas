@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
+import { fetchAllPages } from './pagination'
 
 // ── Hospitals ──────────────────────────────────────────────────────────────
 
 export function useHospitals(params = {}) {
   return useQuery({
     queryKey: ['hospitals', params],
-    queryFn: () => client.get('/api/hospitals/', { params }).then((r) => r.data),
+    queryFn: () => fetchAllPages(client, '/api/hospitals/', params),
   })
 }
 
@@ -61,7 +62,7 @@ export function useAssetTree(hospitalId) {
 export function useAssets(params = {}) {
   return useQuery({
     queryKey: ['assets', params],
-    queryFn: () => client.get('/api/assets/', { params }).then((r) => r.data),
+    queryFn: () => fetchAllPages(client, '/api/assets/', params),
   })
 }
 

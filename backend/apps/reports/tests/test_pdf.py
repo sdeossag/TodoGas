@@ -208,7 +208,7 @@ def test_cli_can_see_reports_of_own_hospital(mock_storage, db, cli, report):
     mock_storage.url.return_value = FAKE_URL
     resp = auth_client(cli).get(REPORTS_URL)
     assert resp.status_code == status.HTTP_200_OK
-    assert len(resp.data) == 1
+    assert resp.data["count"] == 1
 
 
 @patch("apps.reports.serializers.default_storage")
@@ -216,7 +216,7 @@ def test_cli_cannot_see_reports_of_other_hospital(mock_storage, db, cli_b, repor
     mock_storage.url.return_value = FAKE_URL
     resp = auth_client(cli_b).get(REPORTS_URL)
     assert resp.status_code == status.HTTP_200_OK
-    assert len(resp.data) == 0
+    assert resp.data["count"] == 0
 
 
 @patch("apps.reports.tasks.send_report_email")

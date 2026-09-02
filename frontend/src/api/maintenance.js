@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
+import { fetchAllPages } from './pagination'
 
 const BASE = '/api/maintenance/plans'
 
 export function useMaintenancePlans(params = {}) {
   return useQuery({
     queryKey: ['maintenance-plans', params],
-    queryFn: () => client.get(`${BASE}/`, { params }).then((r) => r.data),
+    queryFn: () => fetchAllPages(client, `${BASE}/`, params),
   })
 }
 

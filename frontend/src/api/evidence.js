@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
+import { fetchAllPages } from './pagination'
 
 export function useWorkOrderPhotos(workOrderId) {
   return useQuery({
     queryKey: ['photos', workOrderId],
     queryFn: () =>
-      client.get('/api/evidence/photos/', { params: { work_order: workOrderId } }).then((r) => r.data),
+      fetchAllPages(client, '/api/evidence/photos/', { work_order: workOrderId }),
     enabled: !!workOrderId,
   })
 }

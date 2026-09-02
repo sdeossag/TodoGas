@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.postgres",
     "apps.users",
     "apps.assets",
     "apps.checklists",
@@ -124,6 +125,12 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # Sin esto cada list endpoint devuelve la tabla entera (RF-AC-05,
+    # RNF-REN-01). Afecta solo a las acciones `list` de ViewSet y a las
+    # ListAPIView: las @action que construyen su propia Response no pasan por
+    # paginate_queryset y siguen devolviendo el objeto que ya devolvian.
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.DefaultPagination",
+    "PAGE_SIZE": 50,
 }
 
 # ── Email ──────────────────────────────────────────────────────────────────

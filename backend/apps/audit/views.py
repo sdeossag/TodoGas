@@ -1,6 +1,5 @@
 from django.db.models import Q
 from rest_framework import viewsets
-from rest_framework.pagination import PageNumberPagination
 
 from apps.users.permissions import IsAdmin
 
@@ -8,16 +7,11 @@ from .models import AuditLog
 from .serializers import AuditLogSerializer
 
 
-class AuditPagination(PageNumberPagination):
-    page_size = 50
-    page_size_query_param = 'page_size'
-    max_page_size = 200
-
-
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AuditLogSerializer
     permission_classes = [IsAdmin]
-    pagination_class = AuditPagination
+    # Usa config.pagination.DefaultPagination, identica a la que este
+    # ViewSet definia por su cuenta cuando era el unico endpoint paginado.
 
     def get_queryset(self):
         qs = AuditLog.objects.select_related('user').order_by('-timestamp')

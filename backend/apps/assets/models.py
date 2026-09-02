@@ -1,6 +1,8 @@
 import uuid
 
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
+from django.db.models.functions import Upper
 
 
 class Hospital(models.Model):
@@ -29,6 +31,14 @@ class Hospital(models.Model):
     class Meta:
         db_table = "assets_hospital"
         ordering = ["name"]
+        indexes = [
+            # RF-AC-05 pide que la busqueda de activos alcance tambien el
+            # nombre del hospital, que se resuelve por join contra esta tabla.
+            GinIndex(
+                OpClass(Upper("name"), name="gin_trgm_ops"),
+                name="idx_hospital_name_trgm",
+            ),
+        ]
 
     def __str__(self):
         return self.name
@@ -148,6 +158,36 @@ class Asset(models.Model):
         indexes = [
             models.Index(fields=["hospital", "status"], name="idx_asset_hospital_status"),
             models.Index(fields=["serial_number"], name="idx_asset_serial"),
+            # Busqueda por subcadena sobre ~3.940 activos (RF-AC-05, RNF-ESC-02).
+            #
+            # Van sobre Upper(campo), no sobre la columna cruda, porque Django
+            # traduce `icontains` a UPPER(col::text) LIKE UPPER(%s): un indice
+            # sobre la columna sin envolver se crearia pero el planificador no
+            # lo usaria nunca.
+            #
+            # gin_trgm_ops y no full-text search: tsvector tokeniza por
+            # palabras y no encontraria "1234" dentro de un numero de serie,
+            # que es justo como se busca un equipo en campo.
+            GinIndex(
+                OpClass(Upper("name"), name="gin_trgm_ops"),
+                name="idx_asset_name_trgm",
+            ),
+            GinIndex(
+                OpClass(Upper("code"), name="gin_trgm_ops"),
+                name="idx_asset_code_trgm",
+            ),
+            GinIndex(
+                OpClass(Upper("serial_number"), name="gin_trgm_ops"),
+                name="idx_asset_serial_trgm",
+            ),
+            GinIndex(
+                OpClass(Upper("model"), name="gin_trgm_ops"),
+                name="idx_asset_model_trgm",
+            ),
+            GinIndex(
+                OpClass(Upper("manufacturer"), name="gin_trgm_ops"),
+                name="idx_asset_manuf_trgm",
+            ),
         ]
 
     def __str__(self):
