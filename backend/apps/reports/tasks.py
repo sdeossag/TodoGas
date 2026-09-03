@@ -1,4 +1,5 @@
 import hashlib
+import logging
 
 from celery import shared_task
 from django.conf import settings
@@ -14,6 +15,8 @@ from .generator import generate_service_report_pdf
 from .models import GeneratedReport, ReportSendLog
 from .utils import get_logo_base64
 
+logger = logging.getLogger(__name__)
+
 
 @shared_task(bind=True, max_retries=3)
 def generate_work_order_pdf(self, work_order_id):
@@ -28,7 +31,46 @@ def generate_work_order_pdf(self, work_order_id):
 
         return {"status": "ok", "file_url": file_url}
     except Exception as exc:
+        # En desarrollo las tareas corren en modo eager con EAGER_PROPAGATES a
+        # False: sin este log el fallo no aparece en ningun sitio y la OT queda
+        # completada pero sin PDF, con la pestaña Reportes girando en vacio.
+        logger.exception(
+            "No se pudo generar el PDF de la OT %s: %s", work_order_id, exc
+        )
+
+        if self.request.retries >= self.max_retries:
+            # Ultimo intento: el log del servidor deja de ser el unico sitio
+            # donde consta. Queda en la traza de auditoria, que si tiene
+            # interfaz, y el detalle de la OT lo expone como
+            # report_status='missing' para poder reintentar a mano.
+            _registrar_fallo_de_acta(work_order_id, exc)
+            return {"status": "failed", "error": str(exc)}
+
         raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))
+
+
+def _registrar_fallo_de_acta(work_order_id, exc):
+    """Anota en auditoria que una OT cerrada se quedo sin acta."""
+    from apps.audit.models import AuditLog
+
+    try:
+        AuditLog.objects.create(
+            user=None,
+            action=AuditLog.Action.CREATE,
+            entity_type="GeneratedReport",
+            entity_id=work_order_id,
+            changes={
+                "resultado": "fallo",
+                "detalle": "No se pudo generar el acta tras agotar los reintentos.",
+                "error": str(exc)[:500],
+            },
+        )
+    except Exception:
+        # Si ni la auditoria se puede escribir, el log de arriba es lo que hay.
+        logger.exception(
+            "Tampoco se pudo registrar en auditoria el fallo del acta de la OT %s",
+            work_order_id,
+        )
 
 
 @shared_task(bind=True, max_retries=3)
@@ -51,7 +93,7 @@ def send_report_email(self, work_order_id):
         recipient_email = hospital.contact_email
 
         subject = (
-            f"Reporte de servicio - OT-{work_order.wo_number}"
+            f"Reporte de servicio - {work_order.wo_code}"
             f" | {work_order.asset.name}"
         )
         body = render_to_string(

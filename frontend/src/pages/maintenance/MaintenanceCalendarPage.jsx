@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useWorkOrders } from '../../api/workOrders'
 import { useHospitals } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
+import { woStatusLabel } from '../../constants/labels'
+import { formatWoCode } from '../../utils/workOrder'
 
 const DAYS_OF_WEEK = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const MONTHS_ES = [
@@ -81,7 +83,7 @@ export default function MaintenanceCalendarPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Calendario de Mantenimientos</h1>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Calendario de mantenimientos</h1>
           <p className="text-sm text-gray-500 mt-0.5">OTs preventivas programadas</p>
         </div>
         <select
@@ -98,7 +100,7 @@ export default function MaintenanceCalendarPage() {
 
       <div className="flex gap-4">
         {/* Calendario */}
-        <div className="flex-1 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
           {/* Navegación mes */}
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <button onClick={prevMonth}
@@ -141,7 +143,7 @@ export default function MaintenanceCalendarPage() {
                     <div className="mt-1 flex flex-wrap gap-0.5">
                       {dayOrders.slice(0, 4).map((wo) => (
                         <span key={wo.id} className={`w-2 h-2 rounded-full ${statusDot(wo.status)}`}
-                          title={`OT-${wo.wo_number}`} />
+                          title={formatWoCode(wo)} />
                       ))}
                       {dayOrders.length > 4 && (
                         <span className="text-xs text-gray-500 leading-none">+{dayOrders.length - 4}</span>
@@ -164,7 +166,7 @@ export default function MaintenanceCalendarPage() {
         </div>
 
         {/* Panel derecho — detalle del día */}
-        <div className="w-72 flex-shrink-0 bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div className="w-72 flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-card">
           {!selectedDay ? (
             <div className="flex flex-col items-center justify-center h-full py-12 text-gray-500">
               <Icon name="calendar" className="w-9 h-9 mx-auto mb-2 text-gray-400" />
@@ -184,17 +186,17 @@ export default function MaintenanceCalendarPage() {
                       className="border border-gray-100 rounded-lg p-3 cursor-pointer hover:bg-gray-50"
                       onClick={() => navigate(`/ordenes/${wo.id}`)}>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono text-gray-500">OT-{wo.wo_number}</span>
+                        <span className="text-xs font-mono text-gray-500">{formatWoCode(wo)}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded-full ${statusBadge(wo.status)}`}>
-                          {wo.status}
+                          {woStatusLabel(wo.status)}
                         </span>
                       </div>
                       <p className="text-sm text-gray-800 mt-1 line-clamp-2">{wo.title}</p>
                       <p className="text-xs text-gray-500 mt-0.5">{wo.asset?.name ?? '—'}</p>
-                      {wo.assigned_to && (
+                      {wo.assigned_to?.full_name && (
                         <p className="text-xs text-gray-500 flex items-center gap-1">
                           <Icon name="profile" className="w-3.5 h-3.5 flex-shrink-0" />
-                          {wo.assigned_to.first_name} {wo.assigned_to.last_name}
+                          {wo.assigned_to.full_name}
                         </p>
                       )}
                     </div>

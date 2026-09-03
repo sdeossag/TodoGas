@@ -64,6 +64,9 @@ class Signature(models.Model):
 
     class Meta:
         db_table = "evidence_signature"
+        # Orden estable para paginar, y deja la firma del tecnico antes que la
+        # del cliente en el acta.
+        ordering = ["work_order", "signature_type"]
         constraints = [
             models.UniqueConstraint(
                 fields=["work_order", "signature_type"],

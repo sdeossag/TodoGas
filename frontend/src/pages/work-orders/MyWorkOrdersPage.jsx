@@ -8,6 +8,9 @@ import StatusBadge from '../../components/workOrders/StatusBadge'
 import PriorityBadge from '../../components/workOrders/PriorityBadge'
 import TransitionButton from '../../components/workOrders/TransitionButton'
 import Icon from '../../components/ui/Icon'
+import { taskTypeLabel } from '../../constants/labels'
+import Spinner from '../../components/ui/Spinner'
+import { formatWoCode } from '../../utils/workOrder'
 
 const TABS = [
   { label: 'Pendientes',   filter: 'PENDING' },
@@ -16,22 +19,6 @@ const TABS = [
   { label: 'Todas',        filter: '' },
 ]
 
-const TASK_TYPE_LABELS = {
-  PREVENTIVE: 'Preventivo',
-  CORRECTIVE: 'Correctivo',
-  VERIFICATION: 'Verificación',
-  INSTALLATION: 'Instalación',
-  DELIVERY: 'Entrega',
-}
-
-function Spinner() {
-  return (
-    <svg className="animate-spin h-8 w-8 text-brand" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  )
-}
 
 export default function MyWorkOrdersPage() {
   const navigate = useNavigate()
@@ -46,7 +33,7 @@ export default function MyWorkOrdersPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Mis Órdenes de Trabajo</h1>
+        <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Mis órdenes de trabajo</h1>
         <p className="text-sm text-gray-500 mt-0.5">Órdenes asignadas a ti</p>
       </div>
 
@@ -114,9 +101,9 @@ function WorkOrderCard({ wo, onTransition, navigate, hasPendingSync = false }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div>
-          <span className="font-mono text-xs text-gray-500 font-semibold">OT-{wo.wo_number}</span>
+          <span className="font-mono text-xs text-gray-500 font-semibold">{formatWoCode(wo)}</span>
           <span className="ml-2 text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">
-            {TASK_TYPE_LABELS[wo.task_type] ?? wo.task_type}
+            {taskTypeLabel(wo.task_type)}
           </span>
         </div>
         <PriorityBadge priority={wo.priority} />

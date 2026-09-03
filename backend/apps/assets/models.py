@@ -250,6 +250,7 @@ class AssetCustomFieldValue(models.Model):
 
     class Meta:
         db_table = "assets_assetcustomfieldvalue"
+        ordering = ["asset", "field"]
         constraints = [
             models.UniqueConstraint(
                 fields=["asset", "field"],

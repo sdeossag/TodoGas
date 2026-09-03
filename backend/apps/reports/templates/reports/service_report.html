@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Acta de Servicio OT-{{ work_order.wo_number }}</title>
+<title>Acta de Servicio {{ work_order.wo_code }}</title>
 <style>
   @page {
     size: letter;
@@ -64,7 +64,7 @@
         <div class="header-sub">{{ work_order.get_task_type_display }}</div>
       </td>
       <td style="width:38%; text-align:right; vertical-align:middle">
-        <div style="font-size:14pt; font-weight:bold">OT-{{ work_order.wo_number }}</div>
+        <div style="font-size:14pt; font-weight:bold">{{ work_order.wo_code }}</div>
         <div class="header-sub">Emitido: {{ generated_at|date:"d/m/Y H:i" }}</div>
         <div class="header-sub">Estado: {{ work_order.get_status_display }}</div>
       </td>
@@ -74,20 +74,20 @@
 
 <!-- SECCION 1: Datos del activo -->
 <div class="section">
-  <h2>1. Datos del activo y la intervencion</h2>
+  <h2>1. Datos del activo y la intervención</h2>
   <table>
     <tr>
-      <th style="width:50%">Informacion del activo</th>
-      <th style="width:50%">Informacion de la intervencion</th>
+      <th style="width:50%">Información del activo</th>
+      <th style="width:50%">Información de la intervención</th>
     </tr>
     <tr>
       <td>
         <table style="border:none; margin:0">
           <tr><td style="border:none; padding:2px 0"><span class="label">Hospital / Cliente</span><br><strong>{{ asset.hospital.name }}</strong></td></tr>
-          {% if asset.node %}<tr><td style="border:none; padding:2px 0"><span class="label">Area / Ubicacion</span><br>{{ asset.node.name }}</td></tr>{% endif %}
-          {% if asset.equipment_location %}<tr><td style="border:none; padding:2px 0"><span class="label">Ubicacion</span><br>{{ asset.equipment_location }}</td></tr>{% endif %}
+          {% if asset.node %}<tr><td style="border:none; padding:2px 0"><span class="label">Área / Ubicación</span><br>{{ asset.node.name }}</td></tr>{% endif %}
+          {% if asset.equipment_location %}<tr><td style="border:none; padding:2px 0"><span class="label">Ubicación</span><br>{{ asset.equipment_location }}</td></tr>{% endif %}
           <tr><td style="border:none; padding:2px 0"><span class="label">Nombre del activo</span><br><strong>{{ asset.name }}</strong></td></tr>
-          <tr><td style="border:none; padding:2px 0"><span class="label">Codigo interno</span><br>{{ asset.code }}</td></tr>
+          <tr><td style="border:none; padding:2px 0"><span class="label">Código interno</span><br>{{ asset.code }}</td></tr>
           {% if asset.asset_type %}<tr><td style="border:none; padding:2px 0"><span class="label">Tipo de activo</span><br>{{ asset.asset_type }}</td></tr>{% endif %}
         </table>
       </td>
@@ -95,17 +95,17 @@
         <table style="border:none; margin:0">
           {% if asset.manufacturer %}<tr><td style="border:none; padding:2px 0"><span class="label">Fabricante</span><br>{{ asset.manufacturer }}</td></tr>{% endif %}
           {% if asset.model %}<tr><td style="border:none; padding:2px 0"><span class="label">Modelo</span><br>{{ asset.model }}</td></tr>{% endif %}
-          {% if asset.serial_number %}<tr><td style="border:none; padding:2px 0"><span class="label">Numero de serie</span><br>{{ asset.serial_number }}</td></tr>{% endif %}
-          {% if work_order.completed_at %}<tr><td style="border:none; padding:2px 0"><span class="label">Fecha de intervencion</span><br>{{ work_order.completed_at|date:"d/m/Y H:i" }}</td></tr>{% endif %}
+          {% if asset.serial_number %}<tr><td style="border:none; padding:2px 0"><span class="label">Número de serie</span><br>{{ asset.serial_number }}</td></tr>{% endif %}
+          {% if work_order.completed_at %}<tr><td style="border:none; padding:2px 0"><span class="label">Fecha de intervención</span><br>{{ work_order.completed_at|date:"d/m/Y H:i" }}</td></tr>{% endif %}
           {% if work_order.scheduled_date %}<tr><td style="border:none; padding:2px 0"><span class="label">Fecha programada</span><br>{{ work_order.scheduled_date|date:"d/m/Y" }}</td></tr>{% endif %}
-          <tr><td style="border:none; padding:2px 0"><span class="label">Tecnico responsable</span><br><strong>{% if technician %}{{ technician.first_name }} {{ technician.last_name }}{% else %}No asignado{% endif %}</strong></td></tr>
-          {% if work_order.actual_duration %}<tr><td style="border:none; padding:2px 0"><span class="label">Duracion real</span><br>{{ work_order.actual_duration }}</td></tr>{% endif %}
+          <tr><td style="border:none; padding:2px 0"><span class="label">Técnico responsable</span><br><strong>{% if technician %}{{ technician.first_name }} {{ technician.last_name }}{% else %}No asignado{% endif %}</strong></td></tr>
+          {% if work_order.actual_duration %}<tr><td style="border:none; padding:2px 0"><span class="label">Duración real</span><br>{{ work_order.actual_duration }}</td></tr>{% endif %}
         </table>
       </td>
     </tr>
   </table>
   {% if work_order.description %}
-  <table><tr><th>Descripcion de la intervencion</th></tr><tr><td>{{ work_order.description }}</td></tr></table>
+  <table><tr><th>Descripción de la intervención</th></tr><tr><td>{{ work_order.description }}</td></tr></table>
   {% endif %}
   {% if work_order.notes %}
   <table><tr><th>Notas</th></tr><tr><td>{{ work_order.notes }}</td></tr></table>
@@ -135,13 +135,13 @@
       {% if checklist_response.completed_at %} &nbsp;|&nbsp; Fin: {{ checklist_response.completed_at|date:"d/m/Y H:i" }}{% endif %}
     </div>
   {% else %}
-    <p class="no-data">Esta OT no tenia checklist asociado.</p>
+    <p class="no-data">Esta OT no tenía checklist asociado.</p>
   {% endif %}
 </div>
 
-<!-- SECCION 3: Evidencia fotografica -->
+<!-- SECCION 3: Evidencia fotográfica -->
 <div class="section">
-  <h2>3. Evidencia fotografica</h2>
+  <h2>3. Evidencia fotográfica</h2>
   {% if photos %}
     {% with photos_list=photos|slice:":10" %}
     <table class="photo-grid">
@@ -195,9 +195,9 @@
   <table class="sig-table">
     <tr>
       <td>
-        <div class="label">Firma del tecnico</div>
+        <div class="label">Firma del técnico</div>
         {% for sig in signatures %}{% if sig.signature_type == "TECHNICIAN" %}
-          <br><img src="{{ sig.file_url }}" alt="Firma tecnico">
+          <br><img src="{{ sig.file_url }}" alt="Firma técnico">
           <br><strong>{{ sig.signer_name }}</strong>
           {% if sig.signer_role %}<br><span class="label">{{ sig.signer_role }}</span>{% endif %}
           <br><span class="label">{{ sig.signed_at|date:"d/m/Y H:i" }}</span>

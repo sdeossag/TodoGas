@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
-import { fetchAllPages } from './pagination'
+import { fetchAllPages, unwrapPage } from './pagination'
 
 // ── Hospitals ──────────────────────────────────────────────────────────────
 
@@ -63,6 +63,23 @@ export function useAssets(params = {}) {
   return useQuery({
     queryKey: ['assets', params],
     queryFn: () => fetchAllPages(client, '/api/assets/', params),
+  })
+}
+
+/**
+ * Una sola página de activos, para la vista principal con paginador real.
+ *
+ * A diferencia de useAssets (que recorre todo para los desplegables), este
+ * respeta la paginación del servidor: pide `page` y devuelve
+ * { items, count, hasNext, hasPrev }. keepPreviousData evita el parpadeo a
+ * vacío al cambiar de página.
+ */
+export function useAssetsPage(params = {}) {
+  return useQuery({
+    queryKey: ['assets-page', params],
+    queryFn: () =>
+      client.get('/api/assets/', { params }).then((r) => unwrapPage(r.data)),
+    placeholderData: keepPreviousData,
   })
 }
 

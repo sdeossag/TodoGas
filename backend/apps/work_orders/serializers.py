@@ -22,13 +22,17 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
     assigned_to = serializers.SerializerMethodField()
     is_overdue = serializers.SerializerMethodField()
     has_report = serializers.SerializerMethodField()
+    report_id = serializers.SerializerMethodField()
+    # Numero legible OT-2026-00001 (RF-OT-02). Se anade sin quitar wo_number:
+    # el APK publicado y el esquema SQLite offline siguen leyendo el entero.
+    wo_code = serializers.CharField(read_only=True)
 
     class Meta:
         model = WorkOrder
         fields = [
-            "id", "wo_number", "title", "task_type", "status", "priority",
+            "id", "wo_number", "wo_code", "title", "task_type", "status", "priority",
             "scheduled_date", "asset", "hospital", "assigned_to",
-            "created_at", "is_overdue", "has_report",
+            "created_at", "is_overdue", "has_report", "report_id",
         ]
 
     def get_asset(self, obj):
@@ -55,6 +59,20 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
             return obj.reports.exists()
         return None
 
+    def get_report_id(self, obj):
+        """
+        Id del PDF mas reciente. El portal del cliente lo necesita para
+        descargar sin tener que abrir el detalle de la OT.
+        """
+        if obj.status != WorkOrder.Status.COMPLETED:
+            return None
+        # `reports` viene con prefetch_related en el viewset: ordenar en Python
+        # evita una consulta extra por fila.
+        reports = sorted(
+            obj.reports.all(), key=lambda r: r.generated_at, reverse=True
+        )
+        return str(reports[0].id) if reports else None
+
 
 class WorkOrderDetailSerializer(WorkOrderListSerializer):
     created_by = serializers.SerializerMethodField()
@@ -62,6 +80,7 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
     checklist_version = serializers.SerializerMethodField()
     status_history = WorkOrderStatusHistorySerializer(many=True, read_only=True)
     checklist_response_id = serializers.SerializerMethodField()
+    report_status = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkOrder
@@ -71,8 +90,27 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
             "started_at", "completed_at", "estimated_duration",
             "actual_duration", "downtime", "total_cost", "rating", "notes",
             "created_by", "maintenance_plan", "checklist_version",
-            "checklist_response_id", "status_history", "synced_at", "offline_uuid",
+            "checklist_response_id", "report_status", "status_history",
+            "synced_at", "offline_uuid",
         ]
+
+    def get_report_status(self, obj):
+        """
+        Estado del acta de una OT cerrada.
+
+        La generacion del PDF corre en Celery y no bloquea el cierre de la OT.
+        Si falla y agota los reintentos, la OT queda COMPLETED sin acta: antes
+        eso solo constaba en los logs del servidor y en la interfaz aparecia
+        como una pestana de reportes vacia, indistinguible de "todavia se esta
+        generando". Este campo permite avisar y ofrecer el reintento
+        (POST .../regenerate-report/).
+
+        'not_applicable' mientras la OT no este cerrada, 'ok' si ya tiene acta,
+        'missing' si esta cerrada y no la tiene.
+        """
+        if obj.status != WorkOrder.Status.COMPLETED:
+            return "not_applicable"
+        return "ok" if obj.reports.exists() else "missing"
 
     def get_created_by(self, obj):
         u = obj.created_by

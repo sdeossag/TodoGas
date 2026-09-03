@@ -3,6 +3,8 @@ import useAuthStore from '../../store/authStore'
 import { useReports, useReportDownload } from '../../api/reports'
 import { useGenerateConsolidatedReport } from '../../api/dashboard'
 import { useHospitals } from '../../api/assets'
+import EmptyState from '../../components/ui/EmptyState'
+import { formatWoCode } from '../../utils/workOrder'
 
 const TASK_TYPES = [
   { value: 'PREVENTIVE', label: 'Preventivo' },
@@ -46,7 +48,7 @@ function ConsolidatedReportForm() {
   const errorDetail = generateMut.error?.response?.data?.detail
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+    <section className="bg-white rounded-xl border border-gray-200 shadow-card p-5">
       <h2 className="text-sm font-semibold text-gray-700 mb-1">Reporte consolidado</h2>
       <p className="text-xs text-gray-500 mb-4">
         Genera un PDF con todas las ordenes de un periodo. Se envia por correo al terminar.
@@ -130,7 +132,7 @@ export default function ReportsPage() {
   const [dateTo, setDateTo] = useState('')
   const [appliedFilters, setAppliedFilters] = useState({})
 
-  const { data: reports = [], isLoading } = useReports(appliedFilters)
+  const { data: reports = [], isLoading, isError } = useReports(appliedFilters)
   const downloadMut = useReportDownload()
 
   function handleApply(e) {
@@ -152,7 +154,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6 max-w-5xl">
       <div>
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">Reportes</h1>
+        <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900 mb-1">Reportes</h1>
         <p className="text-sm text-gray-500">Reportes de servicio generados al completar ordenes de trabajo</p>
       </div>
 
@@ -161,7 +163,7 @@ export default function ReportsPage() {
       {/* Filtros */}
       <form
         onSubmit={handleApply}
-        className="bg-white rounded-xl border border-gray-100 shadow-sm p-4"
+        className="bg-white rounded-xl border border-gray-200 shadow-card p-4"
       >
         <div className="flex flex-wrap gap-3 items-end">
           <div>
@@ -213,20 +215,26 @@ export default function ReportsPage() {
       </form>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Spinner />
           </div>
-        ) : reports.length === 0 ? (
-          <div className="text-center py-16 text-gray-500 text-sm">
-            No hay reportes para los filtros seleccionados.
+        ) : isError ? (
+          <div className="text-center py-16 text-red-600 text-sm">
+            No se pudo cargar los reportes. Revisa tu conexión e intenta de nuevo.
           </div>
+        ) : reports.length === 0 ? (
+          <EmptyState
+            icon="report"
+            title="Sin reportes para estos filtros"
+            description="Amplia el rango de fechas o quita alguno de los filtros para ver mas resultados."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
-                <tr className="text-left text-xs text-gray-500 uppercase tracking-wide">
+                <tr className="text-left text-xs font-medium text-gray-500">
                   <th className="px-4 py-3">OT</th>
                   <th className="px-4 py-3">Titulo</th>
                   <th className="px-4 py-3">Hospital</th>
@@ -239,11 +247,11 @@ export default function ReportsPage() {
               <tbody className="divide-y divide-gray-50">
                 {reports.map((report) => {
                   const wo = report.work_order
-                  const successLogs = (report.send_logs || []).filter((l) => l.success)
+                  const successLogs = (report.send_logs || []).filter((l) => l.was_successful)
                   return (
                     <tr key={report.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs text-gray-600 whitespace-nowrap">
-                        OT-{wo?.wo_number}
+                        {formatWoCode(wo)}
                       </td>
                       <td className="px-4 py-3 text-gray-800 max-w-[180px] truncate">
                         {report.title || wo?.title || '—'}
@@ -255,7 +263,7 @@ export default function ReportsPage() {
                         {new Date(report.generated_at).toLocaleString('es-CO')}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                        {report.report_hash ? `${report.report_hash.slice(0, 12)}...` : '—'}
+                        {report.file_hash ? `${report.file_hash.slice(0, 12)}...` : '—'}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
-import { useHospitals, useAssetTree, useAssets } from '../../api/assets'
+import { useHospitals, useAssetTree, useAssetsPage } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
 
 const STATUS_LABELS = {
@@ -45,10 +45,12 @@ export default function AssetsPage() {
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  // Filtro de estado de mantenimiento — llega desde las tarjetas del dashboard.
-  // El backend lo expone como campo calculado, asi que se filtra en cliente.
+  // Estado de mantenimiento (el "color" del activo). Llega desde las tarjetas
+  // del dashboard y ahora lo filtra el servidor (RF-AC-07): antes se traian
+  // todos los activos para filtrar en el cliente, lo que impedia paginar.
   const [pmFilter, setPmFilter] = useState(searchParams.get('maintenance_status') ?? '')
   const [searchInput, setSearchInput] = useState('')
+  const [page, setPage] = useState(1)
 
   const { data: hospitals = [] } = useHospitals({ is_active: true })
   const { data: tree = [], isLoading: treeLoading } = useAssetTree(selectedHospitalId)
@@ -58,17 +60,24 @@ export default function AssetsPage() {
     ...(selectedNodeId && { node_id: selectedNodeId }),
     ...(search && { search }),
     ...(statusFilter && { status: statusFilter }),
+    ...(pmFilter && { maintenance_status: pmFilter }),
+    page,
   }
-  const { data: allAssets = [], isLoading: assetsLoading } = useAssets(assetParams)
-  const assets = pmFilter
-    ? allAssets.filter((a) => (a.maintenance_status ?? 'no_plan') === pmFilter)
-    : allAssets
+  const { data: pageData, isLoading: assetsLoading, isError: assetsError } = useAssetsPage(assetParams)
+  const assets = pageData?.items ?? []
+  const totalAssets = pageData?.count ?? 0
 
   useEffect(() => {
     if (!selectedHospitalId && hospitals.length > 0) {
       setSelectedHospitalId(hospitals[0].id)
     }
   }, [hospitals, selectedHospitalId])
+
+  // Cualquier cambio de filtro vuelve a la primera pagina: quedarse en la 5
+  // tras filtrar mostraria una pagina que quiza ya no existe.
+  useEffect(() => {
+    setPage(1)
+  }, [selectedHospitalId, selectedNodeId, search, statusFilter, pmFilter])
 
   function handleSearchSubmit(e) {
     e.preventDefault()
@@ -85,7 +94,7 @@ export default function AssetsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Activos</h1>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Activos</h1>
           <p className="text-sm text-gray-500 mt-0.5">Equipos médicos registrados</p>
         </div>
         {isAdminOrSup && (
@@ -96,10 +105,10 @@ export default function AssetsPage() {
         )}
       </div>
 
-      {/* Dos columnas */}
-      <div className="flex gap-4 h-[calc(100vh-200px)]">
+      {/* Dos columnas en escritorio, apiladas en movil */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:h-[calc(100dvh-200px)]">
         {/* Columna izquierda — árbol */}
-        <div className="w-72 flex-shrink-0 bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col">
+        <div className="w-full lg:w-72 lg:flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-card flex flex-col max-h-72 lg:max-h-none">
           <div className="p-3 border-b">
             <select
               value={selectedHospitalId ?? ''}
@@ -137,7 +146,7 @@ export default function AssetsPage() {
         </div>
 
         {/* Columna derecha — listado */}
-        <div className="flex-1 bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 shadow-card flex flex-col overflow-hidden">
           {/* Barra de filtros */}
           <div className="p-3 border-b flex flex-wrap gap-2 items-center">
             <form onSubmit={handleSearchSubmit} className="flex gap-1">
@@ -181,9 +190,13 @@ export default function AssetsPage() {
           </div>
 
           {/* Tabla */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto overflow-x-auto">
             {assetsLoading ? (
               <div className="flex justify-center py-16"><Spinner className="w-8 h-8 text-brand" /></div>
+            ) : assetsError ? (
+              <div className="text-center py-16 text-red-600 text-sm">
+                No se pudo cargar el listado de activos. Revisa tu conexión e intenta de nuevo.
+              </div>
             ) : assets.length === 0 ? (
               <div className="text-center py-16 text-gray-500">
                 <Icon name="asset" className="w-10 h-10 mx-auto mb-3 text-gray-400" />
@@ -196,9 +209,9 @@ export default function AssetsPage() {
                 )}
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[46rem]">
                 <thead className="sticky top-0 bg-gray-50">
-                  <tr className="text-left text-xs text-gray-500 uppercase tracking-wide">
+                  <tr className="text-left text-xs font-medium text-gray-500">
                     <th className="px-4 py-3">Código</th>
                     <th className="px-4 py-3">Nombre</th>
                     <th className="px-4 py-3">Tipo</th>
@@ -255,11 +268,48 @@ export default function AssetsPage() {
               </table>
             )}
           </div>
+
+          {/* Paginador. hasNext/hasPrev vienen del servidor y son la fuente
+              autoritativa; el rango es informativo (PAGE_SIZE = default DRF). */}
+          {!assetsLoading && !assetsError && totalAssets > 0 && (
+            <div className="border-t px-4 py-2.5 flex items-center justify-between text-sm text-gray-600 bg-gray-50">
+              <span>
+                {(() => {
+                  const desde = (page - 1) * PAGE_SIZE + 1
+                  const hasta = Math.min(page * PAGE_SIZE, totalAssets)
+                  return `${desde}–${hasta} de ${totalAssets}`
+                })()}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={!pageData?.hasPrev}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1 rounded-lg border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white"
+                >
+                  Anterior
+                </button>
+                <span className="px-2 text-gray-500">Página {page}</span>
+                <button
+                  type="button"
+                  disabled={!pageData?.hasNext}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="px-3 py-1 rounded-lg border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
+
+// PAGE_SIZE del servidor (config.pagination.DefaultPagination). Solo compone la
+// etiqueta "desde–hasta"; el habilitar/deshabilitar botones usa hasNext/hasPrev.
+const PAGE_SIZE = 50
 
 function TreeNode({ node, selected, onSelect, level }) {
   const [open, setOpen] = useState(level === 0)

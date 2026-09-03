@@ -100,6 +100,29 @@ class TestValidateTransition:
             validate_transition(wo_pending, WorkOrder.Status.IN_PROGRESS, tec2)
 
     def test_tec_can_move_to_in_review(self, wo_in_progress, tec):
+        # RF-OT-03: pasar a revision exige checklist (aqui no hay, la OT no
+        # tiene checklist asociado), foto de evidencia y firma. Con foto y
+        # firma la transicion procede.
+        from apps.evidence.models import Photo, Signature
+        from django.utils import timezone
+        Signature.objects.create(
+            work_order=wo_in_progress,
+            signature_type=Signature.SignatureType.TECHNICIAN,
+            file_url="evidence/signatures/test.png",
+            signer_name="Tecnico Test",
+            file_hash="abc123",
+        )
+        Photo.objects.create(
+            work_order=wo_in_progress,
+            file_url="evidence/photos/test.png",
+            taken_at=timezone.now(),
+            file_hash="def456",
+            uploaded_by=tec,
+        )
+        assert validate_transition(wo_in_progress, WorkOrder.Status.IN_REVIEW, tec)
+
+    def test_move_to_in_review_without_photo_is_blocked(self, wo_in_progress, tec):
+        """RF-OT-03: la foto de evidencia es requisito bloqueante."""
         from apps.evidence.models import Signature
         Signature.objects.create(
             work_order=wo_in_progress,
@@ -108,7 +131,16 @@ class TestValidateTransition:
             signer_name="Tecnico Test",
             file_hash="abc123",
         )
-        assert validate_transition(wo_in_progress, WorkOrder.Status.IN_REVIEW, tec)
+        with pytest.raises(ValidationError, match="foto"):
+            validate_transition(wo_in_progress, WorkOrder.Status.IN_REVIEW, tec)
+
+    def test_move_to_in_review_lists_everything_missing(self, wo_in_progress, tec):
+        """RF-OT-03: el mensaje enumera todo lo que falta, no solo lo primero."""
+        with pytest.raises(ValidationError) as exc:
+            validate_transition(wo_in_progress, WorkOrder.Status.IN_REVIEW, tec)
+        mensaje = str(exc.value)
+        assert "foto" in mensaje
+        assert "firma" in mensaje
 
     def test_admin_can_complete_ot(self, wo_in_review, admin):
         assert validate_transition(wo_in_review, WorkOrder.Status.COMPLETED, admin)

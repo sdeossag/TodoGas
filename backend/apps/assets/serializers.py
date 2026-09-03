@@ -124,6 +124,8 @@ class AssetListSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "code", "hospital", "node",
             "asset_type", "status", "priority",
+            # Columnas planas que el portal del cliente muestra en su tabla.
+            "manufacturer", "model", "equipment_location",
             "last_maintenance_date", "next_maintenance_date", "maintenance_status",
         ]
 
@@ -135,40 +137,46 @@ class AssetListSerializer(serializers.ModelSerializer):
             return {"id": str(obj.node_id), "path": obj.node.path}
         return None
 
-    def get_last_maintenance_date(self, obj):
-        from apps.work_orders.models import WorkOrder
-        last = (
-            obj.work_orders
-            .filter(status=WorkOrder.Status.COMPLETED)
-            .order_by("-completed_at")
-            .values_list("completed_at", flat=True)
-            .first()
-        )
-        return last.date().isoformat() if last else None
+    # last_maintenance_date, next_maintenance_date y maintenance_status leen las
+    # anotaciones _last_maint y _next_due que pone AssetViewSet.get_queryset
+    # (subconsultas, no una query por activo). El fallback per-fila solo actua
+    # si el serializer se usa sobre un queryset sin anotar.
 
-    def get_next_maintenance_date(self, obj):
-        next_date = (
+    def _next_due(self, obj):
+        if hasattr(obj, "_next_due"):
+            return obj._next_due
+        return (
             obj.maintenance_plans
             .filter(is_active=True, next_due_date__isnull=False)
             .order_by("next_due_date")
             .values_list("next_due_date", flat=True)
             .first()
         )
+
+    def get_last_maintenance_date(self, obj):
+        if hasattr(obj, "_last_maint"):
+            last = obj._last_maint
+        else:
+            from apps.work_orders.models import WorkOrder
+            last = (
+                obj.work_orders
+                .filter(status=WorkOrder.Status.COMPLETED)
+                .order_by("-completed_at")
+                .values_list("completed_at", flat=True)
+                .first()
+            )
+        return last.date().isoformat() if last else None
+
+    def get_next_maintenance_date(self, obj):
+        next_date = self._next_due(obj)
         return str(next_date) if next_date else None
 
     def get_maintenance_status(self, obj):
         from datetime import date
-        today = date.today()
-        next_date = (
-            obj.maintenance_plans
-            .filter(is_active=True, next_due_date__isnull=False)
-            .order_by("next_due_date")
-            .values_list("next_due_date", flat=True)
-            .first()
-        )
+        next_date = self._next_due(obj)
         if next_date is None:
             return "no_plan"
-        delta = (next_date - today).days
+        delta = (next_date - date.today()).days
         if delta < 0:
             return "overdue"
         if delta <= 15:

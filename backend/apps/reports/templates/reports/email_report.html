@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Reporte de servicio OT-{{ work_order.wo_number }}</title>
+<title>Reporte de servicio {{ work_order.wo_code }}</title>
 </head>
 <body style="margin:0; padding:0; background-color:#f5f5f5; font-family:Arial,Helvetica,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5; padding:24px 0;">
@@ -18,10 +18,10 @@
               <tr>
                 <td>
                   <div style="color:#ffffff; font-size:22px; font-weight:bold; letter-spacing:1px;">TodoGas CMMS</div>
-                  <div style="color:#a8c4e0; font-size:12px; margin-top:4px;">Sistema de gestion de mantenimiento</div>
+                  <div style="color:#a8c4e0; font-size:12px; margin-top:4px;">Sistema de gestión de mantenimiento</div>
                 </td>
                 <td align="right">
-                  <div style="color:#ffffff; font-size:14px; font-weight:bold;">OT-{{ work_order.wo_number }}</div>
+                  <div style="color:#ffffff; font-size:14px; font-weight:bold;">{{ work_order.wo_code }}</div>
                   <div style="color:#a8c4e0; font-size:11px; margin-top:2px;">{{ work_order.get_task_type_display }}</div>
                 </td>
               </tr>
@@ -39,7 +39,7 @@
             </p>
 
             <p style="font-size:14px; color:#555; margin:0 0 24px 0; line-height:1.6;">
-              Se ha completado la siguiente intervencion de mantenimiento en sus instalaciones.
+              Se ha completado la siguiente intervención de mantenimiento en sus instalaciones.
               A continuacion el resumen del servicio prestado.
             </p>
 
@@ -47,7 +47,7 @@
             <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e0e0e0; border-radius:6px; margin-bottom:24px;">
               <tr>
                 <td style="background-color:#f8f9fa; padding:12px 16px; border-bottom:1px solid #e0e0e0;">
-                  <span style="font-size:11px; color:#666; text-transform:uppercase; letter-spacing:0.5px; font-weight:bold;">Resumen de la intervencion</span>
+                  <span style="font-size:11px; color:#666; text-transform:uppercase; letter-spacing:0.5px; font-weight:bold;">Resumen de la intervención</span>
                 </td>
               </tr>
               <tr>
@@ -61,7 +61,7 @@
                     </tr>
                     <tr>
                       <td style="padding:6px 0; border-bottom:1px solid #f0f0f0;">
-                        <span style="font-size:12px; color:#888;">Tipo de intervencion</span><br>
+                        <span style="font-size:12px; color:#888;">Tipo de intervención</span><br>
                         <span style="font-size:13px; color:#333;">{{ work_order.get_task_type_display }}</span>
                       </td>
                     </tr>
@@ -73,7 +73,7 @@
                     </tr>
                     <tr>
                       <td style="padding:6px 0;">
-                        <span style="font-size:12px; color:#888;">Tecnico responsable</span><br>
+                        <span style="font-size:12px; color:#888;">Técnico responsable</span><br>
                         <span style="font-size:13px; color:#333;">{% if work_order.assigned_to %}{{ work_order.assigned_to.first_name }} {{ work_order.assigned_to.last_name }}{% else %}No asignado{% endif %}</span>
                       </td>
                     </tr>
@@ -95,8 +95,8 @@
             </table>
 
             <p style="font-size:13px; color:#555; margin:0 0 8px 0; line-height:1.6;">
-              El reporte completo en PDF incluye el checklist ejecutado, evidencia fotografica
-              y las firmas digitales del tecnico y el receptor del servicio.
+              El reporte completo en PDF incluye el checklist ejecutado, evidencia fotográfica
+              y las firmas digitales del técnico y el receptor del servicio.
             </p>
 
           </td>

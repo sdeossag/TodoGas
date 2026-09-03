@@ -89,7 +89,7 @@ def generate_service_report_pdf(work_order):
     GeneratedReport.objects.create(
         work_order=work_order,
         report_type=GeneratedReport.ReportType.WORK_ORDER,
-        title=f"Acta de Servicio OT-{work_order.wo_number}",
+        title=f"Acta de Servicio {work_order.wo_code}",
         file_url=s3_key,
         file_hash=pdf_hash,
         content_hash=report_hash,

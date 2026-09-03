@@ -22,8 +22,17 @@ class ReportSendLogSerializer(serializers.ModelSerializer):
 
 
 class WorkOrderMinSerializer(serializers.Serializer):
+    """Datos de la OT que la tabla de reportes muestra junto a cada PDF."""
+
     id = serializers.UUIDField()
     wo_number = serializers.IntegerField()
+    wo_code = serializers.CharField(read_only=True)
+    title = serializers.CharField(read_only=True)
+    hospital = serializers.SerializerMethodField()
+
+    def get_hospital(self, obj):
+        h = obj.asset.hospital
+        return {"id": str(h.id), "name": h.name}
 
 
 class GeneratedReportSerializer(serializers.ModelSerializer):

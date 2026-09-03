@@ -5,25 +5,12 @@ import { useWorkOrders } from '../../api/workOrders'
 import StatusBadge from '../../components/workOrders/StatusBadge'
 import PriorityBadge from '../../components/workOrders/PriorityBadge'
 import Icon from '../../components/ui/Icon'
-
-const TASK_TYPE_LABELS = {
-  PREVENTIVE: 'Preventivo',
-  CORRECTIVE: 'Correctivo',
-  VERIFICATION: 'Verificación',
-  INSTALLATION: 'Instalación',
-  DELIVERY: 'Entrega',
-}
+import { taskTypeLabel } from '../../constants/labels'
+import Spinner from '../../components/ui/Spinner'
+import { formatWoCode } from '../../utils/workOrder'
 
 const PAGE_SIZE = 20
 
-function Spinner() {
-  return (
-    <svg className="animate-spin h-6 w-6 text-brand" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  )
-}
 
 export default function WorkOrdersPage() {
   const navigate = useNavigate()
@@ -46,7 +33,7 @@ export default function WorkOrdersPage() {
     ...(isOverdue && { is_overdue: true }),
   }
 
-  const { data: workOrders = [], isLoading } = useWorkOrders(params)
+  const { data: workOrders = [], isLoading, isError } = useWorkOrders(params)
 
   const totalPages = Math.max(1, Math.ceil(workOrders.length / PAGE_SIZE))
   const paginated = workOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -66,7 +53,7 @@ export default function WorkOrdersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Órdenes de Trabajo</h1>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Órdenes de trabajo</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {workOrders.length} {workOrders.length === 1 ? 'orden' : 'órdenes'} encontradas
           </p>
@@ -82,7 +69,7 @@ export default function WorkOrdersPage() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card p-4">
         <div className="flex flex-wrap gap-3 items-center">
           <form onSubmit={handleSearch} className="flex gap-1">
             <input
@@ -141,9 +128,13 @@ export default function WorkOrdersPage() {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-16"><Spinner /></div>
+        ) : isError ? (
+          <div className="text-center py-16 text-red-600 text-sm">
+            No se pudo cargar las órdenes de trabajo. Revisa tu conexión e intenta de nuevo.
+          </div>
         ) : workOrders.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
             <Icon name="wrench" className="w-10 h-10 mx-auto mb-3 text-gray-400" />
@@ -160,7 +151,7 @@ export default function WorkOrdersPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr className="text-left text-xs text-gray-500 uppercase tracking-wide">
+                  <tr className="text-left text-xs font-medium text-gray-500">
                     <th className="px-4 py-3">N° OT</th>
                     <th className="px-4 py-3">Tipo</th>
                     <th className="px-4 py-3">Título</th>
@@ -182,10 +173,10 @@ export default function WorkOrdersPage() {
                       onClick={() => navigate(`/ordenes/${wo.id}`)}
                     >
                       <td className="px-4 py-3 font-mono text-xs text-gray-500 font-semibold">
-                        OT-{wo.wo_number}
+                        {formatWoCode(wo)}
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
-                        {TASK_TYPE_LABELS[wo.task_type] ?? wo.task_type}
+                        {taskTypeLabel(wo.task_type)}
                       </td>
                       <td className="px-4 py-3 font-medium text-gray-800 max-w-[200px] truncate">
                         {wo.title}

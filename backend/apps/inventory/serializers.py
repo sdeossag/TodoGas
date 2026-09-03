@@ -62,7 +62,7 @@ class StockMovementSerializer(serializers.ModelSerializer):
         if not obj.work_order_id:
             return None
         wo = obj.work_order
-        return {'id': str(wo.id), 'wo_number': wo.wo_number}
+        return {'id': str(wo.id), 'wo_number': wo.wo_number, 'wo_code': wo.wo_code}
 
     def get_performed_by(self, obj):
         u = obj.performed_by

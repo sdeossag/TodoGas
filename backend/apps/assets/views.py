@@ -123,13 +123,41 @@ class AssetViewSet(viewsets.ModelViewSet):
         return AssetSerializer
 
     def get_queryset(self):
+        from datetime import timedelta
+
+        from django.db.models import OuterRef, Subquery
+        from django.utils import timezone
+
+        from apps.maintenance.models import MaintenancePlan
+        from apps.work_orders.models import WorkOrder
+
         user = self.request.user
         qs = Asset.objects.select_related(
             "hospital", "node", "node__parent"
         ).prefetch_related(
             "custom_field_values__field",
-            "maintenance_plans",
-            "work_orders",
+        )
+
+        # Proxima fecha de mantenimiento y ultimo mantenimiento como subconsultas
+        # en lugar de tres queries por activo en el serializer (N+1). Ademas
+        # `_next_due` es lo que hace filtrable maintenance_status en el servidor:
+        # antes se calculaba en el cliente y por eso AssetsPage tenia que traer
+        # todos los activos para poder filtrar por color.
+        next_due_sq = (
+            MaintenancePlan.objects
+            .filter(assets=OuterRef("pk"), is_active=True, next_due_date__isnull=False)
+            .order_by("next_due_date")
+            .values("next_due_date")[:1]
+        )
+        last_maint_sq = (
+            WorkOrder.objects
+            .filter(asset=OuterRef("pk"), status=WorkOrder.Status.COMPLETED)
+            .order_by("-completed_at")
+            .values("completed_at")[:1]
+        )
+        qs = qs.annotate(
+            _next_due=Subquery(next_due_sq),
+            _last_maint=Subquery(last_maint_sq),
         )
 
         if user.role == User.Role.CLI:
@@ -150,6 +178,23 @@ class AssetViewSet(viewsets.ModelViewSet):
         node_id = self.request.query_params.get("node_id")
         if node_id:
             qs = qs.filter(node_id=node_id)
+
+        # RF-AC-07: filtro por estado de mantenimiento (el "color" del activo).
+        # Mismas fronteras que AssetListSerializer.get_maintenance_status para
+        # que el filtro y lo que se pinta no puedan divergir: ambos derivan de
+        # `_next_due`.
+        maintenance_status = self.request.query_params.get("maintenance_status")
+        if maintenance_status:
+            today = timezone.localdate()
+            soon = today + timedelta(days=15)
+            if maintenance_status == "no_plan":
+                qs = qs.filter(_next_due__isnull=True)
+            elif maintenance_status == "overdue":
+                qs = qs.filter(_next_due__lt=today)
+            elif maintenance_status == "due_soon":
+                qs = qs.filter(_next_due__gte=today, _next_due__lte=soon)
+            elif maintenance_status == "on_time":
+                qs = qs.filter(_next_due__gt=soon)
 
         search = self.request.query_params.get("search")
         if search:
@@ -245,6 +290,7 @@ class ClientPortalView(APIView):
             {
                 'id': str(wo.id),
                 'wo_number': wo.wo_number,
+                'wo_code': wo.wo_code,
                 'title': wo.title,
                 'status': wo.status,
                 'asset': {'id': str(wo.asset_id), 'name': wo.asset.name},
@@ -272,6 +318,7 @@ class ClientPortalView(APIView):
                 'download_url': url,
                 'file_hash': r.file_hash,
                 'wo_number': r.work_order.wo_number if r.work_order else None,
+                'wo_code': r.work_order.wo_code if r.work_order else None,
             })
 
         return Response({

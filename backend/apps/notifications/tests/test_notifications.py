@@ -97,7 +97,8 @@ def test_notification_log_has_correct_type_and_user(db, wo, tec):
 
     log = NotificationLog.objects.get(user=tec)
     assert str(wo.id) in log.body or wo.asset.name in log.body
-    assert f"OT-{wo.wo_number}" in log.title
+    # Numero legible OT-2026-00001 (RF-OT-02), no el entero crudo.
+    assert wo.wo_code in log.title
 
 
 def test_send_assignment_notification_without_assignee_does_not_raise(db, asset, admin):

@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import { useInventoryItem, useStockMovements, useCreateStockMovement } from '../../api/inventory'
+import useModalDismiss from '../../hooks/useModalDismiss'
+import EmptyState from '../../components/ui/EmptyState'
+import { formatWoCode } from '../../utils/workOrder'
 
 const MOVEMENT_LABELS = {
   IN: 'Entrada',
@@ -53,14 +56,14 @@ export default function ItemMovementsPage() {
         <span className="text-gray-600">{item.name}</span>
       </nav>
 
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 flex items-start justify-between gap-4 flex-wrap">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card p-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs font-mono text-gray-500 mb-1">{item.code}</p>
           <h1 className="text-xl font-bold text-gray-800">{item.name}</h1>
           <p className="text-sm text-gray-500 mt-1">{item.unit_of_measure}</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stock actual</p>
+          <p className="text-xs font-medium text-gray-500 mb-1">Stock actual</p>
           <p className={`text-4xl font-bold ${item.is_low_stock ? 'text-red-600' : 'text-brand'}`}>
             {parseFloat(item.current_stock).toLocaleString('es-CO')}
           </p>
@@ -74,7 +77,7 @@ export default function ItemMovementsPage() {
       </div>
 
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Movimientos</h2>
+        <h2 className="text-sm font-semibold text-gray-800">Movimientos</h2>
         {isAdmin && (
           <button
             onClick={() => setShowModal(true)}
@@ -85,17 +88,22 @@ export default function ItemMovementsPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         {movLoading ? (
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : movements.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 text-sm">Sin movimientos registrados.</div>
+          <EmptyState
+            compact
+            icon="inventory"
+            title="Sin movimientos registrados"
+            description="Los ingresos y salidas de este item apareceran aqui en cuanto se registre el primero."
+          />
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr className="text-left text-xs text-gray-500 uppercase tracking-wide">
+                  <tr className="text-left text-xs font-medium text-gray-500">
                     <th className="px-4 py-3">Fecha</th>
                     <th className="px-4 py-3">Tipo</th>
                     <th className="px-4 py-3">Cantidad</th>
@@ -124,7 +132,7 @@ export default function ItemMovementsPage() {
                             onClick={() => navigate(`/ordenes/${mov.work_order.id}`)}
                             className="text-xs text-brand hover:underline font-mono"
                           >
-                            OT-{mov.work_order.wo_number}
+                            {formatWoCode(mov.work_order)}
                           </button>
                         ) : (
                           <span className="text-gray-400">—</span>
@@ -174,6 +182,7 @@ export default function ItemMovementsPage() {
 }
 
 function MovementModal({ item, onClose }) {
+  useModalDismiss(onClose)
   const createMut = useCreateStockMovement()
   const [form, setForm] = useState({
     movement_type: 'IN',
@@ -225,7 +234,7 @@ function MovementModal({ item, onClose }) {
   const inp = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="text-lg font-semibold text-gray-800 mb-1">Registrar movimiento</h3>
         <p className="text-xs text-gray-500 mb-5">

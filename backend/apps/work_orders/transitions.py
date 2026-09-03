@@ -65,18 +65,34 @@ def validate_transition(work_order, new_status, user, comment=""):
             raise ValidationError("Solo el técnico asignado puede realizar esta transición.")
 
     if from_status == WorkOrder.Status.IN_PROGRESS and new_status == WorkOrder.Status.IN_REVIEW:
+        # RF-OT-03 pide tres requisitos bloqueantes y, si falta alguno, que el
+        # sistema "liste exactamente que falta". Por eso se acumulan todos en
+        # vez de abortar en el primero: al tecnico en campo no le sirve
+        # descubrirlos de uno en uno.
+        faltantes = []
+
         if work_order.checklist_version_id:
             from django.core.exceptions import ObjectDoesNotExist
             try:
                 cr = work_order.checklist_response
                 if not cr.completed_at:
-                    raise ValidationError("El checklist debe estar completado antes de enviar a revisión.")
+                    faltantes.append("completar el checklist")
             except ObjectDoesNotExist:
-                raise ValidationError("Debes completar el checklist antes de enviar a revisión.")
+                faltantes.append("completar el checklist")
+
+        # RF-OT-03 exige "al menos 1 foto de evidencia con geolocalizacion",
+        # pero RF-EV-01 es explicito en que la falta de senal GPS no bloquea la
+        # captura. Se exige entonces la foto, no sus coordenadas: si no, un
+        # tecnico en un sotano sin cobertura no podria cerrar la OT.
+        if not work_order.photos.exists():
+            faltantes.append("subir al menos una foto de evidencia")
 
         if not work_order.signatures.exists():
+            faltantes.append("capturar la firma digital")
+
+        if faltantes:
             raise ValidationError(
-                "No se puede enviar a revision sin al menos una firma digital registrada."
+                "No se puede enviar a revisión. Falta: " + "; ".join(faltantes) + "."
             )
 
     return True

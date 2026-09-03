@@ -62,7 +62,7 @@
   <tbody>
     {% for wo in work_orders %}
     <tr>
-      <td>OT-{{ wo.wo_number }}</td>
+      <td>{{ wo.wo_code }}</td>
       <td>{{ wo.task_type }}</td>
       <td>{{ wo.asset.name }} ({{ wo.asset.code }})</td>
       <td>{% if wo.assigned_to %}{{ wo.assigned_to.first_name }} {{ wo.assigned_to.last_name }}{% else %}—{% endif %}</td>

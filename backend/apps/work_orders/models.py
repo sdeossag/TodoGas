@@ -37,7 +37,11 @@ class WorkOrder(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     wo_number = models.PositiveIntegerField(
         unique=True,
-        help_text="Número legible auto-incremental. Fracttal: 19190, 19197, etc."
+        help_text="Secuencial global. Se muestra siempre a través de wo_code."
+    )
+    wo_year = models.PositiveSmallIntegerField(
+        null=True, blank=True, db_index=True,
+        help_text="Año de creación. Solo compone el número legible (wo_code)."
     )
     asset = models.ForeignKey(
         "assets.Asset", on_delete=models.PROTECT,
@@ -106,7 +110,28 @@ class WorkOrder(models.Model):
             models.Index(fields=["status", "assigned_to"], name="idx_wo_status_assignee"),
             models.Index(fields=["asset", "status"], name="idx_wo_asset_status"),
             models.Index(fields=["scheduled_date"], name="idx_wo_scheduled_date"),
+            # Los tres siguientes los creo la migracion 0002 pero nunca se
+            # declararon aqui: sin esto `makemigrations` los da por sobrantes y
+            # genera una migracion que los borra.
+            models.Index(fields=["status", "scheduled_date"], name="idx_wo_status_scheduled"),
+            models.Index(fields=["maintenance_plan", "status"], name="idx_wo_plan_status"),
+            models.Index(fields=["assigned_to", "status"], name="idx_wo_assignee_status"),
         ]
+
+    @property
+    def wo_code(self):
+        """
+        Número legible de la OT: OT-2026-00001 (RF-OT-02).
+
+        El secuencial es global, no se reinicia cada año: el requisito dice
+        "el secuencial es global (no por hospital)" y el año solo compone la
+        etiqueta. Mantenerlo global evita cambiar la unicidad de wo_number y
+        que dos OTs de años distintos compartan secuencial.
+        """
+        año = self.wo_year or (self.created_at.year if self.created_at else None)
+        if año is None:
+            return f"OT-{self.wo_number:05d}"
+        return f"OT-{año}-{self.wo_number:05d}"
 
     def save(self, *args, **kwargs):
         if not self.wo_number:
@@ -115,10 +140,12 @@ class WorkOrder(models.Model):
                 last = WorkOrder.objects.select_for_update().order_by(
                     '-wo_number').first()
                 self.wo_number = (last.wo_number + 1) if last else 1
+        if not self.wo_year:
+            self.wo_year = timezone.now().year
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"OT-{self.wo_number} [{self.status}]"
+        return f"{self.wo_code} [{self.status}]"
 
 
 class WorkOrderStatusHistory(models.Model):

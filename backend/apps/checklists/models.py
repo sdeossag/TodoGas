@@ -190,6 +190,9 @@ class ChecklistResponse(models.Model):
 
     class Meta:
         db_table = "checklists_checklistresponse"
+        # Sin orden estable la paginacion puede repetir u omitir filas entre
+        # paginas (UnorderedObjectListWarning).
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"Respuesta OT {self.work_order.wo_number}"
@@ -216,6 +219,11 @@ class ChecklistFieldResponse(models.Model):
 
     class Meta:
         db_table = "checklists_checklistfieldresponse"
+        # El acta agrupa las respuestas con {% regroup %}, que solo agrupa
+        # elementos ADYACENTES: sin este orden un mismo grupo sale partido y
+        # repetido en el PDF que recibe el cliente. Ademas respeta el orden en
+        # que el tecnico vio los campos en la app.
+        ordering = ["field__group", "field__sort_order"]
         constraints = [
             models.UniqueConstraint(
                 fields=["response", "field"],

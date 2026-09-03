@@ -26,7 +26,7 @@ def send_assignment_notification(work_order):
     user = work_order.assigned_to
     send_push_notification(
         user=user,
-        title=f"Nueva OT asignada: OT-{work_order.wo_number}",
+        title=f"Nueva OT asignada: {work_order.wo_code}",
         body=f"{work_order.asset.name} — {work_order.asset.hospital.name}",
         data={
             "type": NotificationLog.NotificationType.WO_ASSIGNED,
@@ -42,7 +42,7 @@ def send_overdue_alert(work_order):
     user = work_order.assigned_to
     send_push_notification(
         user=user,
-        title=f"OT vencida: OT-{work_order.wo_number}",
+        title=f"OT vencida: {work_order.wo_code}",
         body=f"{work_order.asset.name} — fecha programada: {work_order.scheduled_date}",
         data={
             "type": NotificationLog.NotificationType.WO_OVERDUE,

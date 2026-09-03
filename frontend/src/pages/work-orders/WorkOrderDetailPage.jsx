@@ -8,8 +8,10 @@ import {
   useAssignWorkOrder,
 } from '../../api/workOrders'
 import { useUsers } from '../../api/users'
+import { formatWoCode } from '../../utils/workOrder'
 import {
   useChecklistResponse,
+  useChecklistTemplates,
   useCreateChecklistResponse,
   useSubmitField,
   useCompleteChecklist,
@@ -22,10 +24,19 @@ import SignatureList from '../../components/evidence/SignatureList'
 import SignaturePad from '../../components/evidence/SignaturePad'
 import PhotoGallery from '../../components/evidence/PhotoGallery'
 import PhotoCapture from '../../components/evidence/PhotoCapture'
-import { useWorkOrderReports, useReportDownload, useResendReportEmail } from '../../api/reports'
+import { useUploadPhoto } from '../../api/evidence'
+import {
+  REPORT_POLL_ATTEMPTS,
+  useWorkOrderReports,
+  useReportDownload,
+  useRegenerateReport,
+  useResendReportEmail,
+} from '../../api/reports'
 import { useInventoryItems, useStockMovements, useCreateStockMovement } from '../../api/inventory'
 import { useIntegrityCheck } from '../../api/dashboard'
 import Icon from '../../components/ui/Icon'
+import { taskTypeLabel, woStatusLabel } from '../../constants/labels'
+import useModalDismiss from '../../hooks/useModalDismiss'
 import useNetworkStore from '../../store/networkStore'
 import {
   markFieldResponseSynced,
@@ -34,13 +45,8 @@ import {
   saveFieldResponse,
 } from '../../db/repositories'
 
-const TASK_TYPE_LABELS = {
-  PREVENTIVE: 'Preventivo',
-  CORRECTIVE: 'Correctivo',
-  VERIFICATION: 'Verificación',
-  INSTALLATION: 'Instalación',
-  DELIVERY: 'Entrega',
-}
+// Margen sobre la ventana de sondeo de useWorkOrderReports (24 intentos x 5s).
+const REPORT_POLL_TIMEOUT_MS = REPORT_POLL_ATTEMPTS * 5000
 
 const STATUS_DOTS = {
   PENDING: 'bg-gray-400',
@@ -72,7 +78,7 @@ function formatDuration(d) {
 function InfoRow({ label, value }) {
   return (
     <div>
-      <dt className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">{label}</dt>
+      <dt className="text-xs font-medium text-gray-500 mb-0.5">{label}</dt>
       <dd className="text-sm text-gray-800">{value ?? '—'}</dd>
     </div>
   )
@@ -116,17 +122,17 @@ export default function WorkOrderDetailPage() {
           {role === 'TEC' ? 'Mis órdenes' : 'Órdenes de trabajo'}
         </button>
         <span>/</span>
-        <span className="text-gray-600">OT-{wo.wo_number}</span>
+        <span className="text-gray-600">{formatWoCode(wo)}</span>
       </nav>
 
       {/* Encabezado */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card p-6 space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-2">
-              <span className="font-mono text-sm font-bold text-gray-500">OT-{wo.wo_number}</span>
+              <span className="font-mono text-sm font-bold text-gray-500">{formatWoCode(wo)}</span>
               <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded">
-                {TASK_TYPE_LABELS[wo.task_type] ?? wo.task_type}
+                {taskTypeLabel(wo.task_type)}
               </span>
               <StatusBadge status={wo.status} />
               <PriorityBadge priority={wo.priority} />
@@ -153,8 +159,8 @@ export default function WorkOrderDetailPage() {
       {/* Grid de información */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Activo y hospital */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
-          <h2 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Activo</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
+          <h2 className="font-semibold text-gray-800 text-sm">Activo</h2>
           <dl className="grid grid-cols-2 gap-4">
             <InfoRow label="Código" value={<span className="font-mono">{wo.asset?.code}</span>} />
             <InfoRow label="Nombre" value={wo.asset?.name} />
@@ -163,11 +169,11 @@ export default function WorkOrderDetailPage() {
         </div>
 
         {/* Asignación */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
-          <h2 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Asignación</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
+          <h2 className="font-semibold text-gray-800 text-sm">Asignación</h2>
           <dl className="grid grid-cols-2 gap-4">
             <div>
-              <dt className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Técnico asignado</dt>
+              <dt className="text-xs font-medium text-gray-500 mb-0.5">Técnico asignado</dt>
               <dd className="text-sm text-gray-800 flex items-center gap-2">
                 {wo.assigned_to?.full_name ?? '—'}
                 {isAdmin && (
@@ -185,8 +191,8 @@ export default function WorkOrderDetailPage() {
         </div>
 
         {/* Fechas y duraciones */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
-          <h2 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Fechas</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
+          <h2 className="font-semibold text-gray-800 text-sm">Fechas</h2>
           <dl className="grid grid-cols-2 gap-4">
             <InfoRow label="Fecha programada" value={wo.scheduled_date} />
             <InfoRow label="Inicio real" value={wo.started_at ? new Date(wo.started_at).toLocaleString('es-CO') : null} />
@@ -197,8 +203,8 @@ export default function WorkOrderDetailPage() {
         </div>
 
         {/* Progreso y costos */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
-          <h2 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Progreso</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
+          <h2 className="font-semibold text-gray-800 text-sm">Progreso</h2>
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-gray-500">Avance</span>
@@ -237,14 +243,14 @@ export default function WorkOrderDetailPage() {
 
       {/* Notas */}
       {wo.notes && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h2 className="font-semibold text-gray-700 text-sm uppercase tracking-wide mb-2">Notas</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5">
+          <h2 className="font-semibold text-gray-800 text-sm mb-2">Notas</h2>
           <p className="text-sm text-gray-600 whitespace-pre-line">{wo.notes}</p>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         <div className="border-b border-gray-100">
           <div className="flex overflow-x-auto">
             {['Historial de estados', 'Checklist', 'Evidencia', 'Repuestos', 'Reportes'].map((label, i) => (
@@ -271,28 +277,28 @@ export default function WorkOrderDetailPage() {
           {tab === 2 && (
             <div className="space-y-8">
               <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+                <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                   Firmas
                 </h3>
                 <SignatureList workOrderId={id} />
               </div>
               {['ADMIN', 'TEC'].includes(role) && (
                 <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+                  <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                     Agregar firma
                   </h3>
                   <SignaturePad workOrderId={id} disabled={wo.status !== 'IN_PROGRESS'} />
                 </div>
               )}
               <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+                <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                   Fotos
                 </h3>
                 <PhotoGallery workOrderId={id} />
               </div>
               {['ADMIN', 'TEC'].includes(role) && (
                 <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+                  <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                     Agregar foto
                   </h3>
                   <PhotoCapture workOrderId={id} disabled={wo.status !== 'IN_PROGRESS'} />
@@ -349,8 +355,8 @@ function HistoryTab({ id, isAdminOrSup }) {
             </div>
             <p className="text-sm text-gray-700">
               {entry.from_status
-                ? <><span className="text-gray-500">{entry.from_status}</span> → <strong>{entry.to_status}</strong></>
-                : <><strong>{entry.to_status}</strong> (estado inicial)</>
+                ? <><span className="text-gray-500">{woStatusLabel(entry.from_status)}</span> → <strong>{woStatusLabel(entry.to_status)}</strong></>
+                : <><strong>{woStatusLabel(entry.to_status)}</strong> (estado inicial)</>
               }
             </p>
             {entry.comment && (
@@ -366,6 +372,7 @@ function HistoryTab({ id, isAdminOrSup }) {
 // ── Modal de reasignación ────────────────────────────────────────────────────
 
 function AssignModal({ woId, onClose, onSuccess }) {
+  useModalDismiss(onClose)
   const [selectedTec, setSelectedTec] = useState('')
   const { data: _allUsers = [], isLoading } = useUsers({})
   const tecUsers = _allUsers.filter((u) => u.role === 'TEC' && u.is_active)
@@ -379,9 +386,19 @@ function AssignModal({ woId, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Reasignar técnico</h3>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">Reasignar técnico</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="p-1 -mr-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          >
+            <Icon name="close" className="w-5 h-5" />
+          </button>
+        </div>
         {isLoading ? (
           <div className="flex justify-center py-4"><Spinner small /></div>
         ) : (
@@ -419,9 +436,16 @@ function AssignModal({ woId, onClose, onSuccess }) {
 // ── Modal de edición ─────────────────────────────────────────────────────────
 
 function EditModal({ wo, onClose, onSuccess }) {
+  useModalDismiss(onClose)
   const { data: _editUsers = [] } = useUsers({})
   const tecUsers = _editUsers.filter((u) => u.role === 'TEC' && u.is_active)
   const updateMut = useUpdateWorkOrder(wo.id)
+
+  // Una vez iniciado el checklist la version queda fija: cambiarla dejaria las
+  // respuestas apuntando a campos de otra version.
+  const checklistLocked = !!wo.checklist_response_id
+  const { data: checklistTemplates = [] } = useChecklistTemplates({ is_active: true })
+  const publishedChecklists = checklistTemplates.filter((t) => t.current_version_id)
 
   const [form, setForm] = useState({
     title: wo.title ?? '',
@@ -430,6 +454,7 @@ function EditModal({ wo, onClose, onSuccess }) {
     scheduled_date: wo.scheduled_date ?? '',
     estimated_duration: wo.estimated_duration ? wo.estimated_duration.substring(0, 5) : '',
     assigned_to: wo.assigned_to?.id ?? '',
+    checklist_version: wo.checklist_version?.id ?? '',
     notes: wo.notes ?? '',
     classification_1: wo.classification_1 ?? '',
     classification_2: wo.classification_2 ?? '',
@@ -450,6 +475,7 @@ function EditModal({ wo, onClose, onSuccess }) {
       classification_2: form.classification_2,
       ...(form.estimated_duration && { estimated_duration: form.estimated_duration + ':00' }),
       ...(form.assigned_to && { assigned_to: form.assigned_to }),
+      ...(!checklistLocked && { checklist_version: form.checklist_version || null }),
     }
     await updateMut.mutateAsync(payload)
     onSuccess?.()
@@ -457,9 +483,19 @@ function EditModal({ wo, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Editar OT</h3>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">Editar OT</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="p-1 -mr-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          >
+            <Icon name="close" className="w-5 h-5" />
+          </button>
+        </div>
 
         <div className="space-y-4">
           <Field label="Título *">
@@ -512,6 +548,27 @@ function EditModal({ wo, onClose, onSuccess }) {
             </Field>
           </div>
 
+          <Field label="Checklist">
+            <select
+              value={form.checklist_version}
+              onChange={(e) => set('checklist_version', e.target.value)}
+              disabled={checklistLocked}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:bg-gray-50 disabled:text-gray-500"
+            >
+              <option value="">Sin checklist</option>
+              {publishedChecklists.map((t) => (
+                <option key={t.id} value={t.current_version_id}>
+                  {t.name} (v{t.current_version_number})
+                </option>
+              ))}
+            </select>
+            {checklistLocked && (
+              <p className="text-xs text-gray-500 mt-1">
+                El checklist ya fue iniciado y no se puede cambiar.
+              </p>
+            )}
+          </Field>
+
           <Field label="Notas">
             <textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none" />
@@ -559,30 +616,50 @@ function ChecklistTab({ wo, user, refetch }) {
   const isTecAssigned =
     user?.role === 'TEC' && wo.assigned_to?.id === user?.id
 
+  // Misma regla que firmas, fotos y repuestos: solo con la OT en curso.
+  const isInProgress = wo.status === 'IN_PROGRESS'
+  const canEdit = isTecAssigned && isInProgress
+
+  const notStartedNotice = isTecAssigned && !isInProgress && (
+    <div className="mb-4 flex items-start gap-2 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+      <Icon name="warning" className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      <span>
+        {wo.status === 'PENDING'
+          ? 'Inicia la OT para responder el checklist y adjuntar fotos.'
+          : 'El checklist solo se puede editar mientras la OT esta en proceso.'}
+      </span>
+    </div>
+  )
+
   if (!wo.checklist_response_id) {
     return (
-      <NoResponseView
-        wo={wo}
-        isTecAssigned={isTecAssigned}
-        onStart={refetch}
-      />
+      <>
+        {notStartedNotice}
+        <NoResponseView wo={wo} canStart={canEdit} onStart={refetch} />
+      </>
     )
   }
 
   return (
-    <ChecklistResponseView
-      responseId={wo.checklist_response_id}
-      workOrderId={wo.id}
-      isTecAssigned={isTecAssigned}
-      onComplete={refetch}
-    />
+    <>
+      {notStartedNotice}
+      <ChecklistResponseView
+        responseId={wo.checklist_response_id}
+        workOrderId={wo.id}
+        canEdit={canEdit}
+        onComplete={refetch}
+      />
+    </>
   )
 }
 
-function NoResponseView({ wo, isTecAssigned, onStart }) {
+function NoResponseView({ wo, canStart, onStart }) {
   const createMut = useCreateChecklistResponse()
 
+  const [startError, setStartError] = useState('')
+
   async function handleStart() {
+    setStartError('')
     try {
       await createMut.mutateAsync({
         work_order: wo.id,
@@ -590,7 +667,9 @@ function NoResponseView({ wo, isTecAssigned, onStart }) {
       })
       onStart()
     } catch (err) {
-      console.error('[Checklist] start error:', err?.response?.data)
+      const data = err?.response?.data
+      const first = data && typeof data === 'object' ? Object.values(data).flat()[0] : data
+      setStartError(String(first ?? 'No se pudo iniciar el checklist.'))
     }
   }
 
@@ -601,13 +680,13 @@ function NoResponseView({ wo, isTecAssigned, onStart }) {
         <p className="font-medium text-gray-700">{wo.checklist_version.template_name}</p>
         <p className="text-sm text-gray-500">Versión v{wo.checklist_version.version_number}</p>
       </div>
-      {isTecAssigned ? (
+      {canStart ? (
         <button
           onClick={handleStart}
           disabled={createMut.isPending}
           className="px-5 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 transition-colors"
         >
-          {createMut.isPending ? 'Iniciando...' : '▶ Iniciar checklist'}
+          {createMut.isPending ? 'Iniciando...' : 'Iniciar checklist'}
         </button>
       ) : (
         <p className="text-xs text-gray-500">
@@ -616,11 +695,12 @@ function NoResponseView({ wo, isTecAssigned, onStart }) {
             : 'Asigna un técnico a esta OT para iniciar el checklist.'}
         </p>
       )}
+      {startError && <p className="text-sm text-red-600">{startError}</p>}
     </div>
   )
 }
 
-function ChecklistResponseView({ responseId, workOrderId, isTecAssigned, onComplete }) {
+function ChecklistResponseView({ responseId, workOrderId, canEdit, onComplete }) {
   const { data: response, isLoading, refetch } = useChecklistResponse(responseId)
 
   if (isLoading) {
@@ -640,7 +720,7 @@ function ChecklistResponseView({ responseId, workOrderId, isTecAssigned, onCompl
     <ActiveChecklistForm
       response={response}
       workOrderId={workOrderId}
-      isTecAssigned={isTecAssigned}
+      canEdit={canEdit}
       onFieldSaved={refetch}
       onComplete={() => {
         refetch()
@@ -664,7 +744,7 @@ function groupFields(fields) {
   return groups.length ? groups : [{ name: '', fields }]
 }
 
-function ActiveChecklistForm({ response, workOrderId, isTecAssigned, onFieldSaved, onComplete }) {
+function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onComplete }) {
   const allFields = response.version_fields ?? []
   const fieldResponses = response.field_responses ?? []
 
@@ -702,8 +782,15 @@ function ActiveChecklistForm({ response, workOrderId, isTecAssigned, onFieldSave
   const canComplete = requiredUnanswered.length === 0
   const isLastGroup = groupIdx === groups.length - 1
 
+  /** Campos escritos que aun no llegaron al servidor (nadie disparo el blur). */
+  function pendingFieldIds() {
+    return Object.keys(localValues).filter(
+      (id) => (localValues[id] ?? '') !== (answeredMap[id]?.value ?? '')
+    )
+  }
+
   async function handleBlur(fieldId) {
-    if (!isTecAssigned) return
+    if (!canEdit) return
     const value = localValues[fieldId] ?? ''
     if (answeredMap[fieldId]?.value === value) return
 
@@ -737,13 +824,23 @@ function ActiveChecklistForm({ response, workOrderId, isTecAssigned, onFieldSave
     await refreshPendingCount()
   }
 
+  const [completeError, setCompleteError] = useState('')
+
   async function handleComplete() {
     if (!canComplete) return
+    setCompleteError('')
     try {
+      // Volcar primero lo que sigue solo en el formulario.
+      for (const fieldId of pendingFieldIds()) {
+        await handleBlur(fieldId)
+      }
       await completeMut.mutateAsync()
       onComplete()
     } catch (err) {
-      console.error('[Checklist] complete error:', err?.response?.data)
+      const data = err?.response?.data
+      setCompleteError(
+        data?.detail ?? 'No se pudo finalizar el checklist. Revisa los campos e intenta de nuevo.'
+      )
     }
   }
 
@@ -788,9 +885,10 @@ function ActiveChecklistForm({ response, workOrderId, isTecAssigned, onFieldSave
           <ChecklistFieldInput
             key={field.id}
             field={field}
+            workOrderId={workOrderId}
             value={localValues[field.id] ?? ''}
             fieldResponse={answeredMap[field.id]}
-            disabled={!isTecAssigned}
+            disabled={!canEdit}
             onChange={(val) =>
               setLocalValues((prev) => ({ ...prev, [field.id]: val }))
             }
@@ -822,7 +920,7 @@ function ActiveChecklistForm({ response, workOrderId, isTecAssigned, onFieldSave
           )}
         </div>
 
-        {isLastGroup && isTecAssigned && (
+        {isLastGroup && canEdit && (
           <div className="flex items-center gap-2">
             {!canComplete && (
               <span className="text-xs text-orange-500">
@@ -840,11 +938,15 @@ function ActiveChecklistForm({ response, workOrderId, isTecAssigned, onFieldSave
           </div>
         )}
       </div>
+
+      {completeError && (
+        <p className="text-sm text-red-600 text-right">{completeError}</p>
+      )}
     </div>
   )
 }
 
-function ChecklistFieldInput({ field, value, fieldResponse, disabled, onChange, onBlur }) {
+function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disabled, onChange, onBlur }) {
   const ft = getFieldType(field.field_type)
   const isAnswered = !!fieldResponse
   const isOutOfRange = fieldResponse?.out_of_range
@@ -1045,37 +1147,98 @@ function ChecklistFieldInput({ field, value, fieldResponse, disabled, onChange, 
 
       {/* PHOTO */}
       {field.field_type === 'PHOTO' && (
-        <div>
-          {value && (
-            <p className="text-xs text-green-600 mb-1 flex items-center gap-1">
-              <Icon name="camera" className="w-3.5 h-3.5 flex-shrink-0" />
-              Foto adjuntada: {value}
-            </p>
-          )}
-          {!disabled && (
-            <label className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
-              <Icon name="camera" className="w-4 h-4" /> Seleccionar foto
-              <input
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) { onChange(file.name); setTimeout(onBlur, 0) }
-                }}
-              />
-            </label>
-          )}
-        </div>
+        <ChecklistPhotoField
+          workOrderId={workOrderId}
+          value={value}
+          disabled={disabled}
+          onChange={onChange}
+          onBlur={onBlur}
+        />
       )}
 
       {/* SIGNATURE */}
       {field.field_type === 'SIGNATURE' && (
         <div className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50">
           <Icon name="signature" className="w-4 h-4 text-gray-500" />
-          <span className="text-sm text-gray-500">Firma disponible en Sprint 6</span>
+          <span className="text-sm text-gray-500">
+            La firma se registra en la pestaña Evidencia.
+          </span>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Campo PHOTO del checklist.
+ *
+ * Antes solo guardaba `file.name` y mostraba "Foto adjuntada": el archivo no
+ * salia del navegador. Ahora sube la imagen a la evidencia de la OT y guarda
+ * la URL devuelta como valor del campo.
+ */
+function ChecklistPhotoField({ workOrderId, value, disabled, onChange, onBlur }) {
+  const uploadPhoto = useUploadPhoto()
+  const [error, setError] = useState('')
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0]
+    // Permite volver a elegir el mismo archivo despues de un fallo.
+    event.target.value = ''
+    if (!file) return
+
+    setError('')
+    try {
+      const photo = await uploadPhoto.mutateAsync({
+        work_order: workOrderId,
+        file,
+        taken_at: new Date().toISOString(),
+        caption: 'Checklist',
+      })
+      onChange(photo.file_url ?? photo.id)
+      setTimeout(onBlur, 0)
+    } catch (err) {
+      const detail = err?.response?.data
+      const first = detail && typeof detail === 'object' ? Object.values(detail).flat()[0] : detail
+      setError(String(first ?? 'No se pudo subir la foto.'))
+    }
+  }
+
+  return (
+    <div>
+      {value && !uploadPhoto.isPending && (
+        <p className="text-xs text-green-600 mb-1 flex items-center gap-1">
+          <Icon name="camera" className="w-3.5 h-3.5 flex-shrink-0" />
+          Foto adjunta
+          <a
+            href={value}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand hover:underline"
+          >
+            ver
+          </a>
+        </p>
+      )}
+      {!disabled && (
+        <label
+          className={`inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm transition-colors ${
+            uploadPhoto.isPending
+              ? 'text-gray-400 cursor-wait'
+              : 'text-gray-600 hover:bg-gray-50 cursor-pointer'
+          }`}
+        >
+          {uploadPhoto.isPending ? <Spinner small /> : <Icon name="camera" className="w-4 h-4" />}
+          {uploadPhoto.isPending ? 'Subiendo...' : 'Seleccionar foto'}
+          <input
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            disabled={uploadPhoto.isPending}
+            onChange={handleFile}
+          />
+        </label>
+      )}
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   )
 }
@@ -1117,7 +1280,7 @@ function RepuestosTab({ wo, user }) {
         <div className="overflow-x-auto rounded-xl border border-gray-100">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
-              <tr className="text-left text-xs text-gray-500 uppercase tracking-wide">
+              <tr className="text-left text-xs font-medium text-gray-500">
                 <th className="px-4 py-3">Item</th>
                 <th className="px-4 py-3">Codigo</th>
                 <th className="px-4 py-3">Cantidad</th>
@@ -1158,6 +1321,7 @@ function RepuestosTab({ wo, user }) {
 }
 
 function RepuestoModal({ wo, onClose }) {
+  useModalDismiss(onClose)
   const createMut = useCreateStockMovement()
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -1206,9 +1370,19 @@ function RepuestoModal({ wo, onClose }) {
   const inp = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Registrar repuesto usado</h3>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">Registrar repuesto usado</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="p-1 -mr-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          >
+            <Icon name="close" className="w-5 h-5" />
+          </button>
+        </div>
 
         <div className="space-y-4">
           <div>
@@ -1292,10 +1466,26 @@ function RepuestoModal({ wo, onClose }) {
 // ── Reports tab ───────────────────────────────────────────────────────────────
 
 function ReportsTab({ workOrderId, woStatus, role }) {
-  const { data: reports = [], isLoading } = useWorkOrderReports(workOrderId)
+  const { data: reports = [], isLoading, isError, refetch } = useWorkOrderReports(workOrderId)
   const downloadMut = useReportDownload()
   const resendMut = useResendReportEmail()
   const [confirmResend, setConfirmResend] = useState(null)
+  const [gaveUp, setGaveUp] = useState(false)
+  const regenerateMut = useRegenerateReport(workOrderId)
+
+  const hasReport = reports.length > 0
+
+  // Temporizador explicito. Antes se comparaba contra `dataUpdatedAt`, pero ese
+  // valor se refresca en cada sondeo, asi que el umbral no se alcanzaba nunca y
+  // la pestaña se quedaba girando para siempre.
+  useEffect(() => {
+    if (woStatus !== 'COMPLETED' || hasReport) {
+      setGaveUp(false)
+      return undefined
+    }
+    const timer = setTimeout(() => setGaveUp(true), REPORT_POLL_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [woStatus, hasReport])
 
   if (woStatus !== 'COMPLETED') {
     return (
@@ -1305,11 +1495,62 @@ function ReportsTab({ workOrderId, woStatus, role }) {
     )
   }
 
-  if (isLoading || reports.length === 0) {
+  if (isError) {
     return (
-      <div className="flex flex-col items-center gap-3 py-10 text-gray-500">
-        <Spinner />
-        <p className="text-sm">Generando reporte...</p>
+      <div className="py-8 text-center space-y-3">
+        <p className="text-sm text-red-600">No se pudo consultar el reporte de esta OT.</p>
+        <button onClick={() => refetch()} className="btn-secondary">
+          Reintentar
+        </button>
+      </div>
+    )
+  }
+
+  if (!hasReport) {
+    if (isLoading || !gaveUp) {
+      return (
+        <div className="flex flex-col items-center gap-3 py-10 text-gray-500">
+          <Spinner />
+          <p className="text-sm">Generando reporte...</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="py-8 text-center space-y-3">
+        <Icon name="warning" className="w-8 h-8 mx-auto text-amber-500" />
+        <p className="text-sm text-gray-700">El reporte no se pudo generar.</p>
+        <p className="text-xs text-gray-500 max-w-md mx-auto">
+          La OT quedo completada correctamente. Revisa la consola del backend:
+          si aparece un error de WeasyPrint, faltan las librerias graficas
+          (GTK/Pango) que necesita para escribir el PDF.
+        </p>
+        {role === 'ADMIN' ? (
+          <>
+            <button
+              onClick={async () => {
+                setGaveUp(false)
+                await regenerateMut.mutateAsync().catch(() => {})
+                refetch()
+              }}
+              disabled={regenerateMut.isPending}
+              className="btn-secondary inline-flex items-center gap-2"
+            >
+              {regenerateMut.isPending && <Spinner small />}
+              {regenerateMut.isPending ? 'Generando...' : 'Generar reporte de nuevo'}
+            </button>
+            {regenerateMut.isError && (
+              <p className="text-xs text-red-600">
+                {regenerateMut.error?.response?.data?.detail ??
+                  'No se pudo relanzar la generacion.'}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-gray-500">
+            Pide a un administrador que vuelva a generar el reporte.
+          </p>
+        )}
       </div>
     )
   }
@@ -1320,13 +1561,13 @@ function ReportsTab({ workOrderId, woStatus, role }) {
         <div key={report.id} className="border border-gray-200 rounded-xl p-5 space-y-4">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="space-y-1 min-w-0">
-              <p className="font-medium text-gray-800">{report.title || `Reporte OT-${report.work_order?.wo_number}`}</p>
+              <p className="font-medium text-gray-800">{report.title || `Reporte ${formatWoCode(report.work_order)}`}</p>
               <p className="text-xs text-gray-500">
                 Generado: {new Date(report.generated_at).toLocaleString('es-CO')}
               </p>
-              {report.report_hash && (
+              {report.file_hash && (
                 <p className="font-mono text-xs text-gray-500">
-                  SHA-256: {report.report_hash.slice(0, 16)}...
+                  SHA-256: {report.file_hash.slice(0, 16)}...
                 </p>
               )}
             </div>
@@ -1342,7 +1583,7 @@ function ReportsTab({ workOrderId, woStatus, role }) {
 
           {/* Send logs */}
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <p className="text-xs font-semibold text-gray-500 mb-2">
               Envios por correo
             </p>
             {report.send_logs && report.send_logs.length > 0 ? (
@@ -1350,13 +1591,13 @@ function ReportsTab({ workOrderId, woStatus, role }) {
                 {report.send_logs.map((log) => (
                   <li key={log.id} className="flex items-center gap-2 text-xs text-gray-500">
                     <Icon
-                      name={log.success ? 'check' : 'close'}
-                      className={`w-3.5 h-3.5 flex-shrink-0 ${log.success ? 'text-green-600' : 'text-red-500'}`}
+                      name={log.was_successful ? 'check' : 'close'}
+                      className={`w-3.5 h-3.5 flex-shrink-0 ${log.was_successful ? 'text-green-600' : 'text-red-500'}`}
                     />
                     <span>{log.recipient_email}</span>
                     <span className="text-gray-400">·</span>
                     <span>{new Date(log.sent_at).toLocaleString('es-CO')}</span>
-                    {!log.success && log.error_message && (
+                    {!log.was_successful && log.error_message && (
                       <span className="text-red-400">({log.error_message})</span>
                     )}
                   </li>
@@ -1424,7 +1665,7 @@ function IntegritySection({ workOrderId }) {
 
   return (
     <div className="border border-gray-200 rounded-xl p-5 space-y-3">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+      <p className="text-xs font-semibold text-gray-500">
         Verificacion de integridad
       </p>
 
@@ -1504,7 +1745,7 @@ function CompletedChecklistView({ response }) {
       {groups.map((group, gi) => (
         <div key={gi} className="space-y-4">
           {group.name && (
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2">
+            <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2">
               {group.name}
             </h3>
           )}
@@ -1512,7 +1753,7 @@ function CompletedChecklistView({ response }) {
             const fr = answeredMap[field.id]
             return (
               <div key={field.id} className="space-y-1">
-                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                <label className="block text-xs font-medium text-gray-500">
                   {field.label}
                   {fr?.out_of_range && (
                     <span className="ml-2 inline-flex items-center gap-1 text-red-600 normal-case font-normal">
