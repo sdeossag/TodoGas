@@ -13,6 +13,7 @@ from .serializers import (
     AssetCreateUpdateSerializer,
     AssetCustomFieldSerializer,
     AssetListSerializer,
+    AssetNodeCreateUpdateSerializer,
     AssetNodeSerializer,
     AssetNodeTreeSerializer,
     AssetSerializer,
@@ -60,6 +61,43 @@ class AssetNodeViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         return [IsAdminOrSup()]
 
+    def get_serializer_class(self):
+        # Escribir con AssetNodeSerializer era imposible: sus campos `hospital`
+        # y `parent` son SerializerMethodField (solo lectura), asi que el POST
+        # los descartaba y el INSERT reventaba con un 500.
+        if self.action in ("create", "update", "partial_update"):
+            return AssetNodeCreateUpdateSerializer
+        return AssetNodeSerializer
+
+    def create(self, request, *args, **kwargs):
+        # La respuesta se devuelve con el serializer de lectura, para que el
+        # cliente reciba hospital/parent anidados y el `path` ya materializado,
+        # igual que en un GET.
+        escritura = self.get_serializer(data=request.data)
+        escritura.is_valid(raise_exception=True)
+        nodo = escritura.save()
+        return Response(
+            AssetNodeSerializer(nodo).data, status=status.HTTP_201_CREATED
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        nodo = self.get_object()
+        # on_delete=PROTECT en assets y en los hijos: sin esto, borrar un nodo
+        # con contenido salia como ProtectedError, es decir otro 500.
+        if nodo.children.exists():
+            return Response(
+                {"detail": "No se puede eliminar: la ubicacion tiene "
+                           "sububicaciones. Elimina o mueve primero las de dentro."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if nodo.assets.exists():
+            return Response(
+                {"detail": "No se puede eliminar: hay activos en esta ubicacion. "
+                           "Muevelos antes de eliminarla."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
     def get_queryset(self):
         qs = AssetNode.objects.select_related("hospital", "parent")
         hospital_id = self.request.query_params.get("hospital_id")
@@ -76,10 +114,21 @@ class AssetNodeViewSet(viewsets.ModelViewSet):
             )
         return super().list(request, *args, **kwargs)
 
+    def update(self, request, *args, **kwargs):
+        parcial = kwargs.pop("partial", False)
+        instancia = self.get_object()
+        escritura = self.get_serializer(instancia, data=request.data, partial=parcial)
+        escritura.is_valid(raise_exception=True)
+        self.perform_update(escritura)
+        return Response(AssetNodeSerializer(escritura.instance).data)
+
     def perform_update(self, serializer):
-        old_name = serializer.instance.name
+        # Se compara el path y no solo el nombre: ahora que `parent` es
+        # editable, mover un nodo de sitio tambien cambia la ruta de todos sus
+        # descendientes, y antes esas rutas se quedaban obsoletas.
+        old_path = serializer.instance.path
         instance = serializer.save()
-        if old_name != instance.name:
+        if old_path != instance.path:
             self._recalculate_children_paths(instance)
 
     def _recalculate_children_paths(self, node):

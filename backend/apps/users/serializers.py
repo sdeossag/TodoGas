@@ -57,7 +57,19 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["first_name", "last_name", "phone", "employee_code", "hospital"]
+        fields = [
+            "first_name", "last_name", "phone", "employee_code",
+            "hospital", "is_active",
+        ]
+
+    def validate_is_active(self, value):
+        # No existe una acción `activate`, así que reactivar sólo es posible por
+        # PATCH. Se replica aquí el resguardo de la acción `deactivate`: un
+        # admin no puede dejarse a sí mismo fuera del sistema.
+        request = self.context.get("request")
+        if value is False and request is not None and self.instance == request.user:
+            raise serializers.ValidationError("No puedes desactivarte a ti mismo.")
+        return value
 
     def update(self, instance, validated_data):
         for attr, value in validated_data.items():

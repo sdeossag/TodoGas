@@ -1,15 +1,14 @@
+import { CHART, complianceColor } from '../../constants/palette'
+
 const SIZES = {
   sm: { bar: 'h-1.5', text: 'text-xs' },
-  md: { bar: 'h-2.5', text: 'text-sm' },
-  lg: { bar: 'h-4',   text: 'text-base' },
+  md: { bar: 'h-2', text: 'text-sm' },
+  lg: { bar: 'h-3', text: 'text-base' },
 }
 
-export function complianceColor(percentage) {
-  if (percentage == null) return '#9ca3af'
-  if (percentage >= 80) return '#16a34a'
-  if (percentage >= 50) return '#ca8a04'
-  return '#dc2626'
-}
+// Se reexporta para no romper los imports existentes; la definicion vive ahora
+// en constants/palette.js junto al resto de colores de datos.
+export { complianceColor }
 
 export default function ComplianceBar({ percentage, label, size = 'md' }) {
   const s = SIZES[size] ?? SIZES.md
@@ -19,16 +18,23 @@ export default function ComplianceBar({ percentage, label, size = 'md' }) {
 
   return (
     <div className="w-full">
-      <div className={`flex items-center justify-between mb-1 ${s.text}`}>
-        <span className="text-gray-600">{label}</span>
-        <span className="font-semibold" style={{ color }}>
+      <div className={`flex items-baseline justify-between gap-3 mb-1.5 ${s.text}`}>
+        <span className="text-gray-600 truncate">{label}</span>
+        <span className="font-mono font-semibold tabular-nums flex-shrink-0" style={{ color }}>
           {hasData ? `${percentage}%` : 'Sin datos'}
         </span>
       </div>
-      <div className={`w-full ${s.bar} bg-gray-100 rounded-full overflow-hidden`}>
+      <div
+        className={`w-full ${s.bar} bg-gray-100 rounded-full overflow-hidden`}
+        role="progressbar"
+        aria-valuenow={hasData ? width : undefined}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label}
+      >
         <div
-          className={`${s.bar} rounded-full transition-all duration-300`}
-          style={{ width: `${width}%`, backgroundColor: hasData ? color : '#e5e7eb' }}
+          className={`${s.bar} rounded-full transition-[width] duration-500 ease-spring`}
+          style={{ width: `${width}%`, backgroundColor: hasData ? color : CHART.grid }}
         />
       </div>
     </div>

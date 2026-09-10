@@ -1,0 +1,19 @@
+# Dependencias solo de desarrollo y CI. No instalar en produccion.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# Los tests las necesitan todas: sin model_bakery fallan al importar 8 modulos
+# y sin pytest-mock falla el fixture `mocker` de test_dashboard.py.
+
+-r requirements.txt
+
+pytest>=8.0,<10
+pytest-django>=4.9,<5
+pytest-mock>=3.14,<4
+coverage>=7.6,<8
+
+# IMPORTANTE: fijar por debajo de 1.20.
+# model_bakery 1.20+ exige Django >= 5.2 y al instalarlo desinstala en silencio
+# el Django 5.1 que pide requirements.txt, dejando DRF sin poder importarse
+# (ImportError: cannot import name 'cc_delim_re' from 'django.utils.cache').
+model_bakery>=1.17,<1.20

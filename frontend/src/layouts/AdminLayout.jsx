@@ -4,6 +4,7 @@ import useAuthStore from '../store/authStore'
 import NotificationBell from '../components/notifications/NotificationBell'
 import { useStockAlerts } from '../api/inventory'
 import Icon from '../components/ui/Icon'
+import Avatar from '../components/ui/Avatar'
 import OfflineBanner from '../components/ui/OfflineBanner'
 
 const ROLE_LABELS = {
@@ -51,19 +52,25 @@ const NAV_GROUPS = [
     title: 'Administracion',
     links: [
       { to: '/inventario', label: 'Inventario', icon: 'inventory', alertKey: 'inventory' },
-      { to: '/usuarios', label: 'Usuarios', icon: 'users' },
+      { to: '/usuarios', label: 'Usuarios', icon: 'users', adminOnly: true },
       { to: '/reportes', label: 'Reportes', icon: 'report' },
       { to: '/auditoria', label: 'Auditoria', icon: 'audit', adminOnly: true },
     ],
+  },
+  {
+    id: 'cuenta',
+    title: 'Cuenta',
+    links: [{ to: '/mi-perfil', label: 'Mi perfil', icon: 'profile' }],
   },
 ]
 
 function navClasses({ isActive }) {
   return [
-    'flex items-center gap-3 pl-4 pr-4 py-2 text-sm border-l-4 transition-colors duration-100',
+    'group relative flex items-center gap-3 mx-2 pl-3 pr-2.5 py-2 rounded-lg text-sm',
+    'transition-[background-color,color] duration-150',
     isActive
-      ? 'bg-brand-700 border-white text-white font-semibold'
-      : 'border-transparent text-brand-100 hover:bg-brand-700/60 hover:text-white',
+      ? 'bg-white/[0.10] text-white font-medium'
+      : 'text-brand-100/75 hover:bg-white/[0.06] hover:text-white',
   ].join(' ')
 }
 
@@ -95,7 +102,11 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div className="flex flex-col h-dvh bg-gray-100">
+      <a href="#contenido" className="skip-link">
+        Saltar al contenido
+      </a>
+
       {/* Barra superior — ocupa todo el ancho, independiente del sidebar */}
       <header className="h-20 flex-shrink-0 bg-white border-b border-gray-200 shadow-sm flex items-center gap-3 px-4 sm:px-6 z-30">
         <button
@@ -103,12 +114,15 @@ export default function AdminLayout() {
           onClick={() => setSidebarOpen((open) => !open)}
           aria-label={sidebarOpen ? 'Ocultar menu' : 'Mostrar menu'}
           aria-expanded={sidebarOpen}
-          className="p-2 -ml-1 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="p-2 -ml-1 rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 active:bg-gray-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25"
         >
           <Icon name="menu" className="w-6 h-6" />
         </button>
 
-        <Link to="/dashboard" className="flex items-center gap-3">
+        <Link
+          to="/dashboard"
+          className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25"
+        >
           {showLogo ? (
             <img
               src="/logo-mejorado-.png"
@@ -117,11 +131,11 @@ export default function AdminLayout() {
               onError={() => setShowLogo(false)}
             />
           ) : (
-            <span className="text-xl font-bold text-brand tracking-tight">TodoGas</span>
+            <span className="text-xl font-semibold text-brand tracking-tight">TodoGas</span>
           )}
           {/* En pantallas estrechas la barra no da de si: basta con el logo */}
-          <span className="hidden md:block h-9 w-px bg-gray-200" aria-hidden="true" />
-          <span className="hidden md:block text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">
+          <span className="hidden md:block h-8 w-px bg-gray-200" aria-hidden="true" />
+          <span className="hidden md:block text-xs font-medium tracking-[0.18em] text-gray-400">
             CMMS
           </span>
         </Link>
@@ -129,15 +143,20 @@ export default function AdminLayout() {
         <div className="flex-1" />
 
         <NotificationBell />
-        <div className="text-right leading-tight hidden sm:block">
-          <p className="text-sm font-medium text-gray-800">
-            {user?.first_name} {user?.last_name}
-          </p>
-          <p className="text-xs text-gray-500">{ROLE_LABELS[user?.role] ?? user?.role}</p>
+
+        <div className="hidden sm:flex items-center gap-2.5 pl-1">
+          <Avatar user={user} size="md" />
+          <div className="text-left leading-tight">
+            <p className="text-sm font-medium text-gray-800">
+              {user?.first_name} {user?.last_name}
+            </p>
+            <p className="text-xs text-gray-500">{ROLE_LABELS[user?.role] ?? user?.role}</p>
+          </div>
         </div>
+
         <button
           onClick={handleLogout}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors duration-150"
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-sm text-gray-500 transition-colors hover:bg-red-50 hover:text-red-700 active:bg-red-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-500/25"
         >
           <span className="hidden md:inline">Cerrar sesion</span>
           <Icon name="logout" className="w-5 h-5" />
@@ -151,7 +170,7 @@ export default function AdminLayout() {
         {/* Fondo oscuro que cierra el panel al tocarlo (solo movil) */}
         {sidebarOpen && (
           <div
-            className="absolute inset-0 bg-gray-900/40 z-20 lg:hidden"
+            className="absolute inset-0 bg-gray-900/50 backdrop-blur-[2px] z-20 lg:hidden animate-fade"
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
@@ -159,7 +178,7 @@ export default function AdminLayout() {
 
         <aside
           className={[
-            'bg-brand-800 overflow-hidden transition-all duration-200 ease-out',
+            'bg-brand-900 overflow-hidden transition-all duration-200 ease-spring',
             // movil: capa flotante que entra desde la izquierda
             'absolute left-0 inset-y-0 z-20 w-60',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full',
@@ -170,28 +189,46 @@ export default function AdminLayout() {
         >
           {/* Ancho fijo para que el contenido no se reflow mientras se anima */}
           <div className="w-60 h-full flex flex-col">
-            <nav className="flex-1 py-4 overflow-y-auto no-scrollbar">
+            <nav aria-label="Navegacion principal" className="flex-1 py-3 overflow-y-auto no-scrollbar">
               {NAV_GROUPS.map((group, gi) => {
                 const links = group.links.filter((l) => !l.adminOnly || user?.role === 'ADMIN')
                 if (links.length === 0) return null
                 return (
                   <div
                     key={group.id}
-                    className={gi > 0 ? 'mt-1.5 pt-1.5 border-t border-white/10' : ''}
+                    className={gi > 0 ? 'mt-4 pt-4 border-t border-white/[0.07]' : ''}
                   >
                     {group.title && (
-                      <p className="px-5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-brand-200">
+                      <p className="px-5 pb-2 text-[11px] font-medium text-brand-300/70">
                         {group.title}
                       </p>
                     )}
                     {links.map(({ to, label, icon, alertKey }) => (
                       <NavLink key={to} to={to} className={navClasses}>
-                        <Icon name={icon} className="w-[18px] h-[18px] flex-shrink-0" />
-                        <span className="flex-1">{label}</span>
-                        {alertKey === 'inventory' && lowStockCount > 0 && (
-                          <span className="flex items-center justify-center h-5 min-w-[1.25rem] px-1 rounded-full bg-red-500 text-white text-xs font-bold">
-                            {lowStockCount > 99 ? '99+' : lowStockCount}
-                          </span>
+                        {({ isActive }) => (
+                          <>
+                            {/* Guia fina pegada al borde del panel: marca la
+                                pagina activa sin el borde de 4px que partia
+                                en dos la fila. */}
+                            <span
+                              className={`absolute -left-2 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-brand-300 transition-all duration-200 ease-spring ${
+                                isActive ? 'h-5 opacity-100' : 'h-0 opacity-0'
+                              }`}
+                              aria-hidden="true"
+                            />
+                            <Icon
+                              name={icon}
+                              className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${
+                                isActive ? 'text-brand-200' : 'text-brand-300/60 group-hover:text-brand-200'
+                              }`}
+                            />
+                            <span className="flex-1 truncate">{label}</span>
+                            {alertKey === 'inventory' && lowStockCount > 0 && (
+                              <span className="flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-md bg-red-500/90 text-white text-[11px] font-semibold tabular-nums">
+                                {lowStockCount > 99 ? '99+' : lowStockCount}
+                              </span>
+                            )}
+                          </>
                         )}
                       </NavLink>
                     ))}
@@ -200,15 +237,24 @@ export default function AdminLayout() {
               })}
             </nav>
 
-            <div className="p-4 border-t border-white/10">
-              <p className="text-brand-100 text-xs truncate">{user?.email}</p>
-              <p className="text-brand-300 text-xs">{ROLE_LABELS[user?.role] ?? user?.role}</p>
+            <div className="flex items-center gap-2.5 p-4 border-t border-white/[0.07]">
+              <Avatar user={user} size="sm" tone="dark" />
+              <div className="min-w-0 leading-tight">
+                <p className="text-brand-100 text-xs truncate">{user?.email}</p>
+                <p className="text-brand-300/70 text-[11px]">
+                  {ROLE_LABELS[user?.role] ?? user?.role}
+                </p>
+              </div>
             </div>
           </div>
         </aside>
 
-        <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
+        <main id="contenido" className="flex-1 overflow-y-auto">
+          {/* Tope de ancho para que en monitores anchos las tablas no se
+              estiren de canto a canto y se pierda la linea de lectura. */}
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 pb-10">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

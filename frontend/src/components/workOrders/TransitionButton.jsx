@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import useAuthStore from '../../store/authStore'
 import useNetworkStore from '../../store/networkStore'
@@ -6,6 +6,8 @@ import { useCancelWorkOrder, useTransitionWorkOrder } from '../../api/workOrders
 import { useWorkOrderSignatures } from '../../api/evidence'
 import { markStatusChangedOffline } from '../../db/repositories'
 import Icon from '../ui/Icon'
+import useModalDismiss from '../../hooks/useModalDismiss'
+import Spinner from '../ui/Spinner'
 
 const NO_SIGNATURE_MSG =
   'No se puede enviar a revision sin al menos una firma digital registrada.'
@@ -18,14 +20,6 @@ const OFFLINE_SIGNATURE_MSG =
 const OFFLINE_CANCEL_MSG =
   'Cancelar una OT requiere conexion. Intenta de nuevo al recuperar la red.'
 
-function Spinner() {
-  return (
-    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  )
-}
 
 function extractBackendError(err) {
   const data = err?.response?.data
@@ -48,6 +42,12 @@ export default function TransitionButton({ workOrder, onSuccess }) {
   const [cancelComment, setCancelComment] = useState('')
   const [transitionError, setTransitionError] = useState('')
   const [savingOffline, setSavingOffline] = useState(false)
+
+  const closeCancelModal = useCallback(() => {
+    setShowCancelModal(false)
+    setCancelComment('')
+  }, [])
+  useModalDismiss(showCancelModal ? closeCancelModal : null)
 
   const isOnline = useNetworkStore((s) => s.isOnline)
   const refreshPendingCount = useNetworkStore((s) => s.refreshPendingCount)
@@ -241,7 +241,7 @@ export default function TransitionButton({ workOrder, onSuccess }) {
 
       {/* Modal de cancelacion */}
       {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-semibold text-gray-800 mb-1">Cancelar OT</h3>
             <p className="text-sm text-gray-500 mb-4">

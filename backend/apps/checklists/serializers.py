@@ -43,6 +43,7 @@ class ChecklistTemplateVersionSerializer(serializers.ModelSerializer):
 
 
 class ChecklistTemplateListSerializer(serializers.ModelSerializer):
+    current_version_id = serializers.SerializerMethodField()
     current_version_number = serializers.SerializerMethodField()
     fields_count = serializers.SerializerMethodField()
 
@@ -50,17 +51,32 @@ class ChecklistTemplateListSerializer(serializers.ModelSerializer):
         model = ChecklistTemplate
         fields = [
             "id", "name", "description", "is_active",
-            "current_version_number", "fields_count",
+            "current_version_id", "current_version_number", "fields_count",
             "created_at", "updated_at",
         ]
 
+    def _current_version(self, obj):
+        # `versions` llega con prefetch_related desde el viewset.
+        for v in obj.versions.all():
+            if v.is_current:
+                return v
+        return None
+
+    def get_current_version_id(self, obj):
+        """
+        La OT se ata a una version, no a la plantilla. Sin este id el formulario
+        de creacion de OT no tiene con que rellenar `checklist_version`.
+        """
+        v = self._current_version(obj)
+        return str(v.id) if v else None
+
     def get_current_version_number(self, obj):
-        v = obj.versions.filter(is_current=True).first()
+        v = self._current_version(obj)
         return v.version_number if v else None
 
     def get_fields_count(self, obj):
-        v = obj.versions.filter(is_current=True).first()
-        return v.fields.count() if v else 0
+        v = self._current_version(obj)
+        return len(v.fields.all()) if v else 0
 
 
 class ChecklistTemplateDetailSerializer(serializers.ModelSerializer):

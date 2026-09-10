@@ -6,7 +6,11 @@ function useNotifications() {
   return useQuery({
     queryKey: ['notifications'],
     queryFn: () => client.get('/api/notifications/').then((r) => r.data),
-    refetchInterval: 30000,
+    // El endpoint puede no existir en este despliegue (la app `notifications`
+    // solo expone el servicio de envio, no una API de lectura). Sin este corte
+    // el sondeo seguia cada 30s llenando la consola de 404.
+    refetchInterval: (query) => (query.state.error ? false : 30000),
+    refetchOnWindowFocus: false,
     retry: false,
   })
 }

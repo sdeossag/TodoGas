@@ -3,16 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useCreateWorkOrder } from '../../api/workOrders'
 import { useAssets } from '../../api/assets'
 import { useUsers } from '../../api/users'
+import { useChecklistTemplates } from '../../api/checklists'
 import Icon from '../../components/ui/Icon'
+import { assetStatusLabel, fieldLabel } from '../../constants/labels'
+import Spinner from '../../components/ui/Spinner'
 
-function Spinner() {
-  return (
-    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  )
-}
 
 function Field({ label, required, children, hint }) {
   return (
@@ -113,6 +108,11 @@ export default function CreateWorkOrderPage() {
   // El endpoint /api/users/ no filtra por rol — filtramos client-side
   const tecUsers = (useUsers({}).data ?? []).filter((u) => u.role === 'TEC' && u.is_active)
 
+  // Solo sirven las plantillas con una version publicada: la OT se ata a la
+  // version, no a la plantilla.
+  const { data: checklistTemplates = [] } = useChecklistTemplates({ is_active: true })
+  const publishedChecklists = checklistTemplates.filter((t) => t.current_version_id)
+
   const [selectedAsset, setSelectedAsset] = useState(null)
   const [form, setForm] = useState({
     task_type: 'CORRECTIVE',
@@ -123,6 +123,7 @@ export default function CreateWorkOrderPage() {
     estimated_hours: '',
     estimated_minutes: '',
     assigned_to: '',
+    checklist_version: '',
     notes: '',
     request_number: '',
   })
@@ -160,6 +161,7 @@ export default function CreateWorkOrderPage() {
       scheduled_date: form.scheduled_date,
       notes: form.notes.trim(),
       ...(form.assigned_to && { assigned_to: form.assigned_to }),
+      ...(form.checklist_version && { checklist_version: form.checklist_version }),
       ...(estimatedDuration && { estimated_duration: estimatedDuration }),
       ...(form.request_number && { request_number: parseInt(form.request_number) }),
     }
@@ -190,19 +192,21 @@ export default function CreateWorkOrderPage() {
           <Icon name="arrowLeft" className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Nueva Orden de Trabajo</h1>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Nueva orden de trabajo</h1>
           <p className="text-sm text-gray-500">Solo OT correctivas y de verificación</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-5">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 shadow-card p-6 space-y-5">
         {/* Banner de error general */}
         {Object.keys(errors).length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-sm font-semibold text-red-700 mb-1">No se pudo crear la OT:</p>
             <ul className="text-sm text-red-600 space-y-0.5 list-disc list-inside">
               {Object.entries(errors).map(([k, v]) => v && (
-                <li key={k}><span className="font-mono text-xs">{k}:</span> {String(v)}</li>
+                <li key={k}>
+                  {k === '_general' ? String(v) : <><span className="font-medium">{fieldLabel(k)}:</span> {String(v)}</>}
+                </li>
               ))}
             </ul>
           </div>
@@ -225,7 +229,7 @@ export default function CreateWorkOrderPage() {
             <p className="text-xs mt-1">
               Estado:{' '}
               <span className={selectedAsset.status === 'ACTIVE' ? 'text-green-600 font-medium' : 'text-red-500'}>
-                {selectedAsset.status}
+                {assetStatusLabel(selectedAsset.status)}
               </span>
             </p>
           </div>
@@ -312,10 +316,30 @@ export default function CreateWorkOrderPage() {
         </Field>
 
         {/* Checklist */}
-        <Field label="Checklist" hint="Disponible en Sprint 4">
-          <select disabled className={`${INPUT} opacity-50 cursor-not-allowed`}>
-            <option>Sin checklist</option>
+        <Field
+          label="Checklist"
+          hint={
+            publishedChecklists.length === 0
+              ? 'No hay plantillas con una version publicada.'
+              : 'Opcional. El tecnico lo respondera desde el detalle de la OT.'
+          }
+        >
+          <select
+            value={form.checklist_version}
+            onChange={(e) => set('checklist_version', e.target.value)}
+            disabled={publishedChecklists.length === 0}
+            className={INPUT}
+          >
+            <option value="">Sin checklist</option>
+            {publishedChecklists.map((t) => (
+              <option key={t.id} value={t.current_version_id}>
+                {t.name} (v{t.current_version_number})
+              </option>
+            ))}
           </select>
+          {errors.checklist_version && (
+            <p className="text-red-500 text-xs mt-1">{errors.checklist_version}</p>
+          )}
         </Field>
 
         {/* Notas */}

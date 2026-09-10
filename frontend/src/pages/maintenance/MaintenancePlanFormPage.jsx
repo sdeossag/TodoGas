@@ -8,15 +8,8 @@ import {
 import { useHospitals, useAssets } from '../../api/assets'
 import { useChecklistTemplates } from '../../api/checklists'
 import Icon from '../../components/ui/Icon'
+import Spinner from '../../components/ui/Spinner'
 
-function Spinner() {
-  return (
-    <svg className="animate-spin h-5 w-5 text-brand" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  )
-}
 
 function calculateNextDates(frequencyValue, frequencyUnit, count = 5) {
   const fv = parseInt(frequencyValue, 10)
@@ -65,13 +58,24 @@ export default function MaintenancePlanFormPage() {
   const updateMut = useUpdateMaintenancePlan(id)
 
   const { data: hospitals = [] } = useHospitals({ is_active: true })
+  // Solo sirven las plantillas con una version publicada: el motor ata la OT a
+  // la version, y sin ella genera ordenes preventivas sin nada que diligenciar.
   const { data: checklists = [] } = useChecklistTemplates({ is_active: true })
+  const publishedChecklists = checklists.filter((c) => c.current_version_id)
 
   const [form, setForm] = useState(EMPTY_FORM)
   const [selectedAssets, setSelectedAssets] = useState([])
   const [assetSearch, setAssetSearch] = useState('')
   const [assetSearchInput, setAssetSearchInput] = useState('')
   const [error, setError] = useState('')
+
+  // Un plan creado antes de esta validacion puede apuntar a una plantilla sin
+  // version publicada. Se sigue mostrando en el select —marcada— porque si
+  // desapareciera, el campo pintaria "Sin checklist" mientras el formulario
+  // conserva el id invalido, y el guardado fallaria sin explicacion visible.
+  const selectedChecklist = checklists.find((c) => c.id === form.checklist_template)
+  const orphanChecklist =
+    selectedChecklist && !selectedChecklist.current_version_id ? selectedChecklist : null
 
   const { data: searchedAssets = [] } = useAssets(
     assetSearch ? { search: assetSearch } : {}
@@ -171,7 +175,7 @@ export default function MaintenancePlanFormPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/planes-pm')} className="text-gray-500 hover:text-gray-600" aria-label="Volver a planes"><Icon name="arrowLeft" className="w-5 h-5" /></button>
-        <h1 className="text-2xl font-bold text-gray-800">
+        <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">
           {isEdit ? 'Editar plan de mantenimiento' : 'Nuevo plan de mantenimiento'}
         </h1>
       </div>
@@ -179,7 +183,7 @@ export default function MaintenancePlanFormPage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Columna izquierda */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
             <h2 className="text-sm font-semibold text-gray-600 border-b pb-2">Configuración del plan</h2>
 
             <Field label="Nombre *">
@@ -248,10 +252,30 @@ export default function MaintenancePlanFormPage() {
               <select value={form.checklist_template} onChange={set('checklist_template')}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
                 <option value="">Sin checklist</option>
-                {checklists.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                {publishedChecklists.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} (v{c.current_version_number})
+                  </option>
                 ))}
+                {orphanChecklist && (
+                  <option value={orphanChecklist.id}>
+                    {orphanChecklist.name} — sin version publicada
+                  </option>
+                )}
               </select>
+              {orphanChecklist ? (
+                <p className="text-amber-700 text-xs mt-1">
+                  «{orphanChecklist.name}» no tiene version publicada, asi que este plan
+                  genera OT sin checklist. Publica una version o elige otra plantilla
+                  para poder guardar.
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  {publishedChecklists.length === 0
+                    ? 'No hay plantillas con una version publicada. Publica una desde el editor de checklists.'
+                    : 'Solo aparecen las plantillas con una version publicada: la OT se ata a la version.'}
+                </p>
+              )}
             </Field>
 
             <Field label="Restringir a hospital">
@@ -266,7 +290,7 @@ export default function MaintenancePlanFormPage() {
           </div>
 
           {/* Columna derecha — activos */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
             <h2 className="text-sm font-semibold text-gray-600 border-b pb-2">
               Activos del plan <span className="text-red-500">*</span>
             </h2>
@@ -317,7 +341,7 @@ export default function MaintenancePlanFormPage() {
 
             {/* Lista seleccionados */}
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-2">
+              <p className="text-xs font-medium text-gray-500 mb-2">
                 Activos seleccionados ({selectedAssets.length})
               </p>
               {selectedAssets.length === 0 ? (
@@ -345,7 +369,7 @@ export default function MaintenancePlanFormPage() {
         {/* Próximas fechas */}
         {nextDates.length > 0 && (
           <div className="bg-brand/5 border border-brand/10 rounded-xl p-4">
-            <p className="text-xs font-semibold text-brand uppercase tracking-wide mb-2">Próximas ejecuciones</p>
+            <p className="text-xs font-semibold text-brand-700 mb-2">Próximas ejecuciones</p>
             <div className="flex gap-3 flex-wrap">
               {nextDates.map((d, i) => (
                 <span key={i} className="text-xs bg-white border border-brand/20 text-brand px-2 py-1 rounded-lg">

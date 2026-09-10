@@ -20,7 +20,6 @@ export default function SignaturePad({
   disabled = false,
   onSuccess,
 }) {
-  const mountDisabled = useRef(disabled)
   const canvasRef = useRef(null)
   const isDrawing = useRef(false)
   const [hasStrokes, setHasStrokes] = useState(false)
@@ -61,10 +60,11 @@ export default function SignaturePad({
   }
 
   useEffect(() => {
+    if (disabled) return undefined
     resizeCanvas()
     window.addEventListener('resize', resizeCanvas)
     return () => window.removeEventListener('resize', resizeCanvas)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [disabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function getPos(e) {
     const canvas = canvasRef.current
@@ -84,7 +84,7 @@ export default function SignaturePad({
   }
 
   function startDraw(e) {
-    if (mountDisabled.current) return
+    if (disabled) return
     const ctx = canvasRef.current.getContext('2d')
     const { x, y } = getPos(e)
     ctx.beginPath()
@@ -94,7 +94,7 @@ export default function SignaturePad({
   }
 
   function draw(e) {
-    if (!isDrawing.current || mountDisabled.current) return
+    if (!isDrawing.current || disabled) return
     const ctx = canvasRef.current.getContext('2d')
     const { x, y } = getPos(e)
     ctx.lineTo(x, y)
@@ -202,7 +202,7 @@ export default function SignaturePad({
     )
   }
 
-  if (mountDisabled.current) {
+  if (disabled) {
     return (
       <p className="text-sm text-gray-500">
         Solo se puede firmar mientras la orden esta en progreso.
@@ -236,7 +236,7 @@ export default function SignaturePad({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+          <label className="block text-xs font-medium text-gray-500 mb-1">
             Nombre del firmante <span className="text-red-400">*</span>
           </label>
           <input
@@ -248,7 +248,7 @@ export default function SignaturePad({
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+          <label className="block text-xs font-medium text-gray-500 mb-1">
             Cargo
           </label>
           <input

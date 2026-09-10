@@ -4,15 +4,21 @@ import { useChecklistTemplate, usePublishVersion } from '../../api/checklists'
 import FormBuilder from '../../components/checklists/FormBuilder'
 import ChecklistPreview from '../../components/checklists/ChecklistPreview'
 import Icon from '../../components/ui/Icon'
+import useModalDismiss from '../../hooks/useModalDismiss'
+import Spinner from '../../components/ui/Spinner'
 
-function Spinner() {
-  return (
-    <svg className="animate-spin h-8 w-8 text-brand" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  )
+const TOAST_TONES = {
+  success: 'bg-green-700 text-white',
+  warning: 'bg-amber-600 text-white',
+  danger: 'bg-red-700 text-white',
 }
+
+const TOAST_ICONS = {
+  success: 'checkCircle',
+  warning: 'warning',
+  danger: 'xCircle',
+}
+
 
 export default function ChecklistEditorPage() {
   const { id } = useParams()
@@ -24,7 +30,17 @@ export default function ChecklistEditorPage() {
   const [tab, setTab] = useState(0)
   const [editorFields, setEditorFields] = useState(null)
   const [showConfirm, setShowConfirm] = useState(false)
+  // { message, tone }. Antes solo servia para el exito y los fallos se
+  // quedaban en la consola o salian por window.alert.
   const [toast, setToast] = useState(null)
+
+  const notify = useCallback((message, tone = 'success') => {
+    setToast({ message, tone })
+    setTimeout(() => setToast(null), 4000)
+  }, [])
+
+  const closeConfirm = useCallback(() => setShowConfirm(false), [])
+  useModalDismiss(showConfirm ? closeConfirm : null)
 
   const currentVersion = template?.versions?.find((v) => v.is_current)
   const currentFields = currentVersion?.checklist_fields ?? []
@@ -54,11 +70,12 @@ export default function ChecklistEditorPage() {
       await publishMut.mutateAsync(payload)
       setShowConfirm(false)
       setEditorFields(null)
-      setToast(`Versión v${nextVersionNumber} publicada exitosamente`)
-      setTimeout(() => setToast(null), 4000)
+      notify(`Versión v${nextVersionNumber} publicada`)
       refetch()
     } catch (err) {
       console.error('[ChecklistEditor] publish error:', err?.response?.data)
+      setShowConfirm(false)
+      notify('No se pudo publicar la versión. Intenta de nuevo.', 'danger')
     }
   }
 
@@ -94,13 +111,13 @@ export default function ChecklistEditorPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/checklists')}
-            className="text-gray-500 hover:text-gray-600"
+            className="p-1.5 -ml-1.5 rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25"
             aria-label="Volver a checklists"
           >
             <Icon name="arrowLeft" className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-gray-800">{template.name}</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-gray-900">{template.name}</h1>
             <p className="text-xs text-gray-500 mt-0.5">
               {currentVersion
                 ? `Versión actual: v${currentVersion.version_number} · ${currentFields.length} campos`
@@ -112,12 +129,12 @@ export default function ChecklistEditorPage() {
         <button
           onClick={() => {
             if ((editorFields ?? currentFields).length === 0) {
-              alert('Agrega al menos un campo antes de publicar.')
+              notify('Agrega al menos un campo antes de publicar.', 'warning')
               return
             }
             setShowConfirm(true)
           }}
-          className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors"
+          className="btn-primary"
         >
           Publicar v{nextVersionNumber}
         </button>
@@ -156,7 +173,7 @@ export default function ChecklistEditorPage() {
 
       {/* Confirm modal */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 space-y-4">
             <h3 className="text-lg font-semibold text-gray-800">Publicar nueva versión</h3>
             <p className="text-sm text-gray-600">
@@ -165,21 +182,18 @@ export default function ChecklistEditorPage() {
               archivada. Las OTs ya completadas no se ven afectadas.
             </p>
             {publishMut.isError && (
-              <p className="text-sm text-red-500">
+              <p className="text-sm text-red-700">
                 Error al publicar. Verifica que todos los campos tengan etiqueta.
               </p>
             )}
             <div className="flex justify-end gap-3 pt-1">
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-              >
+              <button onClick={() => setShowConfirm(false)} className="btn-ghost">
                 Cancelar
               </button>
               <button
                 onClick={handlePublish}
                 disabled={publishMut.isPending}
-                className="px-5 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 transition-colors"
+                className="btn-primary"
               >
                 {publishMut.isPending ? 'Publicando...' : 'Publicar'}
               </button>
@@ -190,9 +204,13 @@ export default function ChecklistEditorPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-green-600 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg">
-          <Icon name="checkCircle" className="w-4 h-4 flex-shrink-0" />
-          {toast}
+        <div
+          role="status"
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 text-sm font-medium
+            px-4 py-3 rounded-xl shadow-xl animate-rise ${TOAST_TONES[toast.tone] ?? TOAST_TONES.success}`}
+        >
+          <Icon name={TOAST_ICONS[toast.tone] ?? TOAST_ICONS.success} className="w-4 h-4 flex-shrink-0" />
+          {toast.message}
         </div>
       )}
     </div>

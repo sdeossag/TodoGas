@@ -8,6 +8,7 @@ import {
   useToggleHospitalActive,
 } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
+import useModalDismiss from '../../hooks/useModalDismiss'
 
 const EMPTY_FORM = {
   name: '', code: '', nit: '', city: '', department: '',
@@ -15,6 +16,7 @@ const EMPTY_FORM = {
 }
 
 function HospitalModal({ hospital, onClose }) {
+  useModalDismiss(onClose)
   const isEdit = !!hospital
   const [form, setForm] = useState(isEdit ? {
     name: hospital.name ?? '',
@@ -54,17 +56,30 @@ function HospitalModal({ hospital, onClose }) {
       await mut.mutateAsync(form)
       onClose()
     } catch (err) {
-      const data = err?.response?.data ?? {}
+      const data = err?.response?.data
+      if (!data || typeof data !== 'object') {
+        setErrors({
+          non_field_errors:
+            typeof data === 'string'
+              ? data
+              : 'No se pudo guardar. Revisa tu conexión e intenta de nuevo.',
+        })
+        return
+      }
       const serverErrors = {}
       Object.entries(data).forEach(([k, v]) => {
         serverErrors[k] = Array.isArray(v) ? v.join(' ') : String(v)
       })
+      // `detail` es el error generico de DRF: sin esto el modal se quedaba mudo.
+      if (serverErrors.detail && !serverErrors.non_field_errors) {
+        serverErrors.non_field_errors = serverErrors.detail
+      }
       setErrors(serverErrors)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-[2px]">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800">
@@ -99,7 +114,7 @@ function HospitalModal({ hospital, onClose }) {
             <input value={form.address} onChange={(e) => set('address', e.target.value)}
               className={input()} placeholder="Calle 10 # 5-20" />
           </Field>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">Contacto</p>
+          <p className="text-xs font-semibold text-gray-500 pt-2">Contacto</p>
           <div className="grid grid-cols-3 gap-4">
             <Field label="Nombre" error={errors.contact_name}>
               <input value={form.contact_name} onChange={(e) => set('contact_name', e.target.value)}
@@ -143,8 +158,7 @@ export default function HospitalsPage() {
   const [modalHospital, setModalHospital] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
 
-  const { data: hospitals = [], isLoading } = useHospitals()
-  const toggleMut = useToggleHospitalActive(modalHospital?.id ?? '')
+  const { data: hospitals = [], isLoading, isError } = useHospitals()
 
   const filtered = hospitals
     .filter((h) => {
@@ -160,16 +174,12 @@ export default function HospitalsPage() {
   function openNew() { setModalHospital(null); setModalOpen(true) }
   function openEdit(h) { setModalHospital(h); setModalOpen(true) }
 
-  async function handleToggle(h) {
-    await useToggleHospitalActiveFor(h.id)
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Hospitales</h1>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Hospitales</h1>
           <p className="text-sm text-gray-500 mt-0.5">Gestión de clientes y sedes</p>
         </div>
         {isAdmin && (
@@ -198,19 +208,30 @@ export default function HospitalsPage() {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-16"><Spinner className="w-8 h-8 text-brand" /></div>
+        ) : isError ? (
+          <div className="text-center py-16 text-red-600 text-sm">
+            No se pudo cargar el listado de hospitales. Revisa tu conexión e intenta de nuevo.
+          </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
             <Icon name="hospital" className="w-10 h-10 mx-auto mb-3 text-gray-400" />
-            <p className="font-medium">No hay hospitales registrados</p>
-            {isAdmin && <p className="text-sm mt-1">Crea el primero con el botón "Nuevo hospital"</p>}
+            <p className="font-medium">
+              {hospitals.length === 0
+                ? 'No hay hospitales registrados'
+                : 'Ningún hospital coincide con los filtros'}
+            </p>
+            {isAdmin && hospitals.length === 0 && (
+              <p className="text-sm mt-1">Crea el primero con el botón "Nuevo hospital"</p>
+            )}
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[42rem]">
             <thead>
-              <tr className="bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wide">
+              <tr className="bg-gray-50 text-left text-xs font-medium text-gray-500">
                 <th className="px-4 py-3">Nombre</th>
                 <th className="px-4 py-3">Código</th>
                 <th className="px-4 py-3">Ciudad</th>
@@ -228,6 +249,7 @@ export default function HospitalsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

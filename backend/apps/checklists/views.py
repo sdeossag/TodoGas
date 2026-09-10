@@ -25,6 +25,13 @@ from .validators import validate_field_value
 class ChecklistTemplateViewSet(viewsets.ModelViewSet):
     queryset = ChecklistTemplate.objects.prefetch_related("versions__fields").all()
 
+    def get_queryset(self):
+        qs = ChecklistTemplate.objects.prefetch_related("versions__fields").all()
+        is_active = self.request.query_params.get("is_active")
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() in ("true", "1"))
+        return qs
+
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
             return [IsAuthenticated()]

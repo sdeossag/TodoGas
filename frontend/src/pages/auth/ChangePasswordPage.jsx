@@ -1,26 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
+import PasswordStrength from '../../components/ui/PasswordStrength'
 
 const ROLE_ROUTES = {
   ADMIN: '/dashboard',
   SUP: '/dashboard',
   TEC: '/mis-ordenes',
-  CLI: '/mis-activos',
+  CLI: '/mis-dashboard',
 }
-
-function getStrength(password) {
-  let score = 0
-  if (password.length >= 8) score++
-  if (/[A-Z]/.test(password)) score++
-  if (/\d/.test(password)) score++
-  if (/[!@#$%^&*()\-_=+[\]{};:'",.<>/?\\|`~]/.test(password)) score++
-  return score // 0-4
-}
-
-const STRENGTH_LABELS = ['', 'Débil', 'Regular', 'Buena', 'Fuerte']
-const STRENGTH_COLORS = ['', 'bg-red-400', 'bg-yellow-400', 'bg-blue-400', 'bg-green-500']
-const STRENGTH_TEXT = ['', 'text-red-600', 'text-yellow-600', 'text-blue-600', 'text-green-700']
 
 export default function ChangePasswordPage() {
   const navigate = useNavigate()
@@ -32,8 +20,6 @@ export default function ChangePasswordPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
-
-  const strength = getStrength(next)
 
   const validate = () => {
     const errs = {}
@@ -75,7 +61,7 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
+    <div className="min-h-dvh bg-gray-100 flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
         <div className="mb-6">
           <h1 className="text-xl font-bold text-brand">Cambia tu contraseña</h1>
@@ -128,29 +114,7 @@ export default function ChangePasswordPage() {
               <p className="mt-1 text-xs text-red-600">{fieldErrors.next}</p>
             )}
 
-            {/* Indicador de fortaleza */}
-            {next.length > 0 && (
-              <div className="mt-2">
-                <div className="flex gap-1 mb-1">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div
-                      key={i}
-                      className={`h-1.5 flex-1 rounded-full transition-colors duration-300
-                        ${strength >= i ? STRENGTH_COLORS[strength] : 'bg-gray-200'}`}
-                    />
-                  ))}
-                </div>
-                <p className={`text-xs font-medium ${STRENGTH_TEXT[strength] || 'text-gray-500'}`}>
-                  {strength > 0 ? `Fortaleza: ${STRENGTH_LABELS[strength]}` : ''}
-                </p>
-                <ul className="mt-1 text-xs text-gray-500 space-y-0.5">
-                  {next.length < 8 && <li>• Mínimo 8 caracteres</li>}
-                  {!/[A-Z]/.test(next) && <li>• Al menos una mayúscula</li>}
-                  {!/\d/.test(next) && <li>• Al menos un número</li>}
-                  {!/[!@#$%^&*]/.test(next) && <li>• Al menos un carácter especial (!@#$%^&*)</li>}
-                </ul>
-              </div>
-            )}
+            <PasswordStrength password={next} />
           </div>
 
           {/* Confirmar */}

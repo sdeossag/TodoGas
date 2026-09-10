@@ -8,6 +8,8 @@ import {
   useResumePlan,
 } from '../../api/maintenance'
 import Icon from '../../components/ui/Icon'
+import useModalDismiss from '../../hooks/useModalDismiss'
+import Spinner from '../../components/ui/Spinner'
 
 const TASK_TYPE_LABELS = {
   PREVENTIVE: 'Preventivo',
@@ -24,14 +26,6 @@ const FREQ_UNIT_LABELS = {
   YEARS: 'años',
 }
 
-function Spinner() {
-  return (
-    <svg className="animate-spin h-5 w-5 text-brand" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  )
-}
 
 function ComplianceBar({ pct }) {
   if (pct === null || pct === undefined) {
@@ -63,7 +57,7 @@ export default function MaintenancePlansPage() {
     ...(statusFilter === 'inactive' && { is_active: false }),
     ...(typeFilter && { task_type: typeFilter }),
   }
-  const { data: plans = [], isLoading } = useMaintenancePlans(params)
+  const { data: plans = [], isLoading, isError } = useMaintenancePlans(params)
 
   const planForTrigger = plans.find((p) => p.id === triggerPlanId)
 
@@ -72,7 +66,7 @@ export default function MaintenancePlansPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Planes PM</h1>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Planes PM</h1>
           <p className="text-sm text-gray-500 mt-0.5">{plans.length} planes de mantenimiento</p>
         </div>
         {isAdmin && (
@@ -117,8 +111,12 @@ export default function MaintenancePlansPage() {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {isLoading ? (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
+        {isError ? (
+          <div className="text-center py-16 text-red-600 text-sm">
+            No se pudo cargar los planes de mantenimiento. Revisa tu conexión e intenta de nuevo.
+          </div>
+        ) : isLoading ? (
           <div className="flex justify-center py-16"><Spinner /></div>
         ) : plans.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
@@ -134,7 +132,7 @@ export default function MaintenancePlansPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
-                <tr className="text-left text-xs text-gray-500 uppercase tracking-wide">
+                <tr className="text-left text-xs font-medium text-gray-500">
                   <th className="px-4 py-3">Nombre</th>
                   <th className="px-4 py-3">Frecuencia</th>
                   <th className="px-4 py-3">Tipo</th>
@@ -248,6 +246,7 @@ function PlanRow({ plan, isAdmin, onView, onEdit, onTrigger }) {
 }
 
 function TriggerModal({ plan, result, onResult, onClose }) {
+  useModalDismiss(onClose)
   const triggerMut = useTriggerPlan(plan.id)
 
   async function handleConfirm() {
@@ -256,7 +255,7 @@ function TriggerModal({ plan, result, onResult, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 space-y-4">
         {!result ? (
           <>

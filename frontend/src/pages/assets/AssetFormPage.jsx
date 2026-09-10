@@ -120,11 +120,24 @@ export default function AssetFormPage() {
       const result = await mut.mutateAsync(payload)
       navigate(`/activos/${result.id ?? id}`)
     } catch (err) {
-      const data = err?.response?.data ?? {}
+      const data = err?.response?.data
+      if (!data || typeof data !== 'object') {
+        setErrors({
+          non_field_errors:
+            typeof data === 'string'
+              ? data
+              : 'No se pudo guardar el activo. Revisa tu conexión e intenta de nuevo.',
+        })
+        return
+      }
       const serverErrors = {}
       Object.entries(data).forEach(([k, v]) => {
         serverErrors[k] = Array.isArray(v) ? v.join(' ') : String(v)
       })
+      // `detail` es el error generico de DRF y no tiene campo donde pintarse.
+      if (serverErrors.detail && !serverErrors.non_field_errors) {
+        serverErrors.non_field_errors = serverErrors.detail
+      }
       setErrors(serverErrors)
       // Si el error es del paso 1, volver atrás
       const step1Fields = ['hospital', 'node', 'name', 'code', 'asset_type', 'status', 'priority']
@@ -145,7 +158,7 @@ export default function AssetFormPage() {
           <span>/</span>
           <span className="text-gray-600">{isEdit ? 'Editar activo' : 'Nuevo activo'}</span>
         </nav>
-        <h1 className="text-2xl font-bold text-gray-800">{isEdit ? 'Editar activo' : 'Registrar activo'}</h1>
+        <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">{isEdit ? 'Editar activo' : 'Registrar activo'}</h1>
       </div>
 
       {/* Indicador de pasos */}
@@ -165,8 +178,14 @@ export default function AssetFormPage() {
       </div>
 
       {/* Formulario */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card p-6">
         <form onSubmit={handleSubmit}>
+          {errors.non_field_errors && (
+            <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              {errors.non_field_errors}
+            </div>
+          )}
+
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-base font-semibold text-gray-700 mb-4">Identificación del activo</h2>
@@ -281,9 +300,6 @@ export default function AssetFormPage() {
                   rows={3} className={inp()} placeholder="Observaciones adicionales..." />
               </Field>
 
-              {errors.non_field_errors && (
-                <p className="text-sm text-red-600">{errors.non_field_errors}</p>
-              )}
             </div>
           )}
 

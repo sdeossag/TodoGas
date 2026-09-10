@@ -54,6 +54,71 @@ class AssetNodeSerializer(serializers.ModelSerializer):
         return obj.children.count()
 
 
+class AssetNodeCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer de escritura para las ubicaciones.
+
+    AssetNodeSerializer expone `hospital` y `parent` como SerializerMethodField,
+    o sea de solo lectura. El viewset lo usaba tambien para crear, asi que el
+    POST descartaba esos dos campos en silencio y el INSERT se estrellaba contra
+    el NOT NULL de hospital_id: un HTTP 500 en la cara del cliente en vez de una
+    validacion. Crear ubicaciones era imposible por API.
+
+    `path` no se acepta: lo materializa AssetNode.save() a partir del padre.
+    """
+
+    class Meta:
+        model = AssetNode
+        fields = [
+            "id", "hospital", "parent", "name", "node_type", "code",
+            "sort_order", "is_active",
+        ]
+        read_only_fields = ["id"]
+
+    def _hospital_de(self, attrs, campo):
+        if campo in attrs:
+            return attrs[campo]
+        return getattr(self.instance, campo, None)
+
+    def validate(self, attrs):
+        hospital = self._hospital_de(attrs, "hospital")
+        parent = self._hospital_de(attrs, "parent")
+
+        if parent is not None:
+            if hospital and parent.hospital_id != hospital.pk:
+                raise serializers.ValidationError(
+                    {"parent": "El nodo padre pertenece a otro hospital."}
+                )
+            # Un ciclo dejaria path() en recursion infinita y el arbol
+            # inalcanzable. Solo puede darse al reasignar el padre de un nodo
+            # existente.
+            if self.instance is not None:
+                actual = parent
+                while actual is not None:
+                    if actual.pk == self.instance.pk:
+                        raise serializers.ValidationError(
+                            {"parent": "Un nodo no puede colgar de si mismo ni de "
+                                       "uno de sus descendientes."}
+                        )
+                    actual = actual.parent
+
+        nombre = attrs.get("name", getattr(self.instance, "name", None))
+        if hospital and nombre:
+            hermanos = AssetNode.objects.filter(
+                hospital=hospital, parent=parent, name=nombre
+            )
+            if self.instance is not None:
+                hermanos = hermanos.exclude(pk=self.instance.pk)
+            if hermanos.exists():
+                # Sin esto la restriccion unica (hospital, parent, name) saltaba
+                # como IntegrityError, otro 500.
+                raise serializers.ValidationError(
+                    {"name": "Ya existe una ubicacion con ese nombre en el mismo "
+                             "nivel."}
+                )
+
+        return attrs
+
+
 class AssetNodeTreeSerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
 
@@ -86,61 +151,17 @@ class AssetCustomFieldValueSerializer(serializers.ModelSerializer):
         return {"id": str(obj.field_id), "field_name": obj.field.field_name}
 
 
-class AssetSerializer(serializers.ModelSerializer):
-    hospital = serializers.SerializerMethodField()
-    node = serializers.SerializerMethodField()
-    custom_field_values = AssetCustomFieldValueSerializer(many=True, read_only=True)
+class AssetMaintenanceFieldsMixin:
+    """Estado de mantenimiento derivado, compartido por el listado y la ficha.
 
-    class Meta:
-        model = Asset
-        fields = [
-            "id", "hospital", "node", "name", "code", "manufacturer", "model",
-            "serial_number", "equipment_location", "barcode", "priority",
-            "asset_type", "classification_1", "classification_2", "supplier",
-            "purchase_date", "avg_daily_usage_hours", "status", "notes",
-            "qr_code", "photo_url", "installation_date", "warranty_expiry",
-            "created_at", "updated_at", "custom_field_values",
-        ]
-        read_only_fields = ["id", "qr_code", "created_at", "updated_at"]
+    Lee las anotaciones _last_maint y _next_due que pone AssetViewSet.get_queryset
+    (subconsultas, no una query por activo). El fallback per-fila solo actua si el
+    serializer se usa sobre un queryset sin anotar.
 
-    def get_hospital(self, obj):
-        return {"id": str(obj.hospital_id), "name": obj.hospital.name}
-
-    def get_node(self, obj):
-        if obj.node_id:
-            return {"id": str(obj.node_id), "name": obj.node.name, "path": obj.node.path}
-        return None
-
-
-class AssetListSerializer(serializers.ModelSerializer):
-    hospital = serializers.SerializerMethodField()
-    node = serializers.SerializerMethodField()
-    last_maintenance_date = serializers.SerializerMethodField()
-    next_maintenance_date = serializers.SerializerMethodField()
-    maintenance_status = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Asset
-        fields = [
-            "id", "name", "code", "hospital", "node",
-            "asset_type", "status", "priority",
-            # Columnas planas que el portal del cliente muestra en su tabla.
-            "manufacturer", "model", "equipment_location",
-            "last_maintenance_date", "next_maintenance_date", "maintenance_status",
-        ]
-
-    def get_hospital(self, obj):
-        return {"id": str(obj.hospital_id), "name": obj.hospital.name}
-
-    def get_node(self, obj):
-        if obj.node_id:
-            return {"id": str(obj.node_id), "path": obj.node.path}
-        return None
-
-    # last_maintenance_date, next_maintenance_date y maintenance_status leen las
-    # anotaciones _last_maint y _next_due que pone AssetViewSet.get_queryset
-    # (subconsultas, no una query por activo). El fallback per-fila solo actua
-    # si el serializer se usa sobre un queryset sin anotar.
+    Los tres SerializerMethodField se declaran en cada serializer y no aqui: DRF
+    solo recoge campos declarados de bases que ya son serializers, asi que en un
+    mixin plano se perderian en silencio.
+    """
 
     def _next_due(self, obj):
         if hasattr(obj, "_next_due"):
@@ -182,6 +203,65 @@ class AssetListSerializer(serializers.ModelSerializer):
         if delta <= 15:
             return "due_soon"
         return "on_time"
+
+
+class AssetSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
+    hospital = serializers.SerializerMethodField()
+    node = serializers.SerializerMethodField()
+    custom_field_values = AssetCustomFieldValueSerializer(many=True, read_only=True)
+    # La ficha muestra el mismo bloque de mantenimiento que el listado. Sin estos
+    # tres campos llegaban undefined al frontend y AssetDetailPage pintaba
+    # "Sin plan"/"Nunca" para cualquier activo, contradiciendo a /activos.
+    last_maintenance_date = serializers.SerializerMethodField()
+    next_maintenance_date = serializers.SerializerMethodField()
+    maintenance_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Asset
+        fields = [
+            "id", "hospital", "node", "name", "code", "manufacturer", "model",
+            "serial_number", "equipment_location", "barcode", "priority",
+            "asset_type", "classification_1", "classification_2", "supplier",
+            "purchase_date", "avg_daily_usage_hours", "status", "notes",
+            "qr_code", "photo_url", "installation_date", "warranty_expiry",
+            "created_at", "updated_at", "custom_field_values",
+            "last_maintenance_date", "next_maintenance_date", "maintenance_status",
+        ]
+        read_only_fields = ["id", "qr_code", "created_at", "updated_at"]
+
+    def get_hospital(self, obj):
+        return {"id": str(obj.hospital_id), "name": obj.hospital.name}
+
+    def get_node(self, obj):
+        if obj.node_id:
+            return {"id": str(obj.node_id), "name": obj.node.name, "path": obj.node.path}
+        return None
+
+
+class AssetListSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
+    hospital = serializers.SerializerMethodField()
+    node = serializers.SerializerMethodField()
+    last_maintenance_date = serializers.SerializerMethodField()
+    next_maintenance_date = serializers.SerializerMethodField()
+    maintenance_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Asset
+        fields = [
+            "id", "name", "code", "hospital", "node",
+            "asset_type", "status", "priority",
+            # Columnas planas que el portal del cliente muestra en su tabla.
+            "manufacturer", "model", "equipment_location",
+            "last_maintenance_date", "next_maintenance_date", "maintenance_status",
+        ]
+
+    def get_hospital(self, obj):
+        return {"id": str(obj.hospital_id), "name": obj.hospital.name}
+
+    def get_node(self, obj):
+        if obj.node_id:
+            return {"id": str(obj.node_id), "path": obj.node.path}
+        return None
 
 
 class AssetCreateUpdateSerializer(serializers.ModelSerializer):

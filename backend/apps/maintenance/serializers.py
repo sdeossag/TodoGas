@@ -152,6 +152,23 @@ class MaintenancePlanCreateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("El plan debe tener al menos un activo.")
         return value
 
+    def validate_checklist_template(self, value):
+        """Rechaza plantillas sin version publicada.
+
+        La OT se ata a la version, no a la plantilla: si no hay ninguna con
+        is_current, el motor deja checklist_version en None y genera ordenes
+        preventivas sin nada que diligenciar. El formulario de creacion de OT ya
+        filtraba por esto; el de planes aceptaba cualquier plantilla.
+        """
+        if value is None:
+            return value
+        if not value.versions.filter(is_current=True).exists():
+            raise serializers.ValidationError(
+                f"La plantilla '{value.name}' no tiene una version publicada. "
+                "Publicala desde el editor de checklists o elige otra plantilla."
+            )
+        return value
+
     def create(self, validated_data):
         from .engine import calculate_next_due_date
         assets = validated_data.pop('assets', [])

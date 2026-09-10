@@ -273,7 +273,14 @@ export default function WorkOrderDetailPage() {
           {tab === 0 && <HistoryTab id={id} isAdminOrSup={isAdminOrSup} />}
           {tab === 1 && <ChecklistTab wo={wo} user={user} refetch={refetch} />}
           {tab === 3 && <RepuestosTab wo={wo} user={user} />}
-          {tab === 4 && <ReportsTab workOrderId={id} woStatus={wo.status} role={role} />}
+          {tab === 4 && (
+            <ReportsTab
+              workOrderId={id}
+              woStatus={wo.status}
+              reportStatus={wo.report_status}
+              role={role}
+            />
+          )}
           {tab === 2 && (
             <div className="space-y-8">
               <div>
@@ -762,6 +769,9 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
 
   const submitFieldMut = useSubmitField(response.id)
   const completeMut = useCompleteChecklist(response.id)
+  // Rechazos permanentes (4xx) por campo, para poder avisar al tecnico en vez
+  // de tragarlos como si fueran falta de red.
+  const [fieldErrors, setFieldErrors] = useState({})
 
   const isOnline = useNetworkStore((s) => s.isOnline)
   const refreshPendingCount = useNetworkStore((s) => s.refreshPendingCount)
@@ -789,9 +799,22 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
     )
   }
 
-  async function handleBlur(fieldId) {
+  /**
+   * Guarda la respuesta de un campo.
+   *
+   * `valorExplicito` existe para los campos que se contestan de un toque
+   * (si/no, seleccion, foto). Antes hacian `onChange(v); setTimeout(onBlur, 0)`
+   * y el onBlur programado era el cierre de la renderizacion anterior, asi que
+   * leia de `localValues` el valor VIEJO. Con el guard de mas abajo eso salia
+   * sin enviar nada: el toque se perdia, la interfaz ya mostraba la respuesta
+   * nueva y al recargar reaparecia la vieja. En un checklist de cumplimiento
+   * eso es un acta que afirma lo contrario de lo que verifico el tecnico.
+   */
+  async function handleBlur(fieldId, valorExplicito) {
     if (!canEdit) return
-    const value = localValues[fieldId] ?? ''
+    const value = valorExplicito !== undefined
+      ? valorExplicito
+      : (localValues[fieldId] ?? '')
     if (answeredMap[fieldId]?.value === value) return
 
     // Siempre a SQLite primero: es la unica escritura que no puede fallar.
@@ -813,13 +836,33 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
     try {
       await submitFieldMut.mutateAsync({ field: fieldId, value, notes: '' })
       await markFieldResponseSynced(response.id, fieldId)
+      setFieldErrors((prev) => {
+        if (!prev[fieldId]) return prev
+        const { [fieldId]: _, ...resto } = prev
+        return resto
+      })
       onFieldSaved()
     } catch (err) {
-      // Un fallo de red no interrumpe al tecnico: queda en cola.
-      console.warn(
-        '[Checklist] submit-field fallo, guardado offline:',
-        err?.response?.data ?? err?.message
-      )
+      const status = err?.response?.status
+      // Un 4xx es permanente: el valor no vale y reintentarlo nunca va a
+      // funcionar. Antes se encolaba igual que un corte de red y el tecnico no
+      // veia nada, asi que la respuesta se perdia en silencio.
+      if (status >= 400 && status < 500) {
+        const detalle = err.response?.data?.value ?? err.response?.data?.detail
+        setFieldErrors((prev) => ({
+          ...prev,
+          [fieldId]: typeof detalle === 'string'
+            ? detalle
+            : 'No se pudo guardar esta respuesta. Revisa el valor.',
+        }))
+        console.warn('[Checklist] submit-field rechazado:', err.response?.data)
+      } else {
+        // Sin respuesta o 5xx: transitorio. Queda en cola y se reintenta.
+        console.warn(
+          '[Checklist] submit-field fallo, guardado offline:',
+          err?.response?.data ?? err?.message
+        )
+      }
     }
     await refreshPendingCount()
   }
@@ -882,18 +925,28 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
       {/* Fields */}
       <div className="space-y-5">
         {currentGroup.fields.map((field) => (
-          <ChecklistFieldInput
-            key={field.id}
-            field={field}
-            workOrderId={workOrderId}
-            value={localValues[field.id] ?? ''}
-            fieldResponse={answeredMap[field.id]}
-            disabled={!canEdit}
-            onChange={(val) =>
-              setLocalValues((prev) => ({ ...prev, [field.id]: val }))
-            }
-            onBlur={() => handleBlur(field.id)}
-          />
+          <div key={field.id}>
+            <ChecklistFieldInput
+              field={field}
+              workOrderId={workOrderId}
+              value={localValues[field.id] ?? ''}
+              fieldResponse={answeredMap[field.id]}
+              disabled={!canEdit}
+              onChange={(val) =>
+                setLocalValues((prev) => ({ ...prev, [field.id]: val }))
+              }
+              onBlur={() => handleBlur(field.id)}
+              // Los campos de un solo toque commitean el valor directamente:
+              // no pueden depender de leerlo del estado en el mismo ciclo.
+              onCommit={(val) => {
+                setLocalValues((prev) => ({ ...prev, [field.id]: val }))
+                handleBlur(field.id, val)
+              }}
+            />
+            {fieldErrors[field.id] && (
+              <p className="mt-1 text-xs text-red-600">{fieldErrors[field.id]}</p>
+            )}
+          </div>
         ))}
       </div>
 
@@ -946,7 +999,7 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
   )
 }
 
-function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disabled, onChange, onBlur }) {
+function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disabled, onChange, onBlur, onCommit }) {
   const ft = getFieldType(field.field_type)
   const isAnswered = !!fieldResponse
   const isOutOfRange = fieldResponse?.out_of_range
@@ -961,7 +1014,6 @@ function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disable
   function getMultiValues() {
     try { return JSON.parse(value || '[]') } catch { return [] }
   }
-  function setMultiValues(arr) { onChange(JSON.stringify(arr)) }
 
   const inputCls =
     'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:bg-gray-50 disabled:text-gray-500'
@@ -1035,7 +1087,7 @@ function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disable
               key={v}
               type="button"
               disabled={disabled}
-              onClick={() => { onChange(v); setTimeout(onBlur, 0) }}
+              onClick={() => onCommit(v)}
               className={`px-5 py-2 rounded-lg border text-sm font-medium transition-colors disabled:cursor-default ${
                 value === v
                   ? v === 'true'
@@ -1080,8 +1132,7 @@ function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disable
                   disabled={disabled}
                   onChange={() => {
                     const next = checked ? selected.filter((v) => v !== o) : [...selected, o]
-                    setMultiValues(next)
-                    setTimeout(onBlur, 0)
+                    onCommit(JSON.stringify(next))
                   }}
                   className="rounded border-gray-300 text-brand focus:ring-brand"
                 />
@@ -1130,8 +1181,7 @@ function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disable
                 navigator.geolocation.getCurrentPosition(
                   (pos) => {
                     const v = `${pos.coords.latitude.toFixed(6)},${pos.coords.longitude.toFixed(6)}`
-                    onChange(v)
-                    setTimeout(onBlur, 0)
+                    onCommit(v)
                   },
                   (err) => console.error('GPS error', err)
                 )
@@ -1151,8 +1201,7 @@ function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disable
           workOrderId={workOrderId}
           value={value}
           disabled={disabled}
-          onChange={onChange}
-          onBlur={onBlur}
+          onCommit={onCommit}
         />
       )}
 
@@ -1176,7 +1225,7 @@ function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disable
  * salia del navegador. Ahora sube la imagen a la evidencia de la OT y guarda
  * la URL devuelta como valor del campo.
  */
-function ChecklistPhotoField({ workOrderId, value, disabled, onChange, onBlur }) {
+function ChecklistPhotoField({ workOrderId, value, disabled, onCommit }) {
   const uploadPhoto = useUploadPhoto()
   const [error, setError] = useState('')
 
@@ -1194,8 +1243,7 @@ function ChecklistPhotoField({ workOrderId, value, disabled, onChange, onBlur })
         taken_at: new Date().toISOString(),
         caption: 'Checklist',
       })
-      onChange(photo.file_url ?? photo.id)
-      setTimeout(onBlur, 0)
+      onCommit(photo.file_url ?? photo.id)
     } catch (err) {
       const detail = err?.response?.data
       const first = detail && typeof detail === 'object' ? Object.values(detail).flat()[0] : detail
@@ -1465,7 +1513,7 @@ function RepuestoModal({ wo, onClose }) {
 
 // ── Reports tab ───────────────────────────────────────────────────────────────
 
-function ReportsTab({ workOrderId, woStatus, role }) {
+function ReportsTab({ workOrderId, woStatus, reportStatus, role }) {
   const { data: reports = [], isLoading, isError, refetch } = useWorkOrderReports(workOrderId)
   const downloadMut = useReportDownload()
   const resendMut = useResendReportEmail()
@@ -1474,6 +1522,10 @@ function ReportsTab({ workOrderId, woStatus, role }) {
   const regenerateMut = useRegenerateReport(workOrderId)
 
   const hasReport = reports.length > 0
+  // El backend ya sabe que la generacion fallo (lo registra en auditoria). Sin
+  // consultarlo, esta pestaña no distinguia "fallo" de "todavia se genera" y
+  // giraba los dos minutos enteros del temporizador antes de rendirse.
+  const knownFailure = reportStatus === 'failed'
 
   // Temporizador explicito. Antes se comparaba contra `dataUpdatedAt`, pero ese
   // valor se refresca en cada sondeo, asi que el umbral no se alcanzaba nunca y
@@ -1483,9 +1535,13 @@ function ReportsTab({ workOrderId, woStatus, role }) {
       setGaveUp(false)
       return undefined
     }
+    if (knownFailure) {
+      setGaveUp(true)
+      return undefined
+    }
     const timer = setTimeout(() => setGaveUp(true), REPORT_POLL_TIMEOUT_MS)
     return () => clearTimeout(timer)
-  }, [woStatus, hasReport])
+  }, [woStatus, hasReport, knownFailure])
 
   if (woStatus !== 'COMPLETED') {
     return (

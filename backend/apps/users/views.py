@@ -11,6 +11,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.audit.services import LoginOutcome, log_login_attempt
+
 from .emails import send_password_reset_email, send_welcome_email
 from .models import User
 from .permissions import IsAdmin, IsAdminOrSup, IsOwnerOrAdmin
@@ -53,13 +55,17 @@ class LoginView(APIView):
         email = request.data.get("email", "").lower().strip()
         password = request.data.get("password", "")
 
+        # Cada desenlace se audita aqui y no en AuditMiddleware: la peticion de
+        # login llega anonima, asi que el middleware no puede saber quien entro.
         if not email or not password:
+            log_login_attempt(request, email=email, outcome=LoginOutcome.INCOMPLETE)
             return Response(
                 {"detail": "Email y contraseña son requeridos."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if _throttle.is_blocked(email):
+            log_login_attempt(request, email=email, outcome=LoginOutcome.THROTTLED)
             return Response(
                 {"detail": "Cuenta bloqueada temporalmente. Intenta de nuevo en 30 minutos."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -69,17 +75,27 @@ class LoginView(APIView):
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             _throttle.register_failed_attempt(email)
+            log_login_attempt(request, email=email, outcome=LoginOutcome.UNKNOWN_EMAIL)
             return Response({"detail": "Credenciales inválidas."}, status=status.HTTP_401_UNAUTHORIZED)
 
         if not user.check_password(password):
             remaining = _throttle.register_failed_attempt(email)
+            log_login_attempt(
+                request, email=email, outcome=LoginOutcome.BAD_CREDENTIALS, target=user
+            )
             detail = f"Credenciales inválidas. Intentos restantes: {remaining}."
             return Response({"detail": detail}, status=status.HTTP_401_UNAUTHORIZED)
 
         if not user.is_active:
+            log_login_attempt(
+                request, email=email, outcome=LoginOutcome.INACTIVE, target=user
+            )
             return Response({"detail": "Cuenta desactivada."}, status=status.HTTP_403_FORBIDDEN)
 
         _throttle.reset_attempts(email)
+        log_login_attempt(
+            request, email=email, outcome=LoginOutcome.SUCCESS, user=user
+        )
         refresh = RefreshToken.for_user(user)
         return Response(
             {

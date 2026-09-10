@@ -5,21 +5,43 @@ import uuid
 
 from django.utils.deprecation import MiddlewareMixin
 
+from .services import AUTH_ENTITY_TYPE
+
 logger = logging.getLogger(__name__)
 
 _PATH_ENTITY_MAP = [
     ('/api/evidence/photos/', 'Photo'),
     ('/api/evidence/signatures/', 'Signature'),
     ('/api/asset-nodes/', 'AssetNode'),
+    ('/api/asset-custom-fields/', 'AssetCustomField'),
     ('/api/assets/', 'Asset'),
     ('/api/hospitals/', 'Hospital'),
     ('/api/work-orders/', 'WorkOrder'),
-    ('/api/checklist-templates/', 'ChecklistTemplate'),
-    ('/api/maintenance-plans/', 'MaintenancePlan'),
+    # Estos dos prefijos estaban escritos con guion ('/api/checklist-templates/',
+    # '/api/maintenance-plans/') y las rutas reales llevan barra, asi que no
+    # coincidian nunca: toda la actividad de checklists y de planes PM se
+    # guardaba como URL cruda y quedaba fuera del filtro de la auditoria.
+    # Incluido submit-field y complete, que es el rastro de lo que el tecnico
+    # verifico en cada OT.
+    ('/api/checklists/templates/', 'ChecklistTemplate'),
+    ('/api/checklists/responses/', 'ChecklistResponse'),
+    ('/api/maintenance/plans/', 'MaintenancePlan'),
+    ('/api/reports/', 'GeneratedReport'),
     ('/api/users/', 'User'),
     ('/api/inventory/items/', 'InventoryItem'),
     ('/api/inventory/movements/', 'StockMovement'),
+    # Logout, refresh y cambio de contrasena. Sin esta entrada _entity_type_from_path
+    # devolvia la ruta cruda ('/api/auth/logout/') como tipo de entidad, que no
+    # coincide con ninguna opcion del filtro de la pantalla de auditoria y dejaba
+    # esos eventos fuera de cualquier busqueda. Va al final: es el prefijo mas
+    # generico y no debe ganarle a ninguno de los de arriba.
+    ('/api/auth/', AUTH_ENTITY_TYPE),
 ]
+
+# El login se audita en LoginView, que es el unico sitio donde se conoce la
+# identidad: aqui la peticion todavia es anonima y todo inicio de sesion acababa
+# registrado como "Sistema".
+_VIEW_AUDITED_PATHS = ('/api/auth/login/',)
 
 _UUID_RE = re.compile(
     r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.I
@@ -63,6 +85,8 @@ class AuditMiddleware(MiddlewareMixin):
             if not path.startswith('/api/'):
                 return response
             if request.method == 'GET':
+                return response
+            if path in _VIEW_AUDITED_PATHS:
                 return response
 
             status_code = response.status_code

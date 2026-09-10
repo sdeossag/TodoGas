@@ -44,10 +44,13 @@ def get_plans_due_today():
     )
 
 
-def generate_work_orders_for_plan(plan, triggered_by=None):
+def generate_work_orders_for_plan(plan, triggered_by=None, manual=False):
     """
     Creates one WorkOrder per asset in the plan (skips assets with active OTs).
     Returns {'created': int, 'skipped': int, 'warnings': list, 'execution_id': str}.
+
+    `manual=True` marca el disparo desde la interfaz ("Disparar ahora"), que no
+    es lo mismo que la corrida programada: ver `is_cycle_run` mas abajo.
     """
     from apps.work_orders.models import WorkOrder
     from apps.checklists.models import ChecklistTemplateVersion
@@ -57,6 +60,24 @@ def generate_work_orders_for_plan(plan, triggered_by=None):
     warnings = []
     execution = None
 
+    today = date.today()
+    due_date = plan.next_due_date or today
+
+    # Un disparo manual ANTES del vencimiento es un mantenimiento extraordinario:
+    # la OT es para hoy y el calendario no se toca. Antes se trataba igual que la
+    # corrida programada, asi que adelantaba next_due_date un periodo completo y
+    # la ejecucion que tocaba desaparecia sin dejar rastro.
+    #
+    # Si el plan ya vencia, el disparo manual SI ejecuta el ciclo: es la corrida
+    # programada hecha a mano. La corrida automatica siempre entra por aqui,
+    # porque get_plans_due_today() solo devuelve planes con next_due_date <= hoy.
+    is_cycle_run = (
+        not manual
+        or plan.next_due_date is None
+        or plan.next_due_date <= today
+    )
+    scheduled_for = due_date if is_cycle_run else today
+
     checklist_version = None
     if plan.checklist_template_id:
         checklist_version = (
@@ -64,6 +85,16 @@ def generate_work_orders_for_plan(plan, triggered_by=None):
             .filter(template_id=plan.checklist_template_id, is_current=True)
             .first()
         )
+        # El serializer ya no deja asociar una plantilla sin version publicada,
+        # pero se puede despublicar despues de crear el plan, y los planes
+        # anteriores a esa validacion siguen en la base. Se generan igual: no
+        # crear la OT cancelaria el preventivo en silencio, que es peor que una
+        # OT sin checklist. Lo que no puede pasar es que nadie se entere.
+        if checklist_version is None:
+            warnings.append(
+                f"La plantilla '{plan.checklist_template.name}' no tiene version "
+                "publicada: las OT se crean sin checklist que diligenciar."
+            )
 
     active_statuses = [
         WorkOrder.Status.PENDING,
@@ -107,7 +138,7 @@ def generate_work_orders_for_plan(plan, triggered_by=None):
                 status=WorkOrder.Status.PENDING,
                 maintenance_plan=plan,
                 checklist_version=checklist_version,
-                scheduled_date=plan.next_due_date or date.today(),
+                scheduled_date=scheduled_for,
                 created_by=creator,
                 estimated_duration=plan.estimated_duration,
             )
@@ -122,10 +153,17 @@ def generate_work_orders_for_plan(plan, triggered_by=None):
         )
 
         plan.last_generated_at = timezone.now()
-        plan.next_due_date = calculate_next_due_date(
-            plan, from_date=plan.next_due_date or date.today()
-        )
-        plan.save(update_fields=['last_generated_at', 'next_due_date'])
+        if is_cycle_run:
+            plan.next_due_date = calculate_next_due_date(plan, from_date=due_date)
+            plan.save(update_fields=['last_generated_at', 'next_due_date'])
+        else:
+            # Extraordinario: el calendario se queda donde estaba. Se avisa,
+            # porque "Disparar ahora" sin mas da a entender que consumio el ciclo.
+            plan.save(update_fields=['last_generated_at'])
+            warnings.append(
+                "Mantenimiento extraordinario: el proximo vencimiento programado "
+                f"sigue siendo el {plan.next_due_date}."
+            )
 
     return {
         'created': created_count,

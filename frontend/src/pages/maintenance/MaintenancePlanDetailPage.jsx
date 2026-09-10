@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer,
@@ -12,6 +12,8 @@ import {
   useResumePlan,
 } from '../../api/maintenance'
 import Icon from '../../components/ui/Icon'
+import useModalDismiss from '../../hooks/useModalDismiss'
+import Spinner from '../../components/ui/Spinner'
 
 const FREQ_UNIT_LABELS = {
   DAYS: 'días', WEEKS: 'semanas', MONTHS: 'meses', YEARS: 'años',
@@ -26,14 +28,6 @@ const PRIORITY_LABELS = {
   LOW: { label: 'Baja', cls: 'bg-gray-100 text-gray-500' },
 }
 
-function Spinner() {
-  return (
-    <svg className="animate-spin h-6 w-6 text-brand" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  )
-}
 
 function formatDate(val) {
   if (!val) return '—'
@@ -60,6 +54,9 @@ export default function MaintenancePlanDetailPage() {
   const [tab, setTab] = useState(0)
   const [triggerResult, setTriggerResult] = useState(null)
   const [showTriggerModal, setShowTriggerModal] = useState(false)
+
+  const closeTriggerModal = useCallback(() => setShowTriggerModal(false), [])
+  useModalDismiss(showTriggerModal ? closeTriggerModal : null)
 
   const { data: plan, isLoading, isError } = useMaintenancePlan(id)
   const pauseMut = usePausePlan(id)
@@ -98,7 +95,7 @@ export default function MaintenancePlanDetailPage() {
       </nav>
 
       {/* Encabezado */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -112,7 +109,7 @@ export default function MaintenancePlanDetailPage() {
                 Prioridad {pr.label}
               </span>
             </div>
-            <h1 className="text-2xl font-bold text-gray-800">{plan.name}</h1>
+            <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">{plan.name}</h1>
             <p className="text-sm text-gray-500 mt-0.5">
               Cada {plan.frequency_value} {FREQ_UNIT_LABELS[plan.frequency_unit]}
             </p>
@@ -169,7 +166,7 @@ export default function MaintenancePlanDetailPage() {
         {/* Next 5 dates */}
         {plan.next_5_dates?.length > 0 && (
           <div className="mt-4 border-t pt-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-2">Próximas ejecuciones</p>
+            <p className="text-xs font-medium text-gray-500 mb-2">Próximas ejecuciones</p>
             <div className="flex gap-3 flex-wrap">
               {plan.next_5_dates.map((d, i) => (
                 <span key={i} className="text-xs bg-brand/10 text-brand px-2 py-1 rounded-lg">
@@ -182,7 +179,7 @@ export default function MaintenancePlanDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         <div className="border-b flex">
           {['Activos del plan', 'Historial de ejecuciones', 'Cumplimiento'].map((t, i) => (
             <button key={t} onClick={() => setTab(i)}
@@ -202,7 +199,7 @@ export default function MaintenancePlanDetailPage() {
 
       {/* Trigger modal */}
       {showTriggerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 space-y-4">
             {!triggerResult ? (
               <>
@@ -252,7 +249,7 @@ export default function MaintenancePlanDetailPage() {
 function InfoItem({ label, value }) {
   return (
     <div>
-      <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-0.5">{label}</p>
+      <p className="text-xs font-medium text-gray-500 mb-0.5">{label}</p>
       <div className="text-sm text-gray-800">{value ?? '—'}</div>
     </div>
   )
@@ -268,7 +265,7 @@ function AssetsTab({ plan }) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-gray-50">
-          <tr className="text-left text-xs text-gray-500 uppercase tracking-wide">
+          <tr className="text-left text-xs font-medium text-gray-500">
             <th className="px-3 py-2">Código</th>
             <th className="px-3 py-2">Nombre</th>
             <th className="px-3 py-2">Hospital</th>

@@ -85,9 +85,7 @@ jobs:
             libgdk-pixbuf-2.0-0
 
       - name: Instalar dependencias Python
-        run: |
-          pip install -r backend/requirements.txt
-          pip install pytest pytest-django coverage
+        run: pip install -r backend/requirements-dev.txt
 
       - name: Verificar que manage.py check pasa
         working-directory: backend
@@ -102,7 +100,7 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
         run: python manage.py check
 
-      - name: Verificar migraciones al dia
+      - name: Verificar que no falten migraciones por generar
         working-directory: backend
         env:
           DJANGO_SETTINGS_MODULE: config.settings.development
@@ -113,9 +111,12 @@ jobs:
           DB_HOST: localhost
           DB_PORT: 5432
           REDIS_URL: redis://localhost:6379/0
-        run: python manage.py migrate --check
-        # Falla si hay migraciones pendientes de crear
-        # Obliga a hacer makemigrations antes de hacer PR
+        run: python manage.py makemigrations --check --dry-run
+        # Sale con codigo 1 si un modelo cambio sin su migracion.
+        # Obliga a hacer makemigrations antes de abrir el PR.
+        #
+        # No usar `migrate --check`: ese comprueba migraciones sin APLICAR, y
+        # contra la base recien creada del job siempre serian todas.
 
       - name: Correr migraciones
         working-directory: backend
@@ -143,7 +144,8 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
         run: |
           coverage run -m pytest apps/ -v --tb=short
-          coverage report --min-coverage=0
-          # min-coverage=0 por ahora porque no hay tests aun.
-          # Subir a 70 cuando haya tests en los modulos criticos
-          # (users, work_orders, audit).
+          coverage report --fail-under=0
+          # El flag es --fail-under; --min-coverage no existe en coverage.py
+          # y hacia fallar el paso entero.
+          # Umbral en 0 por ahora: subirlo a 70 cuando la cobertura de los
+          # modulos criticos (users, work_orders, audit) este medida.

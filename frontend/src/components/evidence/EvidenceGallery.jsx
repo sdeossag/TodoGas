@@ -29,7 +29,7 @@ export default function EvidenceGallery({ workOrderId }) {
     <div className="space-y-8">
       {/* Fotos */}
       <div>
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+        <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
           Fotos
         </h3>
         {photos.isLoading ? (
@@ -66,7 +66,7 @@ export default function EvidenceGallery({ workOrderId }) {
 
       {/* Firmas */}
       <div>
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+        <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
           Firmas
         </h3>
         {signatures.isLoading ? (

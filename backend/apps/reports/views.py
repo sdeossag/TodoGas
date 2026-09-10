@@ -23,7 +23,7 @@ class GeneratedReportViewSet(
     def get_queryset(self):
         user = self.request.user
         qs = GeneratedReport.objects.select_related(
-            "work_order"
+            "work_order", "work_order__asset", "work_order__asset__hospital"
         ).prefetch_related("send_logs")
 
         if user.role == User.Role.ADMIN:

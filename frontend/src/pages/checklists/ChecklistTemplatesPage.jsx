@@ -3,15 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import { useChecklistTemplates, useCreateChecklistTemplate } from '../../api/checklists'
 import Icon from '../../components/ui/Icon'
+import useModalDismiss from '../../hooks/useModalDismiss'
+import Spinner from '../../components/ui/Spinner'
 
-function Spinner() {
-  return (
-    <svg className="animate-spin h-8 w-8 text-brand" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  )
-}
 
 const FILTERS = [
   { value: '', label: 'Todas' },
@@ -29,14 +23,14 @@ export default function ChecklistTemplatesPage() {
 
   const params =
     filter === 'active' ? { is_active: true } : filter === 'inactive' ? { is_active: false } : {}
-  const { data: templates = [], isLoading } = useChecklistTemplates(params)
+  const { data: templates = [], isLoading, isError } = useChecklistTemplates(params)
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Checklists</h1>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Checklists</h1>
           <p className="text-sm text-gray-500 mt-0.5">{templates.length} plantillas</p>
         </div>
         {isAdmin && (
@@ -67,8 +61,12 @@ export default function ChecklistTemplatesPage() {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {isLoading ? (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
+        {isError ? (
+          <div className="text-center py-16 text-red-600 text-sm">
+            No se pudo cargar las plantillas de checklist. Revisa tu conexión e intenta de nuevo.
+          </div>
+        ) : isLoading ? (
           <div className="flex justify-center py-16">
             <Spinner />
           </div>
@@ -89,7 +87,7 @@ export default function ChecklistTemplatesPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
-                <tr className="text-left text-xs text-gray-500 uppercase tracking-wide">
+                <tr className="text-left text-xs font-medium text-gray-500">
                   <th className="px-4 py-3">Nombre</th>
                   <th className="px-4 py-3">Versión actual</th>
                   <th className="px-4 py-3">Campos</th>
@@ -157,6 +155,7 @@ export default function ChecklistTemplatesPage() {
 // ── Modal de creación ────────────────────────────────────────────────────────
 
 function CreateTemplateModal({ onClose, onCreated }) {
+  useModalDismiss(onClose)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState('')
@@ -181,7 +180,7 @@ function CreateTemplateModal({ onClose, onCreated }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 space-y-4">
         <h3 className="text-lg font-semibold text-gray-800">Nueva plantilla de checklist</h3>
 

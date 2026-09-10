@@ -24,7 +24,11 @@ import InventoryPage from '../pages/inventory/InventoryPage'
 import ItemMovementsPage from '../pages/inventory/ItemMovementsPage'
 import AuditLogPage from '../pages/audit/AuditLogPage'
 import UsersPage from '../pages/users/UsersPage'
+import ProfilePage from '../pages/users/ProfilePage'
 import ClientDashboard from '../pages/client/ClientDashboard'
+import ClientReportsPage from '../pages/client/ClientReportsPage'
+import NotFoundPage from '../pages/NotFoundPage'
+import UiSpinner from '../components/ui/Spinner'
 
 import AdminLayout from '../layouts/AdminLayout'
 import TechnicianLayout from '../layouts/TechnicianLayout'
@@ -39,16 +43,8 @@ const ROLE_HOME = {
 
 function Spinner() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <svg
-        className="animate-spin h-8 w-8 text-brand"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-      </svg>
+    <div className="min-h-dvh flex items-center justify-center bg-gray-50">
+      <UiSpinner className="h-8 w-8 text-brand" label="Cargando la aplicacion" />
     </div>
   )
 }
@@ -101,8 +97,16 @@ export const router = createBrowserRouter(
             { path: '/reportes', element: <ReportsPage /> },
             { path: '/inventario', element: <InventoryPage /> },
             { path: '/inventario/:id/movimientos', element: <ItemMovementsPage /> },
-            { path: '/usuarios', element: <UsersPage /> },
-            { path: '/auditoria', element: <AuditLogPage /> },
+            { path: '/mi-perfil', element: <ProfilePage /> },
+
+            // Gestion de usuarios y auditoria: ADMIN, no SUP.
+            {
+              element: <ProtectedRoute allowedRoles={['ADMIN']} />,
+              children: [
+                { path: '/usuarios', element: <UsersPage /> },
+                { path: '/auditoria', element: <AuditLogPage /> },
+              ],
+            },
           ],
         },
       ],
@@ -117,6 +121,7 @@ export const router = createBrowserRouter(
           children: [
             { path: '/mis-ordenes', element: <MyWorkOrdersPage /> },
             { path: '/mis-ordenes/:id', element: <WorkOrderDetailPage /> },
+            { path: '/mi-perfil', element: <ProfilePage /> },
           ],
         },
       ],
@@ -131,6 +136,8 @@ export const router = createBrowserRouter(
           children: [
             { path: '/mis-dashboard', element: <ClientDashboard /> },
             { path: '/mis-activos', element: <MisActivosPage /> },
+            { path: '/mis-reportes', element: <ClientReportsPage /> },
+            { path: '/mi-perfil', element: <ProfilePage /> },
           ],
         },
       ],
@@ -141,7 +148,7 @@ export const router = createBrowserRouter(
       path: '/',
       element: <RootRedirect />,
     },
-    { path: '*', element: <Navigate to="/login" replace /> },
+    { path: '*', element: <NotFound /> },
   ],
   {
     future: {
@@ -157,4 +164,16 @@ function RootRedirect() {
   if (!isAuthenticated) return <Navigate to="/login" replace />
   const home = ROLE_HOME[user?.role] ?? '/login'
   return <Navigate to={home} replace />
+}
+
+/**
+ * Sin sesion, una ruta desconocida sigue llevando al login: no hay nada que
+ * ensenar y tampoco conviene confirmar que URLs existen. Con sesion abierta se
+ * muestra el 404 real, con su enlace de vuelta al inicio del rol.
+ */
+function NotFound() {
+  const { isAuthenticated, isLoading, user } = useAuthStore()
+  if (isLoading) return <Spinner />
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  return <NotFoundPage homePath={ROLE_HOME[user?.role] ?? '/'} />
 }

@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from apps.work_orders.models import WorkOrder
 
+from .failures import record_report_failure
 from .generator import generate_service_report_pdf
 from .models import GeneratedReport, ReportSendLog
 from .utils import get_logo_base64
@@ -38,39 +39,25 @@ def generate_work_order_pdf(self, work_order_id):
             "No se pudo generar el PDF de la OT %s: %s", work_order_id, exc
         )
 
-        if self.request.retries >= self.max_retries:
-            # Ultimo intento: el log del servidor deja de ser el unico sitio
-            # donde consta. Queda en la traza de auditoria, que si tiene
-            # interfaz, y el detalle de la OT lo expone como
-            # report_status='missing' para poder reintentar a mano.
-            _registrar_fallo_de_acta(work_order_id, exc)
+        # En modo eager (desarrollo, CELERY_TASK_ALWAYS_EAGER) self.retry() NO
+        # reintenta: levanta Retry, y apply() la traga porque EAGER_PROPAGATES
+        # esta en False. `retries` nunca crecia, asi que la rama de abajo no se
+        # alcanzaba jamas y el fallo no quedaba registrado en ningun sitio: la
+        # OT se cerraba sin acta y sin rastro. Por eso la condicion no es "ya
+        # agote los reintentos" sino "no va a haber otro intento".
+        will_retry = (
+            not self.request.is_eager
+            and self.request.retries < self.max_retries
+        )
+        if not will_retry:
+            # El log del servidor deja de ser el unico sitio donde consta:
+            # queda en la traza de auditoria, que si tiene interfaz, y el
+            # detalle de la OT lo expone como report_status='failed' para
+            # avisar y ofrecer el reintento manual.
+            record_report_failure(work_order_id, exc)
             return {"status": "failed", "error": str(exc)}
 
         raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))
-
-
-def _registrar_fallo_de_acta(work_order_id, exc):
-    """Anota en auditoria que una OT cerrada se quedo sin acta."""
-    from apps.audit.models import AuditLog
-
-    try:
-        AuditLog.objects.create(
-            user=None,
-            action=AuditLog.Action.CREATE,
-            entity_type="GeneratedReport",
-            entity_id=work_order_id,
-            changes={
-                "resultado": "fallo",
-                "detalle": "No se pudo generar el acta tras agotar los reintentos.",
-                "error": str(exc)[:500],
-            },
-        )
-    except Exception:
-        # Si ni la auditoria se puede escribir, el log de arriba es lo que hay.
-        logger.exception(
-            "Tampoco se pudo registrar en auditoria el fallo del acta de la OT %s",
-            work_order_id,
-        )
 
 
 @shared_task(bind=True, max_retries=3)

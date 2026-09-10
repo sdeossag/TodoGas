@@ -48,7 +48,9 @@ class MaintenancePlanViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def trigger(self, request, pk=None):
         plan = self.get_object()
-        result = generate_work_orders_for_plan(plan, triggered_by=request.user)
+        result = generate_work_orders_for_plan(
+            plan, triggered_by=request.user, manual=True
+        )
         return Response(result, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])

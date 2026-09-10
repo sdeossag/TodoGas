@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import { useAsset, useUpdateAsset, useDecommissionAsset } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
+import useModalDismiss from '../../hooks/useModalDismiss'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -29,6 +30,9 @@ export default function AssetDetailPage() {
 
   const [tab, setTab] = useState(0)
   const [confirmDecom, setConfirmDecom] = useState(false)
+
+  const closeDecomModal = useCallback(() => setConfirmDecom(false), [])
+  useModalDismiss(confirmDecom ? closeDecomModal : null)
 
   const { data: asset, isLoading, isError } = useAsset(id)
   const decommissionMut = useDecommissionAsset(id)
@@ -71,7 +75,7 @@ export default function AssetDetailPage() {
       </nav>
 
       {/* Encabezado */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -80,7 +84,7 @@ export default function AssetDetailPage() {
                 Prioridad {pr.label}
               </span>
             </div>
-            <h1 className="text-2xl font-bold text-gray-800 truncate">{asset.name}</h1>
+            <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900 truncate">{asset.name}</h1>
             <p className="text-sm text-gray-500 font-mono mt-0.5">{asset.code}</p>
             {asset.node && (
               <p className="text-sm text-gray-500 mt-1 flex items-center gap-1.5">
@@ -107,7 +111,7 @@ export default function AssetDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         <div className="border-b flex">
           {TABS.map((t, i) => (
             <button key={t} onClick={() => setTab(i)}
@@ -129,7 +133,7 @@ export default function AssetDetailPage() {
 
       {/* Modal confirmación baja */}
       {confirmDecom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-[2px]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
             <h3 className="text-lg font-semibold text-gray-800">Confirmar baja del activo</h3>
             <p className="text-sm text-gray-600">
@@ -173,7 +177,7 @@ function InfoTab({ asset }) {
         <h3 className="text-sm font-semibold text-gray-600 mb-3">Estado de mantenimiento</h3>
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-0.5">Próximo mantenimiento</p>
+            <p className="text-xs font-medium text-gray-500 mb-0.5">Próximo mantenimiento</p>
             <p className="text-sm text-gray-800">
               {asset.next_maintenance_date
                 ? new Date(asset.next_maintenance_date + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -181,7 +185,7 @@ function InfoTab({ asset }) {
             </p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-0.5">Último mantenimiento</p>
+            <p className="text-xs font-medium text-gray-500 mb-0.5">Último mantenimiento</p>
             <p className="text-sm text-gray-800">
               {asset.last_maintenance_date
                 ? new Date(asset.last_maintenance_date + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -189,7 +193,7 @@ function InfoTab({ asset }) {
             </p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-0.5">Estado</p>
+            <p className="text-xs font-medium text-gray-500 mb-0.5">Estado</p>
             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${pmBadge.cls}`}>
               {pmBadge.label}
             </span>
@@ -279,7 +283,7 @@ function HistoryTab() {
 function InfoField({ label, value }) {
   return (
     <div>
-      <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-0.5">{label}</p>
+      <p className="text-xs font-medium text-gray-500 mb-0.5">{label}</p>
       <p className="text-sm text-gray-800">{value}</p>
     </div>
   )

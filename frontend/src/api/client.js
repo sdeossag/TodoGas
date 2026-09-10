@@ -79,10 +79,28 @@ client.interceptors.response.use(
   }
 )
 
+/**
+ * Marca por que se cerro la sesion para que LoginPage lo cuente.
+ *
+ * Va en sessionStorage, no en el estado de React: la redireccion es un
+ * `location.href`, asi que la app se remonta entera y cualquier estado en
+ * memoria se pierde por el camino.
+ */
+export const SESSION_EXPIRED_KEY = 'todogas.session_expired'
+
 function clearAuthAndRedirect() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
-  window.location.href = '/login'
+  try {
+    sessionStorage.setItem(SESSION_EXPIRED_KEY, '1')
+  } catch {
+    // Modo privado sin sessionStorage: se pierde el aviso, no la redireccion.
+  }
+  // Ya estamos en /login (por ejemplo, credenciales rechazadas): recargar
+  // borraria el error que el formulario acaba de mostrar.
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login'
+  }
 }
 
 export default client

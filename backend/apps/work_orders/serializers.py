@@ -1,6 +1,8 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.reports.failures import has_report_failure
+
 from .models import WorkOrder, WorkOrderStatusHistory
 
 
@@ -106,11 +108,20 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
         (POST .../regenerate-report/).
 
         'not_applicable' mientras la OT no este cerrada, 'ok' si ya tiene acta,
-        'missing' si esta cerrada y no la tiene.
+        'failed' si consta un fallo de generacion, y 'missing' si esta cerrada,
+        no tiene acta y tampoco hay fallo registrado: sigue generandose.
+
+        Distinguir 'failed' de 'missing' es lo que permite a la interfaz dejar
+        de sondear en vacio. Antes las dos situaciones eran el mismo estado y la
+        pestaña de reportes giraba dos minutos antes de rendirse.
         """
         if obj.status != WorkOrder.Status.COMPLETED:
             return "not_applicable"
-        return "ok" if obj.reports.exists() else "missing"
+        if obj.reports.exists():
+            return "ok"
+        if has_report_failure(obj.id):
+            return "failed"
+        return "missing"
 
     def get_created_by(self, obj):
         u = obj.created_by

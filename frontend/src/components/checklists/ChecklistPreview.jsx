@@ -32,7 +32,7 @@ export default function ChecklistPreview({ fields = [] }) {
       {groups.map((group, gi) => (
         <div key={gi} className="space-y-5">
           {group.name && (
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2">
+            <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2">
               {group.name}
             </h3>
           )}

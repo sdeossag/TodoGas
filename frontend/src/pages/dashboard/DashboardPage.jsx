@@ -16,16 +16,9 @@ import {
 import { useDashboard, useComplianceHistory, useAssetsStatus } from '../../api/dashboard'
 import { useHospitals } from '../../api/assets'
 import KpiCard from '../../components/dashboard/KpiCard'
-import { complianceColor } from '../../components/dashboard/ComplianceBar'
 import Table from '../../components/ui/Table'
-
-const STATUS_COLORS = {
-  PENDING: '#9ca3af',
-  IN_PROGRESS: '#3b82f6',
-  IN_REVIEW: '#f59e0b',
-  COMPLETED: '#16a34a',
-  CANCELLED: '#ef4444',
-}
+import EmptyState from '../../components/ui/EmptyState'
+import { CHART, STATUS_COLORS, complianceColor } from '../../constants/palette'
 
 const STATUS_LABELS = {
   PENDING: 'Pendiente',
@@ -47,39 +40,40 @@ const PERIODS = [
 ]
 
 const ASSET_STATUS_CARDS = [
-  { key: 'on_time', label: 'Al dia', filter: 'on_time', color: 'text-green-600', dot: 'bg-green-500' },
-  { key: 'due_soon', label: 'Proximo vencimiento', filter: 'due_soon', color: 'text-amber-600', dot: 'bg-amber-500' },
-  { key: 'overdue', label: 'Vencido', filter: 'overdue', color: 'text-red-600', dot: 'bg-red-500' },
-  { key: 'no_plan', label: 'Sin plan', filter: 'no_plan', color: 'text-gray-600', dot: 'bg-gray-400' },
+  { key: 'on_time', label: 'Al dia', filter: 'on_time', color: 'text-green-700', dot: 'bg-green-600' },
+  { key: 'due_soon', label: 'Proximo vencimiento', filter: 'due_soon', color: 'text-amber-700', dot: 'bg-amber-500' },
+  { key: 'overdue', label: 'Vencido', filter: 'overdue', color: 'text-red-700', dot: 'bg-red-500' },
+  { key: 'no_plan', label: 'Sin plan', filter: 'no_plan', color: 'text-gray-700', dot: 'bg-gray-400' },
 ]
 
 function CardSkeleton() {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-      <div className="h-3 w-24 bg-gray-100 rounded animate-pulse" />
-      <div className="mt-3 h-8 w-20 bg-gray-100 rounded animate-pulse" />
-      <div className="mt-3 h-3 w-32 bg-gray-100 rounded animate-pulse" />
+    <div className="card p-5">
+      <div className="h-3 w-24 bg-gray-100 rounded-full animate-pulse" />
+      <div className="mt-3.5 h-8 w-20 bg-gray-100 rounded-lg animate-pulse" />
+      <div className="mt-3 h-3 w-32 bg-gray-100 rounded-full animate-pulse" />
     </div>
   )
 }
 
 function ChartSkeleton({ title }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-      <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
+    <div className="card p-5">
+      <div className="h-4 w-40 bg-gray-100 rounded-full animate-pulse" />
       <div className="mt-5 h-64 bg-gray-50 rounded-lg animate-pulse" aria-label={title} />
     </div>
   )
 }
 
-function Panel({ title, children }) {
+function Panel({ title, action, children }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-gray-700">{title}</h2>
-      </div>
+    <section className="panel">
+      <header className="panel-header">
+        <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
+        {action}
+      </header>
       {children}
-    </div>
+    </section>
   )
 }
 
@@ -87,9 +81,9 @@ function StatusTooltip({ active, payload }) {
   if (!active || !payload || payload.length === 0) return null
   const item = payload[0]
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs">
-      <p className="font-medium text-gray-700">{item.name}</p>
-      <p className="text-gray-500">{item.value} orden(es)</p>
+    <div className="bg-white ring-1 ring-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+      <p className="font-medium text-gray-800">{item.name}</p>
+      <p className="mt-0.5 font-mono text-gray-500">{item.value} orden(es)</p>
     </div>
   )
 }
@@ -99,18 +93,18 @@ function ComplianceTooltip({ active, payload }) {
   const d = payload[0].payload
   if (d.percentage == null) {
     return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs">
-        <p className="font-medium text-gray-700">{d.label}</p>
-        <p className="text-gray-500">Sin datos</p>
+      <div className="bg-white ring-1 ring-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+        <p className="font-medium text-gray-800">{d.label}</p>
+        <p className="mt-0.5 text-gray-500">Sin datos</p>
       </div>
     )
   }
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs">
-      <p className="font-medium text-gray-700">
-        {d.label}: {d.percentage}%
+    <div className="bg-white ring-1 ring-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+      <p className="font-medium text-gray-800">
+        {d.label}: <span className="font-mono">{d.percentage}%</span>
       </p>
-      <p className="text-gray-500">
+      <p className="mt-0.5 font-mono text-gray-500">
         {d.completed} completadas / {d.generated} generadas
       </p>
     </div>
@@ -200,18 +194,21 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Encabezado + filtros */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">
             Indicadores de gestion de mantenimiento
           </p>
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Hospital</label>
+            <label htmlFor="filtro-hospital" className="block label-meta mb-1.5">
+              Hospital
+            </label>
             <select
+              id="filtro-hospital"
               value={hospitalId}
               onChange={(e) => setHospitalId(e.target.value)}
               className="input-field w-56 py-2"
@@ -226,18 +223,27 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Periodo</label>
-            <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">
+            <p className="label-meta mb-1.5">Periodo</p>
+            {/* Segmentos sobre un rail hundido: el activo sube como una ficha
+                en vez de pintar de azul un tercio de la barra. */}
+            <div
+              role="group"
+              aria-label="Periodo del informe"
+              className="inline-flex gap-1 p-1 rounded-lg bg-gray-100 ring-1 ring-inset ring-gray-200"
+            >
               {PERIODS.map((p) => (
                 <button
                   key={p.value}
                   type="button"
                   onClick={() => setDays(p.value)}
-                  className={`px-3 py-2 text-sm font-medium transition-colors ${
-                    days === p.value
-                      ? 'bg-brand text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
+                  aria-pressed={days === p.value}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium
+                    transition-[background-color,color,box-shadow] duration-150
+                    focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25 ${
+                      days === p.value
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
                 >
                   {p.label}
                 </button>
@@ -257,13 +263,19 @@ export default function DashboardPage() {
       </div>
 
       {error && (
-        <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-          No se pudieron cargar los indicadores. Intenta de nuevo.
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-4 px-4 py-3 rounded-lg bg-red-50 ring-1 ring-inset ring-red-200 text-red-800 text-sm"
+        >
+          <span>No se pudieron cargar los indicadores.</span>
+          <button type="button" onClick={handleRefresh} className="btn-link text-red-700">
+            Reintentar
+          </button>
         </div>
       )}
 
       {/* Fila 1 — KPIs principales */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger">
         {isLoading ? (
           [...Array(4)].map((_, i) => <CardSkeleton key={i} />)
         ) : (
@@ -304,9 +316,12 @@ export default function DashboardPage() {
           <Panel title="OTs por estado">
             <div className="p-5">
               {pieData.length === 0 ? (
-                <div className="h-[260px] flex items-center justify-center text-sm text-gray-500">
-                  Sin ordenes en el periodo seleccionado.
-                </div>
+                <EmptyState
+                  compact
+                  icon="workOrder"
+                  title="Sin ordenes en el periodo"
+                  description="Amplia el rango de fechas o quita el filtro de hospital para ver actividad."
+                />
               ) : (
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
@@ -317,7 +332,7 @@ export default function DashboardPage() {
                       innerRadius={65}
                       outerRadius={100}
                       paddingAngle={2}
-                      stroke="#ffffff"
+                      stroke={CHART.surface}
                       strokeWidth={2}
                       isAnimationActive={false}
                     >
@@ -358,19 +373,19 @@ export default function DashboardPage() {
                 <BarChart data={historyData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                   <XAxis
                     dataKey="month"
-                    tick={{ fontSize: 12, fill: '#6b7280' }}
-                    axisLine={{ stroke: '#e5e7eb' }}
+                    tick={{ fontSize: 12, fill: CHART.axis }}
+                    axisLine={{ stroke: CHART.grid }}
                     tickLine={false}
                   />
                   <YAxis
                     domain={[0, 100]}
                     ticks={[0, 25, 50, 75, 100]}
-                    tick={{ fontSize: 12, fill: '#6b7280' }}
+                    tick={{ fontSize: 12, fill: CHART.axis }}
                     axisLine={false}
                     tickLine={false}
                     unit="%"
                   />
-                  <Tooltip content={<ComplianceTooltip />} cursor={{ fill: '#f1f5f9' }} />
+                  <Tooltip content={<ComplianceTooltip />} cursor={{ fill: CHART.cursor }} />
                   <Bar dataKey="percentage" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                     {historyData.map((d, i) => (
                       <Cell key={i} fill={complianceColor(d.percentage)} />
@@ -431,16 +446,19 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : assetsWithoutPm.length === 0 ? (
-            <p className="px-5 py-12 text-center text-sm text-gray-500">
-              Todos los activos con plan tienen mantenimiento reciente.
-            </p>
+            <EmptyState
+              compact
+              icon="checkCircle"
+              title="Todo al dia"
+              description="Ningun activo con plan asignado lleva demasiado tiempo sin intervencion."
+            />
           ) : (
             <ul className="divide-y divide-gray-100">
               {assetsWithoutPm.map((a) => (
                 <li key={a.asset_id}>
                   <Link
                     to={`/activos/${a.asset_id}`}
-                    className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-[#f1f5f9] transition-colors"
+                    className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-brand-50/60 transition-colors"
                   >
                     <div className="min-w-0">
                       <p className="text-sm text-gray-800 truncate">{a.asset_name}</p>
@@ -459,22 +477,22 @@ export default function DashboardPage() {
 
       {/* Fila 4 — Estado de activos */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Estado de activos</h2>
+        <h2 className="text-sm font-semibold text-gray-800 mb-3">Estado de activos</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {ASSET_STATUS_CARDS.map((card) => (
             <Link
               key={card.key}
               to={goToAssets(card.filter)}
-              className="block bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-gray-300 hover:shadow transition-all"
+              className="card-interactive block p-4"
             >
               <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${card.dot}`} />
-                <span className="text-xs text-gray-500">{card.label}</span>
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${card.dot}`} aria-hidden="true" />
+                <span className="label-meta truncate">{card.label}</span>
               </div>
               {assetsLoading ? (
-                <div className="mt-2 h-7 w-12 bg-gray-100 rounded animate-pulse" />
+                <div className="mt-2.5 h-7 w-12 bg-gray-100 rounded-lg animate-pulse" />
               ) : (
-                <p className={`mt-2 text-2xl font-bold ${card.color}`}>
+                <p className={`mt-2.5 text-[1.625rem] leading-none stat-value ${card.color}`}>
                   {assetsStatus?.[card.key] ?? 0}
                 </p>
               )}

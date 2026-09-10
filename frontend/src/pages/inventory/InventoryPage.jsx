@@ -6,6 +6,8 @@ import {
   useCreateInventoryItem,
   useUpdateInventoryItem,
 } from '../../api/inventory'
+import useModalDismiss from '../../hooks/useModalDismiss'
+import EmptyState from '../../components/ui/EmptyState'
 
 const UNIT_OPTIONS = ['und', 'kg', 'g', 'l', 'ml', 'mt', 'cm', 'caja', 'rollo', 'par']
 
@@ -52,7 +54,7 @@ export default function InventoryPage() {
   if (debouncedSearch) filters.search = debouncedSearch
   if (statusFilter !== 'all') filters.is_active = statusFilter === 'active'
 
-  const { data: items = [], isLoading } = useInventoryItems(filters)
+  const { data: items = [], isLoading, isError } = useInventoryItems(filters)
 
   const displayed = lowStockOnly
     ? items.filter((i) => parseFloat(i.current_stock) <= parseFloat(i.min_stock))
@@ -72,7 +74,7 @@ export default function InventoryPage() {
     <div className="space-y-5 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Inventario</h1>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Inventario</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {displayed.length} {displayed.length === 1 ? 'item' : 'items'}
             {lowStockOnly && <span className="ml-2 text-red-500 font-medium">— Solo stock bajo</span>}
@@ -88,7 +90,7 @@ export default function InventoryPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex flex-wrap gap-3 items-center">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card p-4 flex flex-wrap gap-3 items-center">
         <input
           type="text"
           value={search}
@@ -107,16 +109,24 @@ export default function InventoryPage() {
         </select>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {isLoading ? (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
+        {isError ? (
+          <div className="text-center py-16 text-red-600 text-sm">
+            No se pudo cargar el inventario. Revisa tu conexión e intenta de nuevo.
+          </div>
+        ) : isLoading ? (
           <div className="flex justify-center py-16"><Spinner /></div>
         ) : displayed.length === 0 ? (
-          <div className="text-center py-16 text-gray-500 text-sm">No hay items de inventario.</div>
+          <EmptyState
+            icon="inventory"
+            title="El inventario esta vacio"
+            description="Registra los repuestos y consumibles que maneja el equipo para poder descontarlos desde las ordenes de trabajo."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
-                <tr className="text-left text-xs text-gray-500 uppercase tracking-wide">
+                <tr className="text-left text-xs font-medium text-gray-500">
                   <th className="px-4 py-3">Nombre</th>
                   <th className="px-4 py-3">Codigo</th>
                   <th className="px-4 py-3">Unidad</th>
@@ -188,6 +198,7 @@ export default function InventoryPage() {
 }
 
 function ItemModal({ item, onClose }) {
+  useModalDismiss(onClose)
   const isEdit = !!item
   const createMut = useCreateInventoryItem()
   const updateMut = useUpdateInventoryItem(item?.id)
@@ -234,7 +245,7 @@ function ItemModal({ item, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         <h3 className="text-lg font-semibold text-gray-800 mb-5">
           {isEdit ? 'Editar item' : 'Nuevo item de inventario'}

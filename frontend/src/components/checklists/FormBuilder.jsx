@@ -126,7 +126,7 @@ export default function FormBuilder({
       {/* Left: type palette */}
       {!readOnly && (
         <div className="w-52 shrink-0 bg-gray-50 rounded-xl border border-gray-200 p-3 self-start">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 px-1">
+          <p className="text-xs font-semibold text-gray-500 mb-3 px-1">
             Tipos de campo
           </p>
           <div className="space-y-0.5">

@@ -2,37 +2,191 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+@layer base {
+  :root {
+    /* Escala de apilamiento. Antes cada modal elegia su z-index a ojo. */
+    --z-sticky: 10;
+    --z-overlay: 20;
+    --z-header: 30;
+    --z-modal: 40;
+    --z-toast: 50;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    /* Geist trae cifras proporcionales por defecto; en un CMMS practicamente
+       todo numero vive dentro de una columna, asi que se fijan tabulares de
+       raiz y solo el texto corrido las desactiva. */
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Titulos: sin palabras huerfanas en la ultima linea. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* El anillo de foco por defecto tambien salta al hacer clic con raton.
+     :focus-visible lo reserva para la navegacion por teclado. */
+  :focus-visible {
+    outline: 2px solid theme('colors.brand.500');
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: theme('colors.brand.200');
+    color: theme('colors.brand.900');
+  }
+
+  /* Barras de scroll acordes al lienzo, no las grises del sistema. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.gray.300') transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: theme('colors.gray.300');
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: theme('colors.gray.400');
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
   .input-field {
-    @apply w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-800
+    @apply w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800
+      transition-[border-color,box-shadow,background-color] duration-150
       placeholder:text-gray-400
-      focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent
-      disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed;
+      hover:border-gray-400
+      focus:outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10
+      disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:border-gray-300;
+  }
+
+  /* Base comun de los botones: la reaccion al pulsar (1px hacia abajo) es lo
+     que separa un boton que responde de una caja que cambia de color. */
+  .btn-base {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm
+      font-medium select-none
+      transition-[background-color,color,box-shadow,transform,border-color] duration-150 ease-spring
+      active:translate-y-px
+      focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-y-0;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm
-      font-medium bg-brand text-white transition-colors hover:bg-brand-light
-      focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2
-      disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply btn-base bg-brand text-white shadow-sm
+      hover:bg-brand-700 hover:shadow-md
+      active:bg-brand-900 active:shadow-sm
+      disabled:hover:bg-brand disabled:hover:shadow-sm;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm
-      font-medium bg-white text-gray-700 border border-gray-300 transition-colors
-      hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-400
-      focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply btn-base bg-white text-gray-700 border border-gray-300 shadow-sm
+      hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900
+      active:bg-gray-100
+      disabled:hover:bg-white disabled:hover:border-gray-300;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm
-      font-medium bg-red-600 text-white transition-colors hover:bg-red-700
-      focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2
-      disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply btn-base bg-red-600 text-white shadow-sm
+      hover:bg-red-700 hover:shadow-md
+      active:bg-red-800 active:shadow-sm
+      focus-visible:ring-red-500/30
+      disabled:hover:bg-red-600 disabled:hover:shadow-sm;
+  }
+
+  /* Tercer nivel: acciones reales que no deben competir con el CTA. Evita la
+     pareja eterna "un boton solido + un boton fantasma". */
+  .btn-ghost {
+    @apply btn-base bg-transparent text-gray-600
+      hover:bg-gray-100 hover:text-gray-900
+      active:bg-gray-200;
+  }
+
+  .btn-link {
+    @apply inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 rounded
+      underline decoration-brand-600/30 underline-offset-4
+      transition-colors duration-150
+      hover:text-brand-800 hover:decoration-brand-600/60
+      focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25;
+  }
+
+  /* Superficies ------------------------------------------------------------
+     Una sola definicion de tarjeta. La elevacion solo aparece cuando hay que
+     comunicar jerarquia; el resto se apoya en el borde y el fondo. */
+  .card {
+    @apply bg-white rounded-xl border border-gray-200 shadow-card;
+  }
+
+  .card-interactive {
+    @apply card transition-[box-shadow,border-color,transform] duration-200 ease-spring
+      hover:shadow-lift hover:border-gray-300 hover:-translate-y-0.5
+      focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25;
+  }
+
+  .panel {
+    @apply bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100;
+  }
+
+  /* Etiqueta corta de metadato. Sin versalitas gritadas: el peso y el color
+     marcan la jerarquia mejor que el uppercase generalizado. */
+  .label-meta {
+    @apply text-xs font-medium text-gray-500;
+  }
+
+  /* Cifra protagonista de un KPI. */
+  .stat-value {
+    @apply font-mono font-semibold tabular-nums tracking-tightest text-gray-900;
+  }
+
+  /* Salto al contenido: solo visible cuando el teclado lo enfoca. */
+  .skip-link {
+    @apply sr-only;
+  }
+
+  .skip-link:focus {
+    @apply not-sr-only fixed left-4 top-4 z-50 px-4 py-2 rounded-lg
+      bg-brand text-white text-sm font-medium shadow-lg;
   }
 }
 
@@ -46,4 +200,34 @@ body {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* Grano fino sobre los fondos planos. Un lienzo liso a pantalla completa se
+     lee como plantilla sin terminar; el ruido le da materia sin distraer. */
+  .grain::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  }
+
+  /* Texto corrido: cifras proporcionales, que es como se leen mejor. */
+  .prose-nums {
+    font-variant-numeric: normal;
+  }
+
+  /* Entrada escalonada: los hijos directos aparecen con retardo creciente en
+     lugar de montarse todos de golpe. */
+  .stagger > * {
+    animation: rise 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 45ms; }
+  .stagger > *:nth-child(3) { animation-delay: 90ms; }
+  .stagger > *:nth-child(4) { animation-delay: 135ms; }
+  .stagger > *:nth-child(5) { animation-delay: 180ms; }
+  .stagger > *:nth-child(6) { animation-delay: 225ms; }
+  .stagger > *:nth-child(n + 7) { animation-delay: 260ms; }
 }

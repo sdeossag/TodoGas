@@ -1,0 +1,23 @@
+# Skills de terceros (no son parte del producto TodoGas)
+.agents/
+agent/
+.claude/skills/
+.claude/settings*.json
+
+# Artefactos de build y salidas generadas
+frontend/__ssrout/
+frontend/dist/
+frontend/android/build/
+frontend/android/.gradle/
+frontend/android/.kotlin/
+frontend/android/app/build/
+frontend/android/capacitor-cordova-android-plugins/
+frontend/android/gradle/
+frontend/android/gradlew
+
+# Recursos binarios sin valor semantico
+frontend/android/app/src/main/res/
+frontend/public/
+backend/media/
+backend/.pytest_cache/
+graphify-out/
