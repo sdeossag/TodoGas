@@ -23,7 +23,7 @@ def calculate_compliance_percentage(month=None, year=None, hospital_id=None):
         scheduled_date__month=month,
     )
     if hospital_id:
-        qs = qs.filter(asset__hospital_id=hospital_id)
+        qs = qs.filter(hospital_id=hospital_id)
 
     generated = qs.count()
     completed = (
@@ -54,7 +54,7 @@ def calculate_mttr(hospital_id=None, days=30):
         completed_at__gte=since,
     )
     if hospital_id:
-        qs = qs.filter(asset__hospital_id=hospital_id)
+        qs = qs.filter(hospital_id=hospital_id)
 
     sample_size = qs.count()
     if not sample_size:
@@ -76,7 +76,7 @@ def calculate_overdue_count(hospital_id=None):
         status__in=[WorkOrder.Status.COMPLETED, WorkOrder.Status.CANCELLED]
     )
     if hospital_id:
-        qs = qs.filter(asset__hospital_id=hospital_id)
+        qs = qs.filter(hospital_id=hospital_id)
     count = qs.count()
     critical = qs.filter(priority=WorkOrder.Priority.HIGH).count()
     return {"count": count, "critical": critical}
@@ -86,7 +86,7 @@ def calculate_ots_by_status(hospital_id=None, days=30):
     since = timezone.now() - timedelta(days=days)
     qs = WorkOrder.objects.filter(created_at__gte=since)
     if hospital_id:
-        qs = qs.filter(asset__hospital_id=hospital_id)
+        qs = qs.filter(hospital_id=hospital_id)
 
     result = {s.value: 0 for s in WorkOrder.Status}
     for item in qs.values("status").annotate(cnt=Count("id")):
@@ -131,33 +131,37 @@ def calculate_assets_without_maintenance(days=90, hospital_id=None):
     since = timezone.now() - timedelta(days=days)
     today = timezone.now().date()
 
+    from apps.maintenance.models import Task
+
     assets_with_plans = Asset.objects.filter(
-        maintenance_plans__is_active=True, status=Asset.Status.ACTIVE
-    ).distinct()
+        plan__is_active=True, status=Asset.Status.ACTIVE
+    )
     if hospital_id:
         assets_with_plans = assets_with_plans.filter(hospital_id=hospital_id)
 
-    recently_maintained = WorkOrder.objects.filter(
-        status=WorkOrder.Status.COMPLETED,
+    # El mantenimiento se cuenta por tarea hecha sobre el activo, no por OT:
+    # una OT puede cubrir varios activos.
+    recently_maintained = Task.objects.filter(
+        status=Task.Status.DONE,
         completed_at__gte=since,
     ).values_list("asset_id", flat=True)
 
-    assets_no_pm = assets_with_plans.exclude(id__in=recently_maintained).select_related("hospital")
+    last_done = (
+        Task.objects.filter(asset=OuterRef("pk"), status=Task.Status.DONE)
+        .order_by("-completed_at")
+        .values("completed_at")[:1]
+    )
+    assets_no_pm = (
+        assets_with_plans.exclude(id__in=recently_maintained)
+        .select_related("hospital")
+        .annotate(_last_done=Subquery(last_done))
+    )
 
     result = []
     for asset in assets_no_pm:
-        last_wo = (
-            WorkOrder.objects.filter(
-                asset=asset,
-                status=WorkOrder.Status.COMPLETED,
-                completed_at__isnull=False,
-            )
-            .order_by("-completed_at")
-            .first()
-        )
         days_since = (
-            (today - last_wo.completed_at.date()).days
-            if last_wo and last_wo.completed_at
+            (today - timezone.localdate(asset._last_done)).days
+            if asset._last_done
             else None
         )
         result.append(

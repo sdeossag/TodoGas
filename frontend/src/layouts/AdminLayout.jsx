@@ -37,8 +37,9 @@ const NAV_GROUPS = [
     id: 'mantenimiento',
     title: 'Mantenimiento',
     links: [
+      { to: '/tareas-pendientes', label: 'Tareas pendientes', icon: 'clock' },
       { to: '/ordenes', label: 'Ordenes de trabajo', icon: 'workOrder' },
-      { to: '/planes-pm', label: 'Planes PM', icon: 'plan' },
+      { to: '/planes-pm', label: 'Planes de tareas', icon: 'plan' },
       { to: '/calendario-pm', label: 'Calendario', icon: 'calendar' },
     ],
   },

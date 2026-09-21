@@ -9,6 +9,7 @@ from apps.assets.models import Asset, Hospital
 from apps.inventory.models import InventoryItem, StockMovement
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.testing import make_work_order
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -53,15 +54,10 @@ def make_item(name="Repuesto", stock=Decimal("10"), min_stock=Decimal("2")):
 
 
 def make_wo(asset, assigned_to, created_by):
-    return WorkOrder.objects.create(
-        asset=asset,
-        task_type=WorkOrder.TaskType.CORRECTIVE,
-        title="OT Test",
+    return make_work_order(
+        asset, created_by, title="OT Test",
         status=WorkOrder.Status.IN_PROGRESS,
-        priority=WorkOrder.Priority.MEDIUM,
-        scheduled_date="2026-09-01",
-        assigned_to=assigned_to,
-        created_by=created_by,
+        scheduled_date="2026-09-01", assigned_to=assigned_to,
     )
 
 

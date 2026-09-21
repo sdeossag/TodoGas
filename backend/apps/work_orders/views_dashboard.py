@@ -76,7 +76,7 @@ class DashboardAssetsStatusView(APIView):
 
     def get(self, request):
         from apps.assets.models import Asset
-        from apps.maintenance.models import MaintenancePlan
+        from apps.maintenance.models import Task
 
         hospital_id = request.query_params.get("hospital_id") or None
         today = timezone.now().date()
@@ -88,17 +88,16 @@ class DashboardAssetsStatusView(APIView):
 
         total = assets.count()
 
-        assets_with_active_plan_ids = (
-            Asset.objects.filter(maintenance_plans__is_active=True)
-            .values_list("id", flat=True)
-            .distinct()
-        )
+        assets_with_active_plan_ids = Asset.objects.filter(
+            plan__is_active=True
+        ).values_list("id", flat=True)
         no_plan = assets.exclude(id__in=assets_with_active_plan_ids).count()
 
+        # La proxima fecha es la de la tarea abierta mas proxima del activo.
         min_due_subq = (
-            MaintenancePlan.objects.filter(assets=OuterRef("pk"), is_active=True)
-            .values("assets")
-            .annotate(min_due=Min("next_due_date"))
+            Task.objects.filter(Task.next_maintenance_q(), asset=OuterRef("pk"))
+            .values("asset")
+            .annotate(min_due=Min("scheduled_date"))
             .values("min_due")[:1]
         )
 

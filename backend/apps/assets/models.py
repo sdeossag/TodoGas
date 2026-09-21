@@ -1,4 +1,5 @@
 import uuid
+from collections import defaultdict
 
 from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
@@ -100,6 +101,30 @@ class AssetNode(models.Model):
     def __str__(self):
         return f"{self.hospital.code}/{self.path or self.name}"
 
+    @classmethod
+    def subtree_ids(cls, node_id):
+        """
+        Ids del nodo y de toda su sububicacion. Filtrar por "Piso 3" tiene que
+        traer los activos de sus habitaciones. Se recorre por `parent` y no por
+        `path`, que se arma con nombres y un nombre puede llevar una barra.
+        """
+        try:
+            raiz = uuid.UUID(str(node_id))
+        except ValueError:
+            return []
+        hospital_id = cls.objects.filter(pk=raiz).values_list("hospital_id", flat=True).first()
+        if hospital_id is None:
+            return []
+        hijos = defaultdict(list)
+        for nid, padre in cls.objects.filter(hospital_id=hospital_id).values_list("id", "parent_id"):
+            hijos[padre].append(nid)
+        ids, pendientes = [], [raiz]
+        while pendientes:
+            actual = pendientes.pop()
+            ids.append(actual)
+            pendientes.extend(hijos[actual])
+        return ids
+
 
 class Asset(models.Model):
     """
@@ -126,6 +151,15 @@ class Asset(models.Model):
         AssetNode, on_delete=models.PROTECT,
         null=True, blank=True,
         related_name="assets"
+    )
+    # Un solo plan por activo, como el campo "Plan de Tareas" de la ficha en
+    # Fracttal (decision D7). Las tareas del plan generan las pendientes del
+    # activo; cambiar de plan se hace por apps.maintenance.services para que la
+    # nueva pendiente herede la fecha de la anterior.
+    plan = models.ForeignKey(
+        "maintenance.MaintenancePlan", on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="assets",
     )
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=50, unique=True)

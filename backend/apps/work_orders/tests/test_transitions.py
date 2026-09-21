@@ -7,6 +7,7 @@ from apps.assets.models import Asset, Hospital
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder, WorkOrderStatusHistory
 from apps.work_orders.transitions import apply_transition, validate_transition
+from apps.maintenance.testing import make_work_order as _nueva_ot
 
 
 def make_user(role, **kwargs):
@@ -22,18 +23,10 @@ def make_user(role, **kwargs):
 
 
 def make_work_order(asset, created_by, assigned_to, status=WorkOrder.Status.PENDING):
-    wo = WorkOrder(
-        asset=asset,
-        task_type=WorkOrder.TaskType.CORRECTIVE,
-        title="OT de prueba",
-        status=status,
-        priority=WorkOrder.Priority.MEDIUM,
-        scheduled_date=date.today(),
+    return _nueva_ot(
+        asset, created_by, title="OT de prueba", status=status,
         assigned_to=assigned_to,
-        created_by=created_by,
     )
-    wo.save()
-    return wo
 
 
 @pytest.fixture

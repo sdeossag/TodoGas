@@ -10,6 +10,7 @@ from apps.assets.models import Asset, Hospital
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 from apps.reports.models import GeneratedReport, ReportSendLog
+from apps.maintenance.testing import make_work_order
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -50,18 +51,9 @@ def make_asset(hospital):
 
 
 def make_wo(asset, created_by, assigned_to=None, wo_status=WorkOrder.Status.COMPLETED):
-    wo = WorkOrder(
-        asset=asset,
-        task_type=WorkOrder.TaskType.CORRECTIVE,
-        title="OT test",
-        status=wo_status,
-        priority=WorkOrder.Priority.MEDIUM,
-        scheduled_date=date.today(),
-        assigned_to=assigned_to,
-        created_by=created_by,
+    return make_work_order(
+        asset, created_by, status=wo_status, assigned_to=assigned_to,
     )
-    wo.save()
-    return wo
 
 
 FAKE_KEY = "reports/test/OT-1.pdf"
@@ -178,7 +170,7 @@ def test_send_report_email_creates_send_log_on_success(mock_email_cls, db, wo, r
     assert result["status"] == "sent"
     log = ReportSendLog.objects.get(report=report)
     assert log.was_successful is True
-    assert log.recipient_email == wo.asset.hospital.contact_email
+    assert log.recipient_email == wo.hospital.contact_email
 
 
 @patch("apps.reports.tasks.send_report_email.retry")

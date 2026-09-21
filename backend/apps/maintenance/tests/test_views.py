@@ -1,3 +1,4 @@
+from dateutil.relativedelta import relativedelta
 from datetime import date, timedelta
 
 import pytest
@@ -10,6 +11,8 @@ from apps.assets.models import Asset, Hospital
 from apps.maintenance.models import MaintenancePlan, MaintenancePlanExecution
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.models import Task
+from apps.maintenance.testing import make_plan
 
 
 def auth_client(user):
@@ -45,16 +48,10 @@ def asset(db, hospital):
 
 @pytest.fixture
 def plan(db, asset):
-    p = baker.make(
-        MaintenancePlan,
-        frequency_value=6,
-        frequency_unit=MaintenancePlan.FrequencyUnit.MONTHS,
-        is_active=True,
+    return make_plan(
+        "Plan vistas", assets=[asset],
         next_due_date=date.today() + timedelta(days=30),
-        task_type=MaintenancePlan.TaskType.PREVENTIVE,
     )
-    p.assets.add(asset)
-    return p
 
 
 def test_admin_can_list_plans(plan, admin_user):
@@ -78,45 +75,46 @@ def test_tec_cannot_list_plans(tec_user):
     assert resp.status_code == status.HTTP_403_FORBIDDEN
 
 
-def test_admin_can_create_plan(admin_user, asset):
+def test_admin_can_create_plan(admin_user):
+    """El plan es la cabecera: las tareas y los activos se agregan despues."""
     client = auth_client(admin_user)
-    payload = {
-        'name': 'Plan Test',
-        'task_type': MaintenancePlan.TaskType.PREVENTIVE,
-        'frequency_value': 3,
-        'frequency_unit': MaintenancePlan.FrequencyUnit.MONTHS,
-        'assets': [str(asset.id)],
-        'priority': MaintenancePlan.Priority.MEDIUM,
-    }
+    payload = {'name': 'Plan Test', 'priority': MaintenancePlan.Priority.HIGH}
     resp = client.post('/api/maintenance/plans/', payload, format='json')
     assert resp.status_code == status.HTTP_201_CREATED
-    data = resp.json()
-    assert data['name'] == 'Plan Test'
-    plan = MaintenancePlan.objects.get(id=data['id'])
-    assert plan.next_due_date is not None
+    plan = MaintenancePlan.objects.get(id=resp.json()['id'])
+    assert plan.name == 'Plan Test'
+    assert plan.priority == MaintenancePlan.Priority.HIGH
+    assert not plan.tasks.exists()
 
 
-def test_create_plan_requires_assets(admin_user):
+def test_duplicate_plan_name_is_explained(plan, admin_user):
     client = auth_client(admin_user)
-    payload = {
-        'name': 'Plan sin activos',
-        'task_type': MaintenancePlan.TaskType.PREVENTIVE,
-        'frequency_value': 6,
-        'frequency_unit': MaintenancePlan.FrequencyUnit.MONTHS,
-        'assets': [],
-        'priority': MaintenancePlan.Priority.MEDIUM,
-    }
-    resp = client.post('/api/maintenance/plans/', payload, format='json')
+    resp = client.post('/api/maintenance/plans/', {'name': plan.name}, format='json')
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert resp.json()['name'] == ['Ya existe un plan de tareas con ese nombre.']
 
 
-def test_trigger_generates_work_orders(plan, admin_user):
+def test_sup_cannot_create_plan(sup_user):
+    client = auth_client(sup_user)
+    resp = client.post('/api/maintenance/plans/', {'name': 'X'}, format='json')
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_trigger_no_longer_exists(plan, admin_user):
+    """«Disparar ahora» desaparece: ahora es reprogramar a hoy y armar la OT."""
     client = auth_client(admin_user)
     resp = client.post(f'/api/maintenance/plans/{plan.id}/trigger/')
-    assert resp.status_code == status.HTTP_200_OK
-    data = resp.json()
-    assert data['created'] == 1
-    assert WorkOrder.objects.filter(maintenance_plan=plan).count() == 1
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_list_summarizes_tasks_assets_and_dates(plan, admin_user, asset):
+    client = auth_client(admin_user)
+    fila = client.get('/api/maintenance/plans/').json()['results'][0]
+    assert fila['assets_count'] == 1
+    assert fila['pending_count'] == 1
+    assert fila['overdue_count'] == 0
+    assert fila['next_due_date'] == str(date.today() + timedelta(days=30))
+    assert [t['frequency_value'] for t in fila['tasks']] == [6]
 
 
 def test_pause_deactivates_plan(plan, admin_user):
@@ -135,7 +133,7 @@ def test_resume_activates_plan(plan, admin_user):
     assert resp.status_code == status.HTTP_200_OK
     plan.refresh_from_db()
     assert plan.is_active is True
-    assert plan.next_due_date is not None
+    assert Task.objects.filter(plan_task__plan=plan, status=Task.Status.PENDING).exists()
 
 
 def test_compliance_returns_12_months(plan, admin_user):

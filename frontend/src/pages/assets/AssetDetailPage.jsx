@@ -1,7 +1,10 @@
 import { useCallback, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import { useAsset, useUpdateAsset, useDecommissionAsset } from '../../api/assets'
+import { useReportDownload } from '../../api/reports'
+import { useAssetTasks } from '../../api/tasks'
+import { TASK_STATUS, formatDate as fechaCorta, formatFrequency } from '../../utils/maintenance'
 import Icon from '../../components/ui/Icon'
 import useModalDismiss from '../../hooks/useModalDismiss'
 
@@ -19,7 +22,7 @@ const PRIORITY_LABELS = {
   LOW: { label: 'Baja', cls: 'bg-gray-100 text-gray-500' },
 }
 
-const TABS = ['Información general', 'Campos personalizados', 'Historial']
+const TABS = ['Información general', 'Tareas', 'Campos personalizados']
 
 export default function AssetDetailPage() {
   const { id } = useParams()
@@ -126,8 +129,8 @@ export default function AssetDetailPage() {
 
         <div className="p-6">
           {tab === 0 && <InfoTab asset={asset} />}
-          {tab === 1 && <CustomFieldsTab asset={asset} />}
-          {tab === 2 && <HistoryTab />}
+          {tab === 1 && <TasksTab assetId={asset.id} />}
+          {tab === 2 && <CustomFieldsTab asset={asset} />}
         </div>
       </div>
 
@@ -175,7 +178,15 @@ function InfoTab({ asset }) {
       {/* Estado de mantenimiento */}
       <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
         <h3 className="text-sm font-semibold text-gray-600 mb-3">Estado de mantenimiento</h3>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-0.5">Plan de tareas</p>
+            <p className="text-sm text-gray-800">
+              {asset.plan
+                ? <Link to={`/planes-pm/${asset.plan.id}`} className="text-brand hover:underline">{asset.plan.name}</Link>
+                : <span className="text-gray-500">Sin plan</span>}
+            </p>
+          </div>
           <div>
             <p className="text-xs font-medium text-gray-500 mb-0.5">Próximo mantenimiento</p>
             <p className="text-sm text-gray-800">
@@ -270,12 +281,125 @@ function CustomFieldsTab({ asset }) {
   )
 }
 
-function HistoryTab() {
+function TasksTab({ assetId }) {
+  const { data, isLoading, isError } = useAssetTasks(assetId)
+  const download = useReportDownload()
+
+  if (isLoading) return <div className="flex justify-center py-12"><Spinner className="w-6 h-6 text-brand" /></div>
+  if (isError) return <p className="text-sm text-red-600 text-center py-8">No se pudieron cargar las tareas del activo.</p>
+
+  const abiertas = data?.open ?? []
+  const historial = data?.history ?? []
+
   return (
-    <div className="text-center py-12 text-gray-500">
-      <Icon name="clock" className="w-10 h-10 mx-auto mb-3 text-gray-400" />
-      <p className="font-medium">Historial disponible en próximos sprints</p>
-      <p className="text-sm mt-1">El historial de órdenes de trabajo se implementará en Sprint 3.</p>
+    <div className="space-y-8">
+      <section>
+        <h3 className="text-sm font-semibold text-gray-600 mb-3">Próximas</h3>
+        {abiertas.length === 0 ? (
+          <p className="text-sm text-gray-500">No tiene tareas abiertas.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr className="text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-2">Tarea</th>
+                  <th className="px-3 py-2">Cuándo</th>
+                  <th className="px-3 py-2">Fecha programada</th>
+                  <th className="px-3 py-2">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {abiertas.map((t) => (
+                  <tr key={t.id}>
+                    <td className="px-3 py-2">
+                      <p className="text-gray-800">{t.title}</p>
+                      {t.plan && <p className="text-xs text-gray-500">{t.plan.name}</p>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">{formatFrequency(t.plan_task)}</td>
+                    <td className="px-3 py-2">
+                      <p className={t.is_overdue ? 'text-red-700 font-medium' : 'text-gray-800'}>{fechaCorta(t.scheduled_date)}</p>
+                      {t.is_rescheduled && (
+                        <p className="text-xs text-amber-700">Calculada: {fechaCorta(t.calculated_date)}</p>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {t.work_order ? (
+                        <Link to={`/ordenes/${t.work_order.id}`} className="text-xs text-brand hover:underline">
+                          En {t.work_order.wo_code}
+                        </Link>
+                      ) : (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${t.is_overdue ? 'bg-red-50 text-red-700' : TASK_STATUS.PENDING.cls}`}>
+                          {t.is_overdue ? 'Vencida' : 'Pendiente'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-gray-600 mb-1">Historial</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Calculada: la que puso la frecuencia. Programada: la que quedó tras reprogramar. Realización: cuando se cerró.
+        </p>
+        {historial.length === 0 ? (
+          <p className="text-sm text-gray-500">Todavía no tiene tareas cerradas.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr className="text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-2">Tarea</th>
+                  <th className="px-3 py-2">Calculada</th>
+                  <th className="px-3 py-2">Programada</th>
+                  <th className="px-3 py-2">Realización</th>
+                  <th className="px-3 py-2">Estado</th>
+                  <th className="px-3 py-2">OT</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {historial.map((t) => (
+                  <tr key={t.id} className="align-top">
+                    <td className="px-3 py-2">
+                      <p className="text-gray-800">{t.title}</p>
+                      {t.plan && <p className="text-xs text-gray-500">{t.plan.name}</p>}
+                      {t.cancellation_note && <p className="text-xs text-gray-500 italic">{t.cancellation_note}</p>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{fechaCorta(t.calculated_date)}</td>
+                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{fechaCorta(t.scheduled_date)}</td>
+                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{t.completed_at ? fechaCorta(t.completed_at) : '—'}</td>
+                    <td className="px-3 py-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${TASK_STATUS[t.status]?.cls ?? ''}`}>
+                        {TASK_STATUS[t.status]?.label ?? t.status_display}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {t.work_order ? (
+                        <div className="flex items-center gap-2">
+                          <Link to={`/ordenes/${t.work_order.id}`} className="text-xs text-brand hover:underline">
+                            {t.work_order.wo_code}
+                          </Link>
+                          {t.work_order.report_id && (
+                            <button onClick={() => download.mutate(t.work_order.report_id)}
+                              disabled={download.isPending}
+                              className="text-xs text-gray-600 hover:text-brand flex items-center gap-1">
+                              <Icon name="download" className="w-3.5 h-3.5" /> Acta
+                            </button>
+                          )}
+                        </div>
+                      ) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

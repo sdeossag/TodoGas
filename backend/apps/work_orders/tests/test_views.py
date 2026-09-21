@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from apps.assets.models import Asset, Hospital
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.testing import make_work_order
 
 
 # ---------------------------------------------------------------------------
@@ -51,18 +52,10 @@ def make_wo(asset, created_by, assigned_to=None,
             wo_status=WorkOrder.Status.PENDING,
             scheduled_date=None,
             priority=WorkOrder.Priority.MEDIUM):
-    wo = WorkOrder(
-        asset=asset,
-        task_type=WorkOrder.TaskType.CORRECTIVE,
-        title="OT test",
-        status=wo_status,
-        priority=priority,
-        scheduled_date=scheduled_date or date.today(),
-        assigned_to=assigned_to,
-        created_by=created_by,
+    return make_work_order(
+        asset, created_by, status=wo_status, priority=priority,
+        scheduled_date=scheduled_date, assigned_to=assigned_to,
     )
-    wo.save()
-    return wo
 
 
 # ---------------------------------------------------------------------------

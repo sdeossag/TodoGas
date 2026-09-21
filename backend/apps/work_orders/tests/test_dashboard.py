@@ -15,6 +15,8 @@ from apps.work_orders.dashboard import (
     calculate_overdue_count,
 )
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.models import Task
+from apps.maintenance.testing import make_work_order
 
 
 # ---------------------------------------------------------------------------
@@ -56,20 +58,18 @@ def make_wo(
 ):
     if scheduled_date is None:
         scheduled_date = date.today()
-    wo = WorkOrder(
-        asset=asset,
-        task_type=task_type,
-        title="OT test",
-        status=wo_status,
-        priority=priority,
-        scheduled_date=scheduled_date,
-        created_by=created_by,
+    wo = make_work_order(
+        asset, created_by, task_type=task_type, status=wo_status,
+        priority=priority, scheduled_date=scheduled_date,
     )
-    wo.save()
     if completed_at or started_at:
         WorkOrder.objects.filter(pk=wo.pk).update(
             completed_at=completed_at,
             started_at=started_at,
+        )
+        # El mantenimiento de un activo se cuenta por su tarea hecha.
+        Task.objects.filter(work_order=wo, status=Task.Status.DONE).update(
+            completed_at=completed_at,
         )
         wo.refresh_from_db()
     return wo
@@ -142,7 +142,7 @@ def test_compliance_calculates_correctly(hospital, asset, admin):
             scheduled_date=today,
         )
     # Mark 2 as COMPLETED on time
-    wos = list(WorkOrder.objects.filter(asset=asset, task_type=WorkOrder.TaskType.PREVENTIVE))
+    wos = list(WorkOrder.objects.filter(tasks__asset=asset, task_type=WorkOrder.TaskType.PREVENTIVE))
     on_time_ts = timezone.now()
     WorkOrder.objects.filter(pk=wos[0].pk).update(
         status=WorkOrder.Status.COMPLETED, completed_at=on_time_ts

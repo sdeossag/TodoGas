@@ -40,3 +40,5 @@ backend/media/
 graphify-out/
 *.m4a
 transcripts/
+# Configuracion local de servidores del panel de vista previa
+.claude/launch.json

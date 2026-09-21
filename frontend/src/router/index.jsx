@@ -20,6 +20,7 @@ import MaintenancePlansPage from '../pages/maintenance/MaintenancePlansPage'
 import MaintenancePlanDetailPage from '../pages/maintenance/MaintenancePlanDetailPage'
 import MaintenancePlanFormPage from '../pages/maintenance/MaintenancePlanFormPage'
 import MaintenanceCalendarPage from '../pages/maintenance/MaintenanceCalendarPage'
+import PendingTasksPage from '../pages/maintenance/PendingTasksPage'
 import ReportsPage from '../pages/reports/ReportsPage'
 import InventoryPage from '../pages/inventory/InventoryPage'
 import ItemMovementsPage from '../pages/inventory/ItemMovementsPage'
@@ -96,6 +97,7 @@ export const router = createBrowserRouter(
             { path: '/planes-pm/:id', element: <MaintenancePlanDetailPage /> },
             { path: '/planes-pm/:id/editar', element: <MaintenancePlanFormPage /> },
             { path: '/calendario-pm', element: <MaintenanceCalendarPage /> },
+            { path: '/tareas-pendientes', element: <PendingTasksPage /> },
             { path: '/reportes', element: <ReportsPage /> },
             { path: '/inventario', element: <InventoryPage /> },
             { path: '/inventario/:id/movimientos', element: <ItemMovementsPage /> },

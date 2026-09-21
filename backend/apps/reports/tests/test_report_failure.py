@@ -28,6 +28,7 @@ from apps.reports.models import GeneratedReport
 from apps.reports.tasks import generate_work_order_pdf
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.testing import make_work_order
 
 GENERATOR = "apps.reports.tasks.generate_service_report_pdf"
 
@@ -68,17 +69,7 @@ def asset(db, hospital):
 
 @pytest.fixture
 def completed_wo(db, asset, admin_user):
-    wo = WorkOrder(
-        asset=asset,
-        task_type=WorkOrder.TaskType.CORRECTIVE,
-        title="OT test",
-        status=WorkOrder.Status.COMPLETED,
-        priority=WorkOrder.Priority.MEDIUM,
-        scheduled_date=date.today(),
-        created_by=admin_user,
-    )
-    wo.save()
-    return wo
+    return make_work_order(asset, admin_user, status=WorkOrder.Status.COMPLETED)
 
 
 def failure_entries(work_order):
@@ -166,14 +157,5 @@ def test_report_status_recovers_to_ok_after_a_successful_retry(completed_wo, adm
 
 
 def test_open_work_order_reports_not_applicable(asset, admin_user):
-    wo = WorkOrder(
-        asset=asset,
-        task_type=WorkOrder.TaskType.CORRECTIVE,
-        title='OT abierta',
-        status=WorkOrder.Status.PENDING,
-        priority=WorkOrder.Priority.MEDIUM,
-        scheduled_date=date.today(),
-        created_by=admin_user,
-    )
-    wo.save()
+    wo = make_work_order(asset, admin_user, title='OT abierta')
     assert report_status_of(auth_client(admin_user), wo) == 'not_applicable'

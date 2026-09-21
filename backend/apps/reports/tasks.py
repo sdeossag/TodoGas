@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 def generate_work_order_pdf(self, work_order_id):
     try:
         work_order = WorkOrder.objects.select_related(
-            "asset__hospital", "assigned_to"
+            "hospital", "assigned_to"
         ).get(id=work_order_id)
 
         _pdf_bytes, file_url, _report_hash = generate_service_report_pdf(work_order)
@@ -66,9 +66,9 @@ def send_report_email(self, work_order_id):
     recipient_email = ""
     try:
         work_order = WorkOrder.objects.select_related(
-            "asset__hospital", "assigned_to"
+            "hospital", "assigned_to"
         ).get(id=work_order_id)
-        hospital = work_order.asset.hospital
+        hospital = work_order.hospital
 
         report = GeneratedReport.objects.filter(
             work_order=work_order
@@ -81,7 +81,7 @@ def send_report_email(self, work_order_id):
 
         subject = (
             f"Reporte de servicio - {work_order.wo_code}"
-            f" | {work_order.asset.name}"
+            f" | {work_order.primary_task.asset.name if work_order.primary_task else work_order.title}"
         )
         body = render_to_string(
             "reports/email_report.html",
@@ -143,20 +143,25 @@ def generate_consolidated_report(
             pass
 
     qs = WorkOrder.objects.select_related(
-        "asset__hospital", "assigned_to"
-    ).filter(
+        "hospital", "assigned_to"
+    ).prefetch_related("tasks__asset").filter(
         scheduled_date__gte=date_from,
         scheduled_date__lte=date_to,
     )
     if hospital:
-        qs = qs.filter(asset__hospital=hospital)
+        qs = qs.filter(hospital=hospital)
     if task_type:
         qs = qs.filter(task_type=task_type)
 
     total_ots = qs.count()
     completed_count = qs.filter(status=WorkOrder.Status.COMPLETED).count()
     pct_completed = round(completed_count / total_ots * 100, 1) if total_ots else 0.0
-    assets_count = qs.values("asset").distinct().count()
+    # Activos distintos atendidos: pasan por las tareas, una OT puede llevar
+    # varios.
+    from apps.maintenance.models import Task
+    assets_count = (
+        Task.objects.filter(work_order__in=qs).values("asset").distinct().count()
+    )
 
     from django.db.models import Count as DjCount
     status_summary = [

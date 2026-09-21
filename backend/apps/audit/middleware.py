@@ -26,6 +26,12 @@ _PATH_ENTITY_MAP = [
     ('/api/checklists/templates/', 'ChecklistTemplate'),
     ('/api/checklists/responses/', 'ChecklistResponse'),
     ('/api/maintenance/plans/', 'MaintenancePlan'),
+    # Modelo de tareas (fase 2): la tarea del plan, cada tarea con su fecha
+    # (reprogramar y anular quedan como acciones sobre Task) y el catalogo
+    # de causas.
+    ('/api/maintenance/plan-tasks/', 'PlanTask'),
+    ('/api/tasks/', 'Task'),
+    ('/api/reschedule-causes/', 'RescheduleCause'),
     ('/api/reports/', 'GeneratedReport'),
     ('/api/users/', 'User'),
     ('/api/inventory/items/', 'InventoryItem'),

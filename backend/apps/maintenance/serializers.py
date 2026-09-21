@@ -1,164 +1,168 @@
-from datetime import date, timedelta
-
-from dateutil.relativedelta import relativedelta
+from django.db.models import Min
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 
 from apps.assets.models import Asset
+from apps.checklists.models import ChecklistTemplate
 
-from .models import MaintenancePlan, MaintenancePlanExecution
+from .models import MaintenancePlan, PlanTask, RescheduleCause, Task, TaskReschedule
+
+# Fase 2 del modelo de tareas: el plan es una cabecera (nombre, prioridad por
+# defecto, activo o pausado) y lo que se repite vive en sus tareas (PlanTask).
+# Los activos no se guardan en el plan: cada activo apunta a su plan (D7).
 
 
-class MaintenancePlanExecutionSerializer(serializers.ModelSerializer):
-    plan = serializers.SerializerMethodField()
-    executed_by = serializers.SerializerMethodField()
+# ── Plan de tareas ────────────────────────────────────────────────────────────
+
+class PlanTaskSummarySerializer(serializers.ModelSerializer):
+    """Lo que la lista de planes muestra de cada tarea."""
 
     class Meta:
-        model = MaintenancePlanExecution
-        fields = ['id', 'plan', 'executed_at', 'executed_by', 'work_orders_created', 'notes']
-        read_only_fields = ['id']
-
-    def get_plan(self, obj):
-        return {'id': str(obj.plan_id), 'name': obj.plan.name}
-
-    def get_executed_by(self, obj):
-        if obj.executed_by_id:
-            u = obj.executed_by
-            return {'id': str(u.id), 'full_name': f'{u.first_name} {u.last_name}'.strip()}
-        return None
+        model = PlanTask
+        fields = [
+            "id", "name", "task_type", "trigger", "frequency_value",
+            "frequency_unit", "repeat_count", "is_active",
+        ]
 
 
 class MaintenancePlanListSerializer(serializers.ModelSerializer):
-    assets_count = serializers.SerializerMethodField()
-    checklist_template = serializers.SerializerMethodField()
-    last_execution = serializers.SerializerMethodField()
+    tasks = serializers.SerializerMethodField()
+    assets_count = serializers.IntegerField(source="assets_total", read_only=True)
+    pending_count = serializers.IntegerField(source="pending_total", read_only=True)
+    overdue_count = serializers.IntegerField(source="overdue_total", read_only=True)
+    next_due_date = serializers.DateField(source="next_due", read_only=True)
     compliance_percentage = serializers.SerializerMethodField()
 
     class Meta:
         model = MaintenancePlan
         fields = [
-            'id', 'name', 'task_type', 'frequency_value', 'frequency_unit',
-            'is_active', 'assets_count', 'checklist_template', 'last_execution',
-            'next_due_date', 'compliance_percentage',
+            "id", "name", "description", "priority", "is_active",
+            "classification_1", "classification_2",
+            "tasks", "assets_count", "pending_count", "overdue_count",
+            "next_due_date", "compliance_percentage",
         ]
 
-    def get_assets_count(self, obj):
-        return obj.assets.count()
-
-    def get_checklist_template(self, obj):
-        if obj.checklist_template_id:
-            return {'id': str(obj.checklist_template_id), 'name': obj.checklist_template.name}
-        return None
-
-    def get_last_execution(self, obj):
-        last = obj.executions.order_by('-executed_at').first()
-        if last:
-            return {
-                'executed_at': last.executed_at,
-                'work_orders_created': last.work_orders_created,
-            }
-        return None
+    def get_tasks(self, obj):
+        return PlanTaskSummarySerializer(obj.tasks.all(), many=True).data
 
     def get_compliance_percentage(self, obj):
-        today = date.today()
-        qs = obj.generated_work_orders.filter(
-            scheduled_date__year=today.year,
-            scheduled_date__month=today.month,
-        )
-        total = qs.count()
-        if total == 0:
+        # Tareas del plan programadas este mes que se hicieron. Cuenta por
+        # activo, no por OT: una OT puede llevar tareas de varios activos.
+        total = getattr(obj, "month_total", 0)
+        if not total:
             return None
-        from apps.work_orders.models import WorkOrder
-        completed = qs.filter(status=WorkOrder.Status.COMPLETED).count()
-        return round(completed / total * 100, 1)
+        return round(obj.month_done / total * 100, 1)
 
 
 class MaintenancePlanDetailSerializer(MaintenancePlanListSerializer):
     restrict_to_hospital = serializers.SerializerMethodField()
     assets = serializers.SerializerMethodField()
-    executions = serializers.SerializerMethodField()
-    next_5_dates = serializers.SerializerMethodField()
 
     class Meta(MaintenancePlanListSerializer.Meta):
         fields = MaintenancePlanListSerializer.Meta.fields + [
-            'description', 'classification_1', 'classification_2', 'priority',
-            'estimated_duration', 'downtime_duration',
-            'restrict_to_hospital', 'assets', 'executions', 'next_5_dates',
-            'last_generated_at', 'created_at', 'updated_at',
+            "restrict_to_hospital", "assets", "created_at", "updated_at",
         ]
+
+    def get_tasks(self, obj):
+        return PlanTaskSerializer(obj.tasks.all(), many=True).data
 
     def get_restrict_to_hospital(self, obj):
         if obj.restrict_to_hospital_id:
-            return {'id': str(obj.restrict_to_hospital_id), 'name': obj.restrict_to_hospital.name}
+            return {"id": str(obj.restrict_to_hospital_id), "name": obj.restrict_to_hospital.name}
         return None
 
     def get_assets(self, obj):
+        proximas = dict(
+            Task.objects.filter(
+                plan_task__plan=obj, plan_task__is_active=True,
+                status__in=Task.OPEN_STATUSES,
+            )
+            .order_by()
+            .values("asset_id")
+            .annotate(fecha=Min("scheduled_date"))
+            .values_list("asset_id", "fecha")
+        )
         return [
             {
-                'id': str(a.id),
-                'code': a.code,
-                'name': a.name,
-                'hospital_name': a.hospital.name,
+                "id": str(a.id),
+                "code": a.code,
+                "name": a.name,
+                "status": a.status,
+                "hospital": {"id": str(a.hospital_id), "name": a.hospital.name},
+                "node_path": a.node.path if a.node_id else "",
+                "next_due_date": proximas.get(a.id),
             }
-            for a in obj.assets.select_related('hospital').all()
+            for a in obj.assets.select_related("hospital", "node").order_by("code")
         ]
-
-    def get_executions(self, obj):
-        last5 = obj.executions.order_by('-executed_at')[:5]
-        return MaintenancePlanExecutionSerializer(last5, many=True).data
-
-    def get_next_5_dates(self, obj):
-        if not obj.next_due_date:
-            return []
-        dates = []
-        fu = obj.frequency_unit
-        fv = obj.frequency_value
-        current = obj.next_due_date
-        for _ in range(5):
-            dates.append(str(current))
-            if fu == MaintenancePlan.FrequencyUnit.DAYS:
-                current = current + timedelta(days=fv)
-            elif fu == MaintenancePlan.FrequencyUnit.WEEKS:
-                current = current + timedelta(weeks=fv)
-            elif fu == MaintenancePlan.FrequencyUnit.MONTHS:
-                current = current + relativedelta(months=fv)
-            elif fu == MaintenancePlan.FrequencyUnit.YEARS:
-                current = current + relativedelta(years=fv)
-        return dates
 
 
 class MaintenancePlanCreateUpdateSerializer(serializers.ModelSerializer):
-    assets = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Asset.objects.all(),
+    name = serializers.CharField(
+        max_length=255,
+        validators=[UniqueValidator(
+            queryset=MaintenancePlan.objects.all(),
+            message="Ya existe un plan de tareas con ese nombre.",
+        )],
     )
 
     class Meta:
         model = MaintenancePlan
         fields = [
-            'id', 'name', 'description', 'task_type', 'classification_1', 'classification_2',
-            'priority', 'estimated_duration', 'downtime_duration',
-            'frequency_value', 'frequency_unit', 'checklist_template', 'assets',
-            'restrict_to_hospital', 'is_active',
+            "id", "name", "description", "classification_1", "classification_2",
+            "priority", "restrict_to_hospital", "is_active",
         ]
-        read_only_fields = ['id']
+        read_only_fields = ["id"]
 
-    def validate_frequency_value(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("La frecuencia debe ser mayor a 0.")
-        return value
 
-    def validate_assets(self, value):
-        if not value:
-            raise serializers.ValidationError("El plan debe tener al menos un activo.")
-        return value
+class AssetIdsSerializer(serializers.Serializer):
+    asset_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Asset.objects.select_related("plan"), allow_empty=False,
+    )
+
+
+# ── Tarea del plan ────────────────────────────────────────────────────────────
+
+class PlanTaskSerializer(serializers.ModelSerializer):
+    checklist_template = serializers.PrimaryKeyRelatedField(
+        queryset=ChecklistTemplate.objects.all(), required=False, allow_null=True,
+    )
+    checklist_template_name = serializers.SerializerMethodField()
+    open_count = serializers.SerializerMethodField()
+    done_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PlanTask
+        fields = [
+            "id", "plan", "name", "description", "task_type", "priority",
+            "checklist_template", "checklist_template_name",
+            "trigger", "frequency_value", "frequency_unit", "repeat_count",
+            "fixed_schedule", "estimated_duration", "downtime_duration",
+            "start_date", "sort_order", "is_active", "open_count", "done_count",
+        ]
+        read_only_fields = ["id"]
+        extra_kwargs = {
+            "priority": {"required": False},
+            "sort_order": {"required": False},
+        }
+
+    def get_checklist_template_name(self, obj):
+        return obj.checklist_template.name if obj.checklist_template_id else None
+
+    def get_open_count(self, obj):
+        if hasattr(obj, "open_total"):
+            return obj.open_total
+        return obj.occurrences.filter(status__in=Task.OPEN_STATUSES).count()
+
+    def get_done_count(self, obj):
+        if hasattr(obj, "done_total"):
+            return obj.done_total
+        return obj.occurrences.filter(status=Task.Status.DONE).count()
 
     def validate_checklist_template(self, value):
         """Rechaza plantillas sin version publicada.
 
-        La OT se ata a la version, no a la plantilla: si no hay ninguna con
-        is_current, el motor deja checklist_version en None y genera ordenes
-        preventivas sin nada que diligenciar. El formulario de creacion de OT ya
-        filtraba por esto; el de planes aceptaba cualquier plantilla.
+        La tarea se ata a la version al entrar en una OT: si no hay ninguna con
+        is_current, entra sin nada que diligenciar.
         """
         if value is None:
             return value
@@ -169,20 +173,197 @@ class MaintenancePlanCreateUpdateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_repeat_count(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError(
+                "Indica cuantas veces (al menos 1), o deja vacio para repetir siempre."
+            )
+        return value
+
+    def validate(self, attrs):
+        instancia = self.instance
+        if instancia is not None:
+            attrs.pop("plan", None)  # una tarea no se cambia de plan
+
+        def actual(campo, defecto=None):
+            if campo in attrs:
+                return attrs[campo]
+            return getattr(instancia, campo) if instancia else defecto
+
+        if actual("trigger", PlanTask.Trigger.DATE) == PlanTask.Trigger.DATE:
+            errores = {}
+            valor = actual("frequency_value")
+            if not valor or valor <= 0:
+                errores["frequency_value"] = "Una tarea por fecha necesita una frecuencia mayor a 0."
+            if not actual("frequency_unit"):
+                errores["frequency_unit"] = "Indica la unidad de la frecuencia."
+            if errores:
+                raise serializers.ValidationError(errores)
+        return attrs
+
+    def _user(self):
+        request = self.context.get("request")
+        return getattr(request, "user", None)
+
     def create(self, validated_data):
-        from .engine import calculate_next_due_date
-        assets = validated_data.pop('assets', [])
-        plan = MaintenancePlan(**validated_data)
-        plan.next_due_date = calculate_next_due_date(plan, from_date=date.today())
-        plan.save()
-        plan.assets.set(assets)
-        return plan
+        from . import services
+
+        plan = validated_data["plan"]
+        validated_data.setdefault("priority", plan.priority)
+        if "sort_order" not in validated_data:
+            ultima = plan.tasks.order_by("-sort_order").values_list("sort_order", flat=True).first()
+            validated_data["sort_order"] = (ultima or 0) + 1
+        tarea = PlanTask.objects.create(**validated_data)
+        if tarea.is_active and tarea.trigger == PlanTask.Trigger.DATE and plan.is_active:
+            services.sync_plan_task(tarea, self._user())
+        return tarea
 
     def update(self, instance, validated_data):
-        assets = validated_data.pop('assets', None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        if assets is not None:
-            instance.assets.set(assets)
+        from . import services
+
+        antes = {
+            "is_active": instance.is_active,
+            "trigger": instance.trigger,
+            "start_date": instance.start_date,
+        }
+        instance = super().update(instance, validated_data)
+        services.plan_task_changed(instance, antes, self._user())
+        # Los conteos anotados al leer la tarea ya no valen: se recalculan.
+        for anotacion in ("open_total", "done_total"):
+            instance.__dict__.pop(anotacion, None)
         return instance
+
+
+class EventOccurrenceSerializer(serializers.Serializer):
+    asset = serializers.PrimaryKeyRelatedField(queryset=Asset.objects.all())
+    scheduled_date = serializers.DateField()
+
+
+# ── Tareas ────────────────────────────────────────────────────────────────────
+
+class TaskSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    asset = serializers.SerializerMethodField()
+    hospital = serializers.SerializerMethodField()
+    plan = serializers.SerializerMethodField()
+    plan_task = serializers.SerializerMethodField()
+    work_order = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+    is_rescheduled = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Task
+        fields = [
+            "id", "status", "status_display", "title", "description", "task_type",
+            "priority", "calculated_date", "scheduled_date", "completed_at",
+            "estimated_duration", "cancellation_note", "is_overdue", "is_rescheduled",
+            "asset", "hospital", "plan", "plan_task", "work_order",
+        ]
+
+    def get_asset(self, obj):
+        a = obj.asset
+        return {
+            "id": str(a.id),
+            "code": a.code,
+            "name": a.name,
+            "node_id": str(a.node_id) if a.node_id else None,
+            "node_path": a.node.path if a.node_id else "",
+        }
+
+    def get_hospital(self, obj):
+        return {"id": str(obj.asset.hospital_id), "name": obj.asset.hospital.name}
+
+    def get_plan(self, obj):
+        if obj.plan_task_id:
+            plan = obj.plan_task.plan
+            return {"id": str(plan.id), "name": plan.name}
+        return None
+
+    def get_plan_task(self, obj):
+        pt = obj.plan_task
+        if pt is None:
+            return None
+        return {
+            "id": str(pt.id),
+            "name": pt.name,
+            "trigger": pt.trigger,
+            "frequency_value": pt.frequency_value,
+            "frequency_unit": pt.frequency_unit,
+            "fixed_schedule": pt.fixed_schedule,
+        }
+
+    def get_work_order(self, obj):
+        wo = obj.work_order
+        if wo is None:
+            return None
+        datos = {"id": str(wo.id), "wo_code": wo.wo_code, "status": wo.status}
+        if self.context.get("with_reports"):
+            acta = max(wo.reports.all(), key=lambda r: r.generated_at, default=None)
+            datos["report_id"] = str(acta.id) if acta else None
+        return datos
+
+    def get_is_overdue(self, obj):
+        from django.utils import timezone
+
+        return obj.is_open and obj.scheduled_date < timezone.localdate()
+
+    def get_is_rescheduled(self, obj):
+        return obj.scheduled_date != obj.calculated_date
+
+
+class RescheduleCauseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RescheduleCause
+        fields = ["id", "name", "is_active", "sort_order"]
+
+
+class TaskRescheduleSerializer(serializers.ModelSerializer):
+    cause = serializers.CharField(source="cause.name", read_only=True)
+    changed_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TaskReschedule
+        fields = ["id", "from_date", "to_date", "cause", "note", "changed_by", "changed_at"]
+
+    def get_changed_by(self, obj):
+        u = obj.changed_by
+        if u is None:
+            return None
+        return {"id": str(u.id), "full_name": f"{u.first_name} {u.last_name}".strip() or u.email}
+
+
+class RescheduleInputSerializer(serializers.Serializer):
+    scheduled_date = serializers.DateField()
+    cause_id = serializers.PrimaryKeyRelatedField(
+        queryset=RescheduleCause.objects.filter(is_active=True),
+        error_messages={
+            "does_not_exist": "Esa causa no existe o esta desactivada.",
+            "required": "La causa es obligatoria.",
+            "null": "La causa es obligatoria.",
+        },
+    )
+    note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class CancelInputSerializer(serializers.Serializer):
+    note = serializers.CharField(
+        error_messages={
+            "blank": "Indica por que se anula la tarea.",
+            "required": "Indica por que se anula la tarea.",
+        },
+    )
+
+
+def _task_ids_field():
+    return serializers.PrimaryKeyRelatedField(
+        many=True, allow_empty=False,
+        queryset=Task.objects.select_related("asset"),
+    )
+
+
+class BulkRescheduleInputSerializer(RescheduleInputSerializer):
+    task_ids = _task_ids_field()
+
+
+class BulkCancelInputSerializer(CancelInputSerializer):
+    task_ids = _task_ids_field()

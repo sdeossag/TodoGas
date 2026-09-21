@@ -19,6 +19,7 @@ from rest_framework.test import APIClient
 from apps.assets.models import Asset, Hospital
 from apps.maintenance.models import MaintenancePlan
 from apps.users.models import User
+from apps.maintenance.testing import make_plan
 
 
 def admin_client(db):
@@ -46,13 +47,11 @@ def make_asset(hospital, code):
 
 def plan_for(asset, days_from_today):
     """Plan activo cuya proxima fecha cae a N dias de hoy (N negativo = vencido)."""
-    plan = MaintenancePlan.objects.create(
-        name=f"Plan {uuid.uuid4()}",
-        is_active=True,
+    return make_plan(
+        f"Plan {uuid.uuid4()}",
         next_due_date=timezone.localdate() + timedelta(days=days_from_today),
+        assets=[asset],
     )
-    plan.assets.add(asset)
-    return plan
 
 
 @pytest.fixture

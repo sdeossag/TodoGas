@@ -159,3 +159,11 @@ SIMPLE_JWT = {
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
 }
+
+# ── Mantenimiento ──────────────────────────────────────────────────────────
+# Convertir en OT, cada dia, las tareas pendientes que vencen. Equivale a
+# "Permitir que la generacion automatica de OTs se active por la fecha de
+# programacion" de Fracttal, que el cliente tiene apagado: alli las OTs las
+# arma el planificador desde las tareas pendientes (decision D1). Apagado: el
+# proceso diario solo garantiza que cada activo tenga su tarea pendiente.
+MAINTENANCE_AUTO_CREATE_WORK_ORDERS = False

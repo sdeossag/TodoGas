@@ -1,27 +1,34 @@
-"""«Disparar ahora» no debe consumir el ciclo programado del plan.
+"""«Disparar ahora» no debe hacer desaparecer la ejecucion programada.
 
-Regresion: el disparo manual y la corrida diaria llamaban a la misma funcion sin
-distinguirse. Siempre creaba la OT con scheduled_date = next_due_date (una fecha
-futura, no "ahora") y despues adelantaba next_due_date un periodo completo, asi
-que un disparo anticipado hacia desaparecer la ejecucion programada siguiente.
+Regresion (bug 3): el disparo manual y la corrida diaria llamaban a la misma
+funcion sin distinguirse, y un disparo anticipado adelantaba el calendario un
+periodo completo: la ejecucion que tocaba desaparecia sin dejar rastro.
 
-Regla actual:
-  - disparo manual ANTES del vencimiento -> mantenimiento extraordinario:
-    OT para hoy y calendario intacto.
-  - disparo manual con el plan ya vencido -> es la corrida programada hecha a
-    mano: ejecuta el ciclo y avanza.
-  - corrida automatica -> siempre ejecuta el ciclo.
+Con el modelo de tareas (diseno aprobado el 2026-09-21) la regla es la de
+Fracttal:
+
+  - disparo manual ANTES del vencimiento -> la tarea pendiente se reprograma a
+    hoy con causa ADELANTADO, queda registrado, y la OT es para hoy. La fecha
+    calculada no cambia nunca.
+  - la siguiente fecha se calcula al cerrar la OT: con programacion fija, desde
+    la fecha calculada (el ciclo no se corre, que era la proteccion del bug 3);
+    sin ella, que es el defecto y como trabaja el cliente, desde la realizacion.
+  - disparo manual de una pendiente ya vencida, o corrida automatica -> la OT
+    toma la fecha programada de la pendiente, sin reprogramar nada.
 """
 
 from datetime import date, timedelta
 
 import pytest
 from dateutil.relativedelta import relativedelta
+from django.utils import timezone
 from model_bakery import baker
 
 from apps.assets.models import Asset, Hospital
+from apps.maintenance import services
 from apps.maintenance.engine import generate_work_orders_for_plan
-from apps.maintenance.models import MaintenancePlan
+from apps.maintenance.models import MaintenancePlanExecution, Task, TaskReschedule
+from apps.maintenance.testing import make_plan, pending_task
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 
@@ -43,37 +50,29 @@ def asset(db, hospital):
     return baker.make(Asset, hospital=hospital, status=Asset.Status.ACTIVE)
 
 
-def make_plan(asset, next_due_date):
-    plan = baker.make(
-        MaintenancePlan,
-        is_active=True,
-        task_type=MaintenancePlan.TaskType.PREVENTIVE,
-        frequency_value=FREQ_MONTHS,
-        frequency_unit=MaintenancePlan.FrequencyUnit.MONTHS,
-        next_due_date=next_due_date,
+def plan_con_pendiente(asset, due, fixed_schedule=False):
+    return make_plan(
+        "Plan alarma", assets=[asset], next_due_date=due,
+        frequency_value=FREQ_MONTHS, fixed_schedule=fixed_schedule,
     )
-    plan.assets.add(asset)
-    return plan
 
 
 def only_work_order(plan):
-    return WorkOrder.objects.get(maintenance_plan=plan)
+    return WorkOrder.objects.get(tasks__plan_task__plan=plan)
 
 
-# ── Disparo manual anticipado: extraordinario ────────────────────────────────
+def cerrar(work_order, cuando):
+    """Completa la OT en `cuando` y cierra sus tareas como lo haria la transicion."""
+    work_order.status = WorkOrder.Status.COMPLETED
+    work_order.completed_at = cuando
+    work_order.save()
+    return services.complete_work_order_tasks(work_order)
 
-def test_manual_trigger_before_due_keeps_schedule(asset, admin_user):
-    due = date.today() + timedelta(days=90)
-    plan = make_plan(asset, due)
 
-    generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
-
-    plan.refresh_from_db()
-    assert plan.next_due_date == due, 'el disparo anticipado no debe mover el calendario'
-
+# ── Disparo manual anticipado: se adelanta con causa ─────────────────────────
 
 def test_manual_trigger_before_due_schedules_ot_for_today(asset, admin_user):
-    plan = make_plan(asset, date.today() + timedelta(days=90))
+    plan = plan_con_pendiente(asset, date.today() + timedelta(days=90))
 
     result = generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
 
@@ -81,62 +80,95 @@ def test_manual_trigger_before_due_schedules_ot_for_today(asset, admin_user):
     assert only_work_order(plan).scheduled_date == date.today()
 
 
-def test_manual_trigger_before_due_warns_it_was_extraordinary(asset, admin_user):
-    plan = make_plan(asset, date.today() + timedelta(days=90))
-
-    result = generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
-
-    assert any('extraordinario' in w for w in result['warnings'])
-
-
-def test_manual_trigger_before_due_still_records_generation(asset, admin_user):
-    plan = make_plan(asset, date.today() + timedelta(days=90))
+def test_manual_trigger_before_due_keeps_calculated_date(asset, admin_user):
+    due = date.today() + timedelta(days=90)
+    plan = plan_con_pendiente(asset, due)
 
     generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
 
-    plan.refresh_from_db()
-    assert plan.last_generated_at is not None
+    tarea = Task.objects.get(plan_task__plan=plan, asset=asset)
+    assert tarea.calculated_date == due, 'el disparo anticipado no borra la fecha calculada'
+    assert tarea.scheduled_date == date.today()
 
 
-# ── Disparo manual de un plan vencido: ejecuta el ciclo ──────────────────────
-
-def test_manual_trigger_when_overdue_advances_schedule(asset, admin_user):
-    due = date.today() - timedelta(days=1)
-    plan = make_plan(asset, due)
+def test_manual_trigger_before_due_is_recorded_as_adelantado(asset, admin_user):
+    due = date.today() + timedelta(days=90)
+    plan = plan_con_pendiente(asset, due)
 
     result = generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
 
-    plan.refresh_from_db()
-    assert plan.next_due_date == due + relativedelta(months=FREQ_MONTHS)
+    registro = TaskReschedule.objects.get(task__plan_task__plan=plan)
+    assert registro.cause.name == 'ADELANTADO'
+    assert registro.from_date == due
+    assert registro.to_date == date.today()
+    assert registro.changed_by == admin_user
+    assert any('ADELANTADO' in w for w in result['warnings'])
+
+
+def test_manual_trigger_still_records_generation(asset, admin_user):
+    plan = plan_con_pendiente(asset, date.today() + timedelta(days=90))
+
+    generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
+
+    assert MaintenancePlanExecution.objects.filter(plan=plan).count() == 1
+
+
+# ── La siguiente fecha: fija o desde la realizacion ──────────────────────────
+
+def test_fixed_schedule_keeps_cycle_after_early_execution(asset, admin_user):
+    """La proteccion original del bug 3: con programacion fija, adelantar una
+    visita no corre el ciclo."""
+    due = date.today() + timedelta(days=90)
+    plan = plan_con_pendiente(asset, due, fixed_schedule=True)
+    generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
+
+    cerrar(only_work_order(plan), timezone.now())
+
+    siguiente = pending_task(plan, asset)
+    assert siguiente.calculated_date == due + relativedelta(months=FREQ_MONTHS)
+
+
+def test_floating_schedule_counts_from_completion(asset, admin_user):
+    """Sin programacion fija (el defecto, como el cliente en Fracttal) la
+    siguiente se cuenta desde el dia en que se hizo."""
+    plan = plan_con_pendiente(asset, date.today() + timedelta(days=90))
+    generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
+    hecho = timezone.now()
+
+    cerrar(only_work_order(plan), hecho)
+
+    siguiente = pending_task(plan, asset)
+    esperado = timezone.localdate(hecho) + relativedelta(months=FREQ_MONTHS)
+    assert siguiente.calculated_date == esperado
+    assert siguiente.scheduled_date == esperado
+
+
+# ── Pendiente ya vencida y corrida programada: sin reprogramar ───────────────
+
+def test_manual_trigger_when_overdue_uses_due_date(asset, admin_user):
+    due = date.today() - timedelta(days=1)
+    plan = plan_con_pendiente(asset, due)
+
+    result = generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
+
     assert only_work_order(plan).scheduled_date == due
-    assert not any('extraordinario' in w for w in result['warnings'])
-
-
-def test_manual_trigger_without_due_date_initialises_schedule(asset, admin_user):
-    plan = make_plan(asset, None)
-
-    generate_work_orders_for_plan(plan, triggered_by=admin_user, manual=True)
-
-    plan.refresh_from_db()
-    assert plan.next_due_date == date.today() + relativedelta(months=FREQ_MONTHS)
-
-
-# ── Corrida programada: siempre avanza ───────────────────────────────────────
-
-def test_scheduled_run_advances_schedule(asset, admin_user):
-    due = date.today() - timedelta(days=1)
-    plan = make_plan(asset, due)
-
-    generate_work_orders_for_plan(plan, triggered_by=admin_user)
-
-    plan.refresh_from_db()
-    assert plan.next_due_date == due + relativedelta(months=FREQ_MONTHS)
+    assert not TaskReschedule.objects.exists()
+    assert not any('ADELANTADO' in w for w in result['warnings'])
 
 
 def test_scheduled_run_uses_due_date_not_today(asset, admin_user):
     due = date.today() - timedelta(days=3)
-    plan = make_plan(asset, due)
+    plan = plan_con_pendiente(asset, due)
 
     generate_work_orders_for_plan(plan, triggered_by=admin_user)
 
     assert only_work_order(plan).scheduled_date == due
+
+
+def test_scheduled_run_ignores_future_pending(asset, admin_user):
+    plan = plan_con_pendiente(asset, date.today() + timedelta(days=10))
+
+    result = generate_work_orders_for_plan(plan, triggered_by=admin_user)
+
+    assert result['created'] == 0
+    assert not WorkOrder.objects.exists()

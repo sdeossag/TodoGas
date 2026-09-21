@@ -12,11 +12,13 @@ from apps.audit.models import AuditLog
 from apps.users.models import User
 from apps.users.permissions import IsAdmin, IsAdminOrSup
 
-from .integrity import INTEGRITY_ALGORITHM_VERSION, compute_wo_content_hash
+from . import integrity
+from .integrity import verify_work_order
 from .models import WorkOrder, WorkOrderStatusHistory
 from .serializers import (
     WorkOrderCreateSerializer,
     WorkOrderDetailSerializer,
+    WorkOrderFromTasksSerializer,
     WorkOrderListSerializer,
     WorkOrderStatusHistorySerializer,
     WorkOrderTechnicianUpdateSerializer,
@@ -68,15 +70,16 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = WorkOrder.objects.select_related(
-            "asset",
-            "asset__hospital",
-            "asset__node",
+            "hospital",
+            "location",
             "assigned_to",
             "created_by",
-            "maintenance_plan",
-            "checklist_version",
-            "checklist_version__template",
         ).prefetch_related(
+            "tasks__asset__hospital",
+            "tasks__asset__node",
+            "tasks__plan_task__plan",
+            "tasks__checklist_version__template",
+            "tasks__checklist_response",
             "status_history",
             "status_history__changed_by",
             "photos",
@@ -91,12 +94,15 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         elif user.role == User.Role.CLI:
             qs = qs.filter(
                 status=WorkOrder.Status.COMPLETED,
-                asset__hospital=user.hospital,
+                hospital=user.hospital,
             )
         else:
             qs = qs.none()
 
         params = self.request.query_params
+        # Los filtros por activo pasan por las tareas: una OT puede tener varias
+        # y el join repetiria la OT una vez por cada coincidencia.
+        via_tareas = False
 
         if v := params.get("status"):
             qs = qs.filter(status=v)
@@ -105,9 +111,10 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if v := params.get("priority"):
             qs = qs.filter(priority=v)
         if v := params.get("asset_id"):
-            qs = qs.filter(asset_id=v)
+            qs = qs.filter(tasks__asset_id=v)
+            via_tareas = True
         if v := params.get("hospital_id"):
-            qs = qs.filter(asset__hospital_id=v)
+            qs = qs.filter(hospital_id=v)
         if v := params.get("assigned_to_id"):
             qs = qs.filter(assigned_to_id=v)
         if v := params.get("scheduled_date_from"):
@@ -127,11 +134,14 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
                 pass
             qs = qs.filter(
                 Q(title__icontains=v)
-                | Q(asset__name__icontains=v)
-                | Q(asset__code__icontains=v)
+                | Q(tasks__asset__name__icontains=v)
+                | Q(tasks__asset__code__icontains=v)
                 | wo_num_q
             )
+            via_tareas = True
 
+        if via_tareas:
+            qs = qs.distinct()
         return qs.annotate(priority_order=_PRIORITY_ORDER).order_by(
             "priority_order", "scheduled_date"
         )
@@ -142,6 +152,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if self.action == "retrieve":
             return WorkOrderDetailSerializer
         if self.action == "create":
+            if self._from_tasks():
+                return WorkOrderFromTasksSerializer
             return WorkOrderCreateSerializer
         if self.action == "partial_update":
             if self.request.user.role == User.Role.TEC:
@@ -149,19 +161,28 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             return WorkOrderUpdateSerializer
         return WorkOrderDetailSerializer
 
+    def _from_tasks(self):
+        return hasattr(self.request.data, "get") and "task_ids" in self.request.data
+
     def get_permissions(self):
         if self.action == "create":
-            return [IsAdmin()]
+            # Agrupar pendientes es trabajo del planificador, que en el diseno
+            # es administrador o supervisor. El alta manual sigue solo para ADMIN.
+            return [IsAdminOrSup()] if self._from_tasks() else [IsAdmin()]
         return [IsAuthenticated()]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        wo = serializer.save()
-        return Response(
-            WorkOrderDetailSerializer(wo, context={"request": request}).data,
-            status=status.HTTP_201_CREATED,
-        )
+        from apps.maintenance.services import TaskStateError
+
+        try:
+            wo = serializer.save()
+        except TaskStateError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        datos = WorkOrderDetailSerializer(wo, context={"request": request}).data
+        datos["warnings"] = getattr(serializer, "warnings", [])
+        return Response(datos, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):
         user = request.user
@@ -346,21 +367,20 @@ class IntegrityCheckView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        from apps.reports.models import GeneratedReport
+        # Cada acta se verifica con el algoritmo con que se firmo. Antes una
+        # version distinta respondia "regenera el reporte", y regenerar
+        # recalcula el hash con lo que diga la base ahora: una alteracion
+        # quedaba lavada.
+        resultado = verify_work_order(wo)
+        report = resultado.report
 
-        report = (
-            GeneratedReport.objects.filter(work_order=wo)
-            .order_by("-generated_at")
-            .first()
-        )
-        if not report:
+        if resultado.outcome == integrity.NO_REPORT:
             return Response(
                 {"detail": "No existe reporte generado para esta OT."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        stored_hash = report.content_hash
-        if not stored_hash:
+        if resultado.outcome == integrity.NO_HASH:
             # Reporte anterior a la introduccion del hash de contenido: no se
             # puede afirmar ni negar la integridad, y decir "verificado" seria
             # peor que decir que no se sabe.
@@ -375,28 +395,26 @@ class IntegrityCheckView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        if report.integrity_version != INTEGRITY_ALGORITHM_VERSION:
+        if resultado.outcome == integrity.UNKNOWN_VERSION:
             return Response(
                 {
                     "verified": None,
                     "message": (
-                        f"El hash se calculo con el algoritmo "
-                        f"{report.integrity_version or 'desconocido'} y el actual "
-                        f"es {INTEGRITY_ALGORITHM_VERSION}. Regenera el reporte."
+                        f"El hash se calculo con un algoritmo desconocido "
+                        f"({report.integrity_version or 'sin version'}). No se "
+                        "puede verificar."
                     ),
                 },
                 status=status.HTTP_409_CONFLICT,
             )
 
-        recomputed = compute_wo_content_hash(wo)
-        verified = recomputed == stored_hash
-
+        verified = resultado.verified
         return Response(
             {
                 "verified": verified,
-                "stored_hash": stored_hash[:16] + "...",
-                "recomputed_hash": recomputed[:16] + "...",
-                "algorithm_version": INTEGRITY_ALGORITHM_VERSION,
+                "stored_hash": report.content_hash[:16] + "...",
+                "recomputed_hash": resultado.recomputed_hash[:16] + "...",
+                "algorithm_version": report.integrity_version,
                 "message": (
                     "Integridad verificada" if verified else "ALERTA: El documento fue modificado"
                 ),

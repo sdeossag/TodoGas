@@ -15,6 +15,7 @@ from apps.assets.models import Asset, Hospital
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 from apps.evidence.models import Photo, Signature
+from apps.maintenance.testing import make_work_order
 
 FAKE_S3_KEY = "evidence/photos/test/fake.jpg"
 FAKE_S3_URL = "https://s3.amazonaws.com/todogas-media-dev/evidence/photos/test/fake.jpg?Signature=xxx"
@@ -55,18 +56,9 @@ def make_asset(hospital):
 
 
 def make_wo(asset, created_by, assigned_to=None, wo_status=WorkOrder.Status.IN_PROGRESS):
-    wo = WorkOrder(
-        asset=asset,
-        task_type=WorkOrder.TaskType.CORRECTIVE,
-        title="OT test",
-        status=wo_status,
-        priority=WorkOrder.Priority.MEDIUM,
-        scheduled_date=date.today(),
-        assigned_to=assigned_to,
-        created_by=created_by,
+    return make_work_order(
+        asset, created_by, status=wo_status, assigned_to=assigned_to,
     )
-    wo.save()
-    return wo
 
 
 def make_image_bytes(width=10, height=10, fmt="JPEG"):

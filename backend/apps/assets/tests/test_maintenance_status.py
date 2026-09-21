@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, timedelta
 
 import pytest
@@ -9,6 +10,7 @@ from apps.assets.models import Asset, Hospital
 from apps.maintenance.models import MaintenancePlan
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.testing import make_plan, make_work_order
 
 
 def auth_client(user):
@@ -43,14 +45,11 @@ def test_maintenance_status_no_plan(asset, admin_user):
 
 
 def test_maintenance_status_on_time(asset, admin_user):
-    p = baker.make(
-        MaintenancePlan,
-        is_active=True,
+    p = make_plan(
+        f"Plan {uuid.uuid4()}",
         next_due_date=date.today() + timedelta(days=30),
-        frequency_value=6,
-        frequency_unit=MaintenancePlan.FrequencyUnit.MONTHS,
+        assets=[asset],
     )
-    p.assets.add(asset)
     client = auth_client(admin_user)
     resp = client.get('/api/assets/')
     items = resp.json() if isinstance(resp.json(), list) else resp.json().get('results', [])
@@ -59,14 +58,11 @@ def test_maintenance_status_on_time(asset, admin_user):
 
 
 def test_maintenance_status_due_soon(asset, admin_user):
-    p = baker.make(
-        MaintenancePlan,
-        is_active=True,
+    p = make_plan(
+        f"Plan {uuid.uuid4()}",
         next_due_date=date.today() + timedelta(days=5),
-        frequency_value=6,
-        frequency_unit=MaintenancePlan.FrequencyUnit.MONTHS,
+        assets=[asset],
     )
-    p.assets.add(asset)
     client = auth_client(admin_user)
     resp = client.get('/api/assets/')
     items = resp.json() if isinstance(resp.json(), list) else resp.json().get('results', [])
@@ -75,14 +71,11 @@ def test_maintenance_status_due_soon(asset, admin_user):
 
 
 def test_maintenance_status_overdue(asset, admin_user):
-    p = baker.make(
-        MaintenancePlan,
-        is_active=True,
+    p = make_plan(
+        f"Plan {uuid.uuid4()}",
         next_due_date=date.today() - timedelta(days=1),
-        frequency_value=6,
-        frequency_unit=MaintenancePlan.FrequencyUnit.MONTHS,
+        assets=[asset],
     )
-    p.assets.add(asset)
     client = auth_client(admin_user)
     resp = client.get('/api/assets/')
     items = resp.json() if isinstance(resp.json(), list) else resp.json().get('results', [])
@@ -91,19 +84,14 @@ def test_maintenance_status_overdue(asset, admin_user):
 
 
 def test_last_maintenance_date_from_completed_wo(asset, admin_user):
-    wo = WorkOrder(
-        asset=asset,
+    from django.utils import timezone
+    wo = make_work_order(
+        asset, admin_user,
         task_type=WorkOrder.TaskType.PREVENTIVE,
         title='Test OT',
         status=WorkOrder.Status.COMPLETED,
-        priority=WorkOrder.Priority.MEDIUM,
-        scheduled_date=date.today(),
-        created_by=admin_user,
+        completed_at=timezone.now(),
     )
-    wo.save()
-    from django.utils import timezone
-    wo.completed_at = timezone.now()
-    wo.save(update_fields=['completed_at'])
 
     client = auth_client(admin_user)
     resp = client.get('/api/assets/')

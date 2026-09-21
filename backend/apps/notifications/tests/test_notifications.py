@@ -7,6 +7,7 @@ from apps.assets.models import Asset, Hospital
 from apps.notifications.models import NotificationLog
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.testing import make_work_order
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -36,18 +37,7 @@ def make_asset(hospital):
 
 
 def make_wo(asset, created_by, assigned_to=None):
-    wo = WorkOrder(
-        asset=asset,
-        task_type=WorkOrder.TaskType.CORRECTIVE,
-        title="OT test",
-        status=WorkOrder.Status.PENDING,
-        priority=WorkOrder.Priority.MEDIUM,
-        scheduled_date=date.today(),
-        assigned_to=assigned_to,
-        created_by=created_by,
-    )
-    wo.save()
-    return wo
+    return make_work_order(asset, created_by, assigned_to=assigned_to)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -96,7 +86,7 @@ def test_notification_log_has_correct_type_and_user(db, wo, tec):
     send_assignment_notification(wo)
 
     log = NotificationLog.objects.get(user=tec)
-    assert str(wo.id) in log.body or wo.asset.name in log.body
+    assert str(wo.id) in log.body or wo.primary_task.asset.name in log.body
     # Numero legible OT-2026-00001 (RF-OT-02), no el entero crudo.
     assert wo.wo_code in log.title
 

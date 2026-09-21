@@ -1,108 +1,55 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  useMaintenancePlan,
   useCreateMaintenancePlan,
+  useMaintenancePlan,
   useUpdateMaintenancePlan,
 } from '../../api/maintenance'
-import { useHospitals, useAssets } from '../../api/assets'
-import { useChecklistTemplates } from '../../api/checklists'
+import { useHospitals } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
 import Spinner from '../../components/ui/Spinner'
-
-
-function calculateNextDates(frequencyValue, frequencyUnit, count = 5) {
-  const fv = parseInt(frequencyValue, 10)
-  if (!fv || fv <= 0) return []
-  const dates = []
-  let current = new Date()
-  current.setHours(0, 0, 0, 0)
-  for (let i = 0; i < count; i++) {
-    switch (frequencyUnit) {
-      case 'DAYS':   current = new Date(current); current.setDate(current.getDate() + fv); break
-      case 'WEEKS':  current = new Date(current); current.setDate(current.getDate() + fv * 7); break
-      case 'MONTHS': current = new Date(current); current.setMonth(current.getMonth() + fv); break
-      case 'YEARS':  current = new Date(current); current.setFullYear(current.getFullYear() + fv); break
-      default:       return dates
-    }
-    dates.push(new Date(current))
-  }
-  return dates
-}
-
-function formatDateShort(d) {
-  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
-}
+import { apiErrorMessage } from '../../utils/apiError'
+import { PRIORITIES } from '../../utils/maintenance'
 
 const EMPTY_FORM = {
   name: '',
   description: '',
-  task_type: 'PREVENTIVE',
   priority: 'MEDIUM',
-  frequency_value: 6,
-  frequency_unit: 'MONTHS',
-  dur_hours: '',
-  dur_minutes: '',
-  checklist_template: '',
+  classification_1: '',
+  classification_2: '',
   restrict_to_hospital: '',
   is_active: true,
 }
 
+/**
+ * Datos generales del plan de tareas. Las tareas y los activos se manejan en
+ * el detalle del plan, como en Fracttal: primero se crea el plan y luego se le
+ * agregan tareas y se asigna a los activos.
+ */
 export default function MaintenancePlanFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const isEdit = !!id
 
-  const { data: existing, isLoading: loadingExisting } = useMaintenancePlan(id)
+  const { data: existing, isLoading } = useMaintenancePlan(id)
   const createMut = useCreateMaintenancePlan()
   const updateMut = useUpdateMaintenancePlan(id)
-
   const { data: hospitals = [] } = useHospitals({ is_active: true })
-  // Solo sirven las plantillas con una version publicada: el motor ata la OT a
-  // la version, y sin ella genera ordenes preventivas sin nada que diligenciar.
-  const { data: checklists = [] } = useChecklistTemplates({ is_active: true })
-  const publishedChecklists = checklists.filter((c) => c.current_version_id)
 
   const [form, setForm] = useState(EMPTY_FORM)
-  const [selectedAssets, setSelectedAssets] = useState([])
-  const [assetSearch, setAssetSearch] = useState('')
-  const [assetSearchInput, setAssetSearchInput] = useState('')
   const [error, setError] = useState('')
-
-  // Un plan creado antes de esta validacion puede apuntar a una plantilla sin
-  // version publicada. Se sigue mostrando en el select —marcada— porque si
-  // desapareciera, el campo pintaria "Sin checklist" mientras el formulario
-  // conserva el id invalido, y el guardado fallaria sin explicacion visible.
-  const selectedChecklist = checklists.find((c) => c.id === form.checklist_template)
-  const orphanChecklist =
-    selectedChecklist && !selectedChecklist.current_version_id ? selectedChecklist : null
-
-  const { data: searchedAssets = [] } = useAssets(
-    assetSearch ? { search: assetSearch } : {}
-  )
 
   useEffect(() => {
     if (isEdit && existing) {
-      const dur = existing.estimated_duration
-      let dur_hours = '', dur_minutes = ''
-      if (dur) {
-        const match = String(dur).match(/(\d+):(\d+):(\d+)/)
-        if (match) { dur_hours = match[1]; dur_minutes = match[2] }
-      }
       setForm({
         name: existing.name ?? '',
         description: existing.description ?? '',
-        task_type: existing.task_type ?? 'PREVENTIVE',
         priority: existing.priority ?? 'MEDIUM',
-        frequency_value: existing.frequency_value ?? 6,
-        frequency_unit: existing.frequency_unit ?? 'MONTHS',
-        dur_hours,
-        dur_minutes,
-        checklist_template: existing.checklist_template?.id ?? '',
+        classification_1: existing.classification_1 ?? '',
+        classification_2: existing.classification_2 ?? '',
         restrict_to_hospital: existing.restrict_to_hospital?.id ?? '',
         is_active: existing.is_active ?? true,
       })
-      setSelectedAssets(existing.assets ?? [])
     }
   }, [isEdit, existing])
 
@@ -110,280 +57,86 @@ export default function MaintenancePlanFormPage() {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
   }
 
-  function addAsset(asset) {
-    if (selectedAssets.find((a) => a.id === asset.id)) return
-    setSelectedAssets((prev) => [...prev, asset])
-  }
-
-  function removeAsset(assetId) {
-    setSelectedAssets((prev) => prev.filter((a) => a.id !== assetId))
-  }
-
-  function buildDuration() {
-    const h = parseInt(form.dur_hours, 10) || 0
-    const m = parseInt(form.dur_minutes, 10) || 0
-    if (h === 0 && m === 0) return null
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`
-  }
-
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    if (!form.name.trim()) { setError('El nombre es requerido.'); return }
-    if (selectedAssets.length === 0) { setError('Debes seleccionar al menos un activo.'); return }
-    if (!form.frequency_value || form.frequency_value <= 0) { setError('La frecuencia debe ser mayor a 0.'); return }
-
+    if (!form.name.trim()) { setError('El nombre es obligatorio.'); return }
     const payload = {
+      ...form,
       name: form.name.trim(),
       description: form.description.trim(),
-      task_type: form.task_type,
-      priority: form.priority,
-      frequency_value: parseInt(form.frequency_value, 10),
-      frequency_unit: form.frequency_unit,
-      estimated_duration: buildDuration(),
-      checklist_template: form.checklist_template || null,
       restrict_to_hospital: form.restrict_to_hospital || null,
-      is_active: form.is_active,
-      assets: selectedAssets.map((a) => a.id),
     }
-
     try {
-      const result = isEdit
-        ? await updateMut.mutateAsync(payload)
-        : await createMut.mutateAsync(payload)
-      navigate(`/planes-pm/${result.id}`)
+      const result = isEdit ? await updateMut.mutateAsync(payload) : await createMut.mutateAsync(payload)
+      // Un plan nuevo no hace nada hasta tener tareas: se abre en esa pestaña.
+      navigate(`/planes-pm/${result.id}`, { state: isEdit ? undefined : { created: true } })
     } catch (err) {
-      const data = err?.response?.data
-      if (data && typeof data === 'object') {
-        setError(Object.entries(data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`).join(' | '))
-      } else {
-        setError('Error al guardar el plan.')
-      }
+      setError(apiErrorMessage(err, 'No se pudo guardar el plan.'))
     }
   }
 
-  const nextDates = calculateNextDates(form.frequency_value, form.frequency_unit)
-
-  if (isEdit && loadingExisting) {
+  if (isEdit && isLoading) {
     return <div className="flex justify-center py-20"><Spinner /></div>
   }
 
   const isPending = createMut.isPending || updateMut.isPending
+  const input = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30'
 
   return (
-    <div className="max-w-5xl space-y-5">
-      {/* Header */}
+    <div className="max-w-2xl space-y-5">
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/planes-pm')} className="text-gray-500 hover:text-gray-600" aria-label="Volver a planes"><Icon name="arrowLeft" className="w-5 h-5" /></button>
+        <button onClick={() => navigate(isEdit ? `/planes-pm/${id}` : '/planes-pm')}
+          className="text-gray-500 hover:text-gray-600" aria-label="Volver">
+          <Icon name="arrowLeft" className="w-5 h-5" />
+        </button>
         <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">
-          {isEdit ? 'Editar plan de mantenimiento' : 'Nuevo plan de mantenimiento'}
+          {isEdit ? 'Editar plan de tareas' : 'Nuevo plan de tareas'}
         </h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Columna izquierda */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-gray-600 border-b pb-2">Configuración del plan</h2>
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
+        <Field label="Nombre *" hint="Como lo reconocen en campo: «3 TOMAS», «ALARMA 3 GASES».">
+          <input value={form.name} onChange={set('name')} required className={input}
+            placeholder="Ej: Salidas de gases 24 tomas" />
+        </Field>
 
-            <Field label="Nombre *">
-              <input value={form.name} onChange={set('name')} required
-                placeholder="Ej: Mantenimiento preventivo cilindros O₂"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30" />
-            </Field>
+        <Field label="Descripción">
+          <textarea value={form.description} onChange={set('description')} rows={2}
+            className={`${input} resize-none`} placeholder="Opcional" />
+        </Field>
 
-            <Field label="Descripción">
-              <textarea value={form.description} onChange={set('description')} rows={2}
-                placeholder="Descripción opcional..."
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none" />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Tipo de tarea *">
-                <select value={form.task_type} onChange={set('task_type')}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
-                  <option value="PREVENTIVE">Preventivo</option>
-                  <option value="CORRECTIVE">Correctivo</option>
-                  <option value="VERIFICATION">Verificación</option>
-                  <option value="INSTALLATION">Instalación</option>
-                  <option value="DELIVERY">Entrega</option>
-                </select>
-              </Field>
-
-              <Field label="Prioridad *">
-                <select value={form.priority} onChange={set('priority')}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
-                  <option value="HIGH">Alta</option>
-                  <option value="MEDIUM">Media</option>
-                  <option value="LOW">Baja</option>
-                </select>
-              </Field>
-            </div>
-
-            <Field label="Frecuencia *">
-              <div className="flex gap-2">
-                <input type="number" min="1" value={form.frequency_value}
-                  onChange={set('frequency_value')}
-                  className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30" />
-                <select value={form.frequency_unit} onChange={set('frequency_unit')}
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
-                  <option value="DAYS">Días</option>
-                  <option value="WEEKS">Semanas</option>
-                  <option value="MONTHS">Meses</option>
-                  <option value="YEARS">Años</option>
-                </select>
-              </div>
-            </Field>
-
-            <Field label="Duración estimada">
-              <div className="flex gap-2 items-center">
-                <input type="number" min="0" max="999" value={form.dur_hours}
-                  onChange={set('dur_hours')} placeholder="0"
-                  className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
-                <span className="text-sm text-gray-500">h</span>
-                <input type="number" min="0" max="59" value={form.dur_minutes}
-                  onChange={set('dur_minutes')} placeholder="0"
-                  className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
-                <span className="text-sm text-gray-500">min</span>
-              </div>
-            </Field>
-
-            <Field label="Checklist">
-              <select value={form.checklist_template} onChange={set('checklist_template')}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
-                <option value="">Sin checklist</option>
-                {publishedChecklists.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} (v{c.current_version_number})
-                  </option>
-                ))}
-                {orphanChecklist && (
-                  <option value={orphanChecklist.id}>
-                    {orphanChecklist.name} — sin version publicada
-                  </option>
-                )}
-              </select>
-              {orphanChecklist ? (
-                <p className="text-amber-700 text-xs mt-1">
-                  «{orphanChecklist.name}» no tiene version publicada, asi que este plan
-                  genera OT sin checklist. Publica una version o elige otra plantilla
-                  para poder guardar.
-                </p>
-              ) : (
-                <p className="text-xs text-gray-500 mt-1">
-                  {publishedChecklists.length === 0
-                    ? 'No hay plantillas con una version publicada. Publica una desde el editor de checklists.'
-                    : 'Solo aparecen las plantillas con una version publicada: la OT se ata a la version.'}
-                </p>
-              )}
-            </Field>
-
-            <Field label="Restringir a hospital">
-              <select value={form.restrict_to_hospital} onChange={set('restrict_to_hospital')}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
-                <option value="">Todos los hospitales</option>
-                {hospitals.map((h) => (
-                  <option key={h.id} value={h.id}>{h.name}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          {/* Columna derecha — activos */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-gray-600 border-b pb-2">
-              Activos del plan <span className="text-red-500">*</span>
-            </h2>
-
-            {/* Buscador */}
-            <div className="flex gap-2">
-              <input
-                value={assetSearchInput}
-                onChange={(e) => setAssetSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), setAssetSearch(assetSearchInput))}
-                placeholder="Buscar activo por código o nombre..."
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30"
-              />
-              <button type="button" onClick={() => setAssetSearch(assetSearchInput)}
-                className="px-3 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-light">
-                Buscar
-              </button>
-            </div>
-
-            {/* Resultados de búsqueda */}
-            {assetSearch && searchedAssets.length > 0 && (
-              <div className="border border-gray-100 rounded-lg max-h-40 overflow-y-auto divide-y divide-gray-50">
-                {searchedAssets.slice(0, 10).map((a) => {
-                  const already = selectedAssets.find((s) => s.id === a.id)
-                  return (
-                    <div key={a.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50">
-                      <div>
-                        <p className="text-sm text-gray-800">{a.name}</p>
-                        <p className="text-xs text-gray-500">{a.code} · {a.hospital?.name}</p>
-                      </div>
-                      <button type="button" onClick={() => addAsset(a)}
-                        disabled={!!already}
-                        className={`text-xs px-2 py-1 rounded ${
-                          already
-                            ? 'text-gray-400 cursor-not-allowed'
-                            : 'bg-brand/10 text-brand hover:bg-brand/20'
-                        }`}>
-                        {already ? 'Ya agregado' : '+ Agregar'}
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            {assetSearch && searchedAssets.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">Sin resultados para "{assetSearch}"</p>
-            )}
-
-            {/* Lista seleccionados */}
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-2">
-                Activos seleccionados ({selectedAssets.length})
-              </p>
-              {selectedAssets.length === 0 ? (
-                <p className="text-xs text-gray-500 text-center py-4">Sin activos seleccionados</p>
-              ) : (
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {selectedAssets.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                      <div>
-                        <p className="text-sm text-gray-800">{a.name}</p>
-                        <p className="text-xs text-gray-500">{a.code} · {a.hospital_name ?? a.hospital?.name}</p>
-                      </div>
-                      <button type="button" onClick={() => removeAsset(a.id)}
-                        className="text-gray-500 hover:text-red-500 text-lg leading-none ml-2">
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Prioridad por defecto" hint="La toman las tareas nuevas del plan.">
+            <select value={form.priority} onChange={set('priority')} className={input}>
+              {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Solo para el hospital" hint="Vacío: se puede asignar a activos de cualquier hospital.">
+            <select value={form.restrict_to_hospital} onChange={set('restrict_to_hospital')} className={input}>
+              <option value="">Cualquier hospital</option>
+              {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Clasificación 1">
+            <input value={form.classification_1} onChange={set('classification_1')} className={input} />
+          </Field>
+          <Field label="Clasificación 2">
+            <input value={form.classification_2} onChange={set('classification_2')} className={input} />
+          </Field>
         </div>
 
-        {/* Próximas fechas */}
-        {nextDates.length > 0 && (
-          <div className="bg-brand/5 border border-brand/10 rounded-xl p-4">
-            <p className="text-xs font-semibold text-brand-700 mb-2">Próximas ejecuciones</p>
-            <div className="flex gap-3 flex-wrap">
-              {nextDates.map((d, i) => (
-                <span key={i} className="text-xs bg-white border border-brand/20 text-brand px-2 py-1 rounded-lg">
-                  {i + 1}. {formatDateShort(d)}
-                </span>
-              ))}
-            </div>
-          </div>
+        {!isEdit && (
+          <p className="text-sm text-gray-600 bg-brand/5 border border-brand/10 rounded-lg px-3 py-2">
+            Después de crearlo le agregas las tareas (qué se hace, con qué checklist y cada cuánto)
+            y lo asignas a los activos.
+          </p>
         )}
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {error && <p className="text-red-600 text-sm" role="alert">{error}</p>}
 
-        <div className="flex justify-end gap-3 pb-4">
-          <button type="button" onClick={() => navigate('/planes-pm')}
+        <div className="flex justify-end gap-3 pt-1">
+          <button type="button" onClick={() => navigate(isEdit ? `/planes-pm/${id}` : '/planes-pm')}
             className="px-5 py-2 text-sm text-gray-600 hover:text-gray-800">
             Cancelar
           </button>
@@ -398,11 +151,14 @@ export default function MaintenancePlanFormPage() {
   )
 }
 
-function Field({ label, children }) {
+function Field({ label, hint, children }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {children}
+      <label className="block">
+        <span className="block text-sm font-medium text-gray-700 mb-1">{label}</span>
+        {children}
+      </label>
+      {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
     </div>
   )
 }

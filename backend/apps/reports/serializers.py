@@ -31,7 +31,7 @@ class WorkOrderMinSerializer(serializers.Serializer):
     hospital = serializers.SerializerMethodField()
 
     def get_hospital(self, obj):
-        h = obj.asset.hospital
+        h = obj.hospital
         return {"id": str(h.id), "name": h.name}
 
 

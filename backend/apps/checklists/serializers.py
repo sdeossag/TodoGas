@@ -2,6 +2,9 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.maintenance.models import Task
+from apps.work_orders.models import WorkOrder
+
 from .models import (
     ChecklistField,
     ChecklistFieldResponse,
@@ -134,13 +137,16 @@ class ChecklistFieldResponseSerializer(serializers.ModelSerializer):
 class ChecklistResponseSerializer(serializers.ModelSerializer):
     field_responses = ChecklistFieldResponseSerializer(many=True, read_only=True)
     completed_by_name = serializers.SerializerMethodField()
+    # El checklist es de la tarea; `work_order` se sigue devolviendo porque
+    # la app movil lo usa para asociar la respuesta a su OT.
+    work_order = serializers.SerializerMethodField()
     version_number = serializers.IntegerField(source="version.version_number", read_only=True)
     version_fields = serializers.SerializerMethodField()
 
     class Meta:
         model = ChecklistResponse
         fields = [
-            "id", "work_order", "version", "version_number",
+            "id", "task", "work_order", "version", "version_number",
             "started_at", "completed_at", "completed_by", "completed_by_name",
             "field_responses", "version_fields", "created_at",
         ]
@@ -149,29 +155,70 @@ class ChecklistResponseSerializer(serializers.ModelSerializer):
         qs = obj.version.fields.all().order_by("sort_order")
         return ChecklistFieldSerializer(qs, many=True).data
 
+    def get_work_order(self, obj):
+        return str(obj.task.work_order_id) if obj.task.work_order_id else None
+
     def get_completed_by_name(self, obj):
         u = obj.completed_by
+        if u is None:
+            return None
         name = f"{u.first_name} {u.last_name}".strip()
         return name or u.email
 
 
 class ChecklistResponseCreateSerializer(serializers.ModelSerializer):
+    """
+    Inicia el checklist de una tarea.
+
+    Acepta la tarea, o la OT cuando la OT tiene una sola tarea: es como lo
+    pide hoy la interfaz ("Iniciar checklist" sobre la OT). Con varias
+    tareas hay que decir cual.
+    """
+
+    task = serializers.PrimaryKeyRelatedField(
+        queryset=Task.objects.select_related("work_order"), required=False
+    )
+    work_order = serializers.PrimaryKeyRelatedField(
+        queryset=WorkOrder.objects.all(), required=False, write_only=True
+    )
+
     class Meta:
         model = ChecklistResponse
-        fields = ["work_order", "version"]
-
-    def validate_work_order(self, work_order):
-        if ChecklistResponse.objects.filter(work_order=work_order).exists():
-            raise serializers.ValidationError("Esta OT ya tiene un checklist iniciado.")
-        return work_order
+        fields = ["task", "work_order", "version"]
 
     def validate(self, data):
-        work_order = data["work_order"]
-        version = data["version"]
-        if work_order.checklist_version_id and work_order.checklist_version_id != version.id:
+        tarea = data.get("task")
+        work_order = data.pop("work_order", None)
+        if tarea is None:
+            if work_order is None:
+                raise serializers.ValidationError(
+                    {"task": "Indica la tarea (o la OT, si tiene una sola)."}
+                )
+            tareas = list(work_order.tasks.all()[:2])
+            if len(tareas) != 1:
+                raise serializers.ValidationError(
+                    {"task": "La OT tiene varias tareas: indica de cual es el checklist."}
+                )
+            tarea = tareas[0]
+            data["task"] = tarea
+        if ChecklistResponse.objects.filter(task=tarea).exists():
             raise serializers.ValidationError(
-                {"version": "La versión no coincide con la asignada a la OT."}
+                {"task": "Esta tarea ya tiene un checklist iniciado."}
             )
+        version = data["version"]
+        if tarea.checklist_version_id and tarea.checklist_version_id != version.id:
+            raise serializers.ValidationError(
+                {"version": "La versión no coincide con la asignada a la tarea."}
+            )
+        return data
+
+    def to_representation(self, instance):
+        # La respuesta del alta devolvia la OT; la app movil la sigue leyendo.
+        data = super().to_representation(instance)
+        data["id"] = str(instance.id)
+        data["work_order"] = (
+            str(instance.task.work_order_id) if instance.task.work_order_id else None
+        )
         return data
 
     def create(self, validated_data):

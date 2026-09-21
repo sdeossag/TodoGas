@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useHospitals, useAsset, useAssetTree, useCreateAsset, useUpdateAsset } from '../../api/assets'
+import { useMaintenancePlans } from '../../api/maintenance'
 import Icon from '../../components/ui/Icon'
 import { flattenTree, indentedLabel } from '../../utils/locationTree'
 
@@ -12,6 +13,7 @@ const EMPTY = {
   asset_type: '',
   status: 'ACTIVE',
   priority: 'MEDIUM',
+  plan: '',
   manufacturer: '',
   model: '',
   serial_number: '',
@@ -47,6 +49,7 @@ export default function AssetFormPage() {
   // caché de 5 minutos lo diera por fresco.
   const { data: tree = [] } = useAssetTree(form.hospital || null, { refetchOnWindowFocus: 'always' })
   const { data: existing, isLoading: loadingExisting } = useAsset(id)
+  const { data: plans = [] } = useMaintenancePlans()
 
   const createMut = useCreateAsset()
   const updateMut = useUpdateAsset(id)
@@ -73,6 +76,7 @@ export default function AssetFormPage() {
         asset_type: existing.asset_type ?? '',
         status: existing.status ?? 'ACTIVE',
         priority: existing.priority ?? 'MEDIUM',
+        plan: existing.plan?.id ?? '',
         manufacturer: existing.manufacturer ?? '',
         model: existing.model ?? '',
         serial_number: existing.serial_number ?? '',
@@ -109,7 +113,7 @@ export default function AssetFormPage() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const payload = { ...form }
+    const payload = { ...form, plan: form.plan || null }
     if (!payload.node) delete payload.node
     if (!payload.avg_daily_usage_hours) delete payload.avg_daily_usage_hours
     if (!payload.purchase_date) delete payload.purchase_date
@@ -140,7 +144,7 @@ export default function AssetFormPage() {
       }
       setErrors(serverErrors)
       // Si el error es del paso 1, volver atrás
-      const step1Fields = ['hospital', 'node', 'name', 'code', 'asset_type', 'status', 'priority']
+      const step1Fields = ['hospital', 'node', 'name', 'code', 'asset_type', 'status', 'priority', 'plan']
       if (step1Fields.some((f) => serverErrors[f])) setStep(1)
     }
   }
@@ -262,6 +266,20 @@ export default function AssetFormPage() {
                   </select>
                 </Field>
               </div>
+
+              <Field label="Plan de tareas" error={errors.plan}>
+                <select value={form.plan} onChange={(e) => set('plan', e.target.value)} className={sel(errors.plan)}>
+                  <option value="">Sin plan</option>
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}{p.is_active ? '' : ' (pausado)'}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {isEdit && existing?.plan && form.plan !== existing.plan.id
+                    ? 'Al cambiarlo, sus pendientes del plan anterior se anulan y las del nuevo conservan la fecha.'
+                    : 'Qué tareas se le hacen y cada cuánto. Se le asigna una vez y el sistema lleva sus fechas.'}
+                </p>
+              </Field>
             </div>
           )}
 

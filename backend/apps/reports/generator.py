@@ -34,15 +34,18 @@ def generate_service_report_pdf(work_order):
     """
     from weasyprint import HTML
 
-    asset = work_order.asset
+    # Fase 1: el acta sigue mostrando un activo y su checklist, los de la
+    # primera tarea. La fase 3 la pasa a un bloque por tarea.
+    tarea = work_order.primary_task
+    asset = tarea.asset if tarea else None
     technician = work_order.assigned_to
 
-    try:
-        checklist_response = ChecklistResponse.objects.prefetch_related(
-            "field_responses__field"
-        ).get(work_order=work_order)
-    except ChecklistResponse.DoesNotExist:
-        checklist_response = None
+    checklist_response = (
+        ChecklistResponse.objects.prefetch_related("field_responses__field")
+        .filter(task=tarea)
+        .first()
+        if tarea else None
+    )
 
     photos_qs = Photo.objects.filter(work_order=work_order).order_by("taken_at")
     signatures_qs = Signature.objects.filter(work_order=work_order)

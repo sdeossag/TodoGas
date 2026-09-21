@@ -110,10 +110,11 @@ export function useDeleteAssetNode() {
 
 // ── Assets ─────────────────────────────────────────────────────────────────
 
-export function useAssets(params = {}) {
+export function useAssets(params = {}, options = {}) {
   return useQuery({
     queryKey: ['assets', params],
     queryFn: () => fetchAllPages(client, '/api/assets/', params),
+    ...options,
   })
 }
 

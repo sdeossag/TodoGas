@@ -71,14 +71,23 @@ def validate_transition(work_order, new_status, user, comment=""):
         # descubrirlos de uno en uno.
         faltantes = []
 
-        if work_order.checklist_version_id:
-            from django.core.exceptions import ObjectDoesNotExist
+        # Cada tarea con checklist tiene que tenerlo completo. Con varias
+        # tareas se nombra el activo, para que el tecnico sepa cual le falta.
+        from django.core.exceptions import ObjectDoesNotExist
+        tareas = [
+            t for t in work_order.tasks.select_related("asset")
+            if t.checklist_version_id and t.status != "CANCELLED"
+        ]
+        for tarea in tareas:
             try:
-                cr = work_order.checklist_response
-                if not cr.completed_at:
-                    faltantes.append("completar el checklist")
+                completo = bool(tarea.checklist_response.completed_at)
             except ObjectDoesNotExist:
-                faltantes.append("completar el checklist")
+                completo = False
+            if not completo:
+                if len(tareas) == 1:
+                    faltantes.append("completar el checklist")
+                else:
+                    faltantes.append(f"completar el checklist de {tarea.asset.name}")
 
         # RF-OT-03 exige "al menos 1 foto de evidencia con geolocalizacion",
         # pero RF-EV-01 es explicito en que la falta de senal GPS no bloquea la
@@ -115,6 +124,15 @@ def apply_transition(work_order, new_status, user, comment=""):
             work_order.actual_duration = now - work_order.started_at
 
     work_order.save()
+
+    # El ciclo de las tareas va antes que el acta: el hash de integridad cubre
+    # el estado de cada tarea, y si se calculara con ellas aun "programadas"
+    # la verificacion posterior (ya "finalizadas") daria alteracion.
+    from apps.maintenance import services
+    if new_status == WorkOrder.Status.COMPLETED:
+        services.complete_work_order_tasks(work_order)
+    elif new_status == WorkOrder.Status.CANCELLED:
+        services.cancel_work_order_tasks(work_order)
 
     if new_status == WorkOrder.Status.COMPLETED:
         from apps.reports.tasks import generate_work_order_pdf

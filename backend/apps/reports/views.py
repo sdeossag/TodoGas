@@ -23,7 +23,7 @@ class GeneratedReportViewSet(
     def get_queryset(self):
         user = self.request.user
         qs = GeneratedReport.objects.select_related(
-            "work_order", "work_order__asset", "work_order__asset__hospital"
+            "work_order", "work_order__hospital"
         ).prefetch_related("send_logs")
 
         if user.role == User.Role.ADMIN:
@@ -32,7 +32,7 @@ class GeneratedReportViewSet(
             pass
         elif user.role == User.Role.CLI:
             qs = qs.filter(
-                work_order__asset__hospital=user.hospital
+                work_order__hospital=user.hospital
             )
         else:
             qs = qs.none()
@@ -43,7 +43,7 @@ class GeneratedReportViewSet(
 
         hospital_id = self.request.query_params.get("hospital_id")
         if hospital_id:
-            qs = qs.filter(work_order__asset__hospital_id=hospital_id)
+            qs = qs.filter(work_order__hospital_id=hospital_id)
 
         date_from = self.request.query_params.get("date_from")
         if date_from:

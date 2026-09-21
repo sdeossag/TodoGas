@@ -15,6 +15,13 @@ class Photo(models.Model):
         "work_orders.WorkOrder", on_delete=models.PROTECT,
         related_name="photos"
     )
+    # Opcional: en una OT con varios activos, de cual es la foto. El acta las
+    # agrupa por tarea cuando la tienen.
+    task = models.ForeignKey(
+        "maintenance.Task", on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="photos",
+    )
     file_url = models.CharField(max_length=500)
     thumbnail_url = models.CharField(max_length=500, blank=True, default="")
     latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)

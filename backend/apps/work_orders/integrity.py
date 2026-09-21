@@ -17,15 +17,32 @@ Dos hashes distintos, que no deben confundirse:
                       base de datos sigue diciendo lo mismo.
 
 Comparar uno contra otro nunca coincide.
+
+Versiones del algoritmo
+-----------------------
+Cada acta guarda con que version se calculo su hash, y la verificacion usa esa
+misma version. Una version nueva NO reemplaza a las anteriores: si la
+verificacion de un acta vieja respondiera "regenera el reporte", regenerar
+recalcularia el hash con lo que diga la base ahora y una alteracion quedaria
+lavada.
+
+  1  Una OT = un activo y un checklist. Tras pasar al modelo de tareas, el
+     activo, la version y las respuestas se leen de la unica tarea de la OT, y
+     el resultado es el mismo JSON byte a byte que antes de la migracion.
+  2  Una OT = varias tareas. Cubre la cabecera de la OT con su hospital y su
+     ubicacion, y cada tarea con su activo, su origen, sus fechas y sus
+     respuestas. Fotos, firmas e inventario igual que la 1, mas la tarea de
+     cada foto.
 """
 
 import hashlib
 import json
+from dataclasses import dataclass
 
-# Cualquier cambio en build_integrity_payload obliga a subir esta version: un
-# hash calculado con otra forma de payload no es comparable, y sin el sello la
-# verificacion reportaria alteracion sobre registros intactos.
-INTEGRITY_ALGORITHM_VERSION = "1"
+# Version con la que se calculan las actas nuevas. Las anteriores se siguen
+# verificando con la suya (SUPPORTED_VERSIONS).
+INTEGRITY_ALGORITHM_VERSION = "2"
+SUPPORTED_VERSIONS = ("1", "2")
 
 
 def _dt(value):
@@ -42,43 +59,82 @@ def _num(value):
     return str(value) if value is not None else None
 
 
-def build_integrity_payload(work_order):
-    """
-    Serializacion canonica del contenido probatorio de una OT.
+def _checklist_payload(checklist):
+    if checklist is None:
+        return None
+    return {
+        "id": _id(checklist.id),
+        "version": _id(checklist.version_id),
+        "completed_at": _dt(checklist.completed_at),
+        "completed_by": _id(checklist.completed_by_id),
+        "fields": sorted(
+            (
+                {
+                    "field": _id(fr.field_id),
+                    "value": fr.value,
+                    "notes": fr.notes,
+                    "answered_at": _dt(fr.answered_at),
+                }
+                for fr in checklist.field_responses.all()
+            ),
+            key=lambda row: row["field"],
+        ),
+    }
 
-    Ordenada por identificador en cada coleccion para que el resultado no
-    dependa del orden que devuelva la base de datos.
-    """
+
+def _response_of(task):
     from apps.checklists.models import ChecklistResponse
-    from apps.evidence.models import Photo, Signature
-    from apps.inventory.models import StockMovement
 
-    checklist = (
-        ChecklistResponse.objects.filter(work_order=work_order)
+    if task is None:
+        return None
+    return (
+        ChecklistResponse.objects.filter(task=task)
         .prefetch_related("field_responses")
         .first()
     )
-    if checklist is None:
-        checklist_payload = None
-    else:
-        checklist_payload = {
-            "id": _id(checklist.id),
-            "version": _id(checklist.version_id),
-            "completed_at": _dt(checklist.completed_at),
-            "completed_by": _id(checklist.completed_by_id),
-            "fields": sorted(
-                (
-                    {
-                        "field": _id(fr.field_id),
-                        "value": fr.value,
-                        "notes": fr.notes,
-                        "answered_at": _dt(fr.answered_at),
-                    }
-                    for fr in checklist.field_responses.all()
-                ),
-                key=lambda row: row["field"],
-            ),
-        }
+
+
+def _signatures(work_order):
+    from apps.evidence.models import Signature
+
+    return sorted(
+        (
+            {
+                "id": _id(s.id),
+                "signature_type": s.signature_type,
+                "file_hash": s.file_hash,
+                "signer_name": s.signer_name,
+                "signer_role": s.signer_role,
+                "signed_at": _dt(s.signed_at),
+            }
+            for s in Signature.objects.filter(work_order=work_order)
+        ),
+        key=lambda row: row["id"],
+    )
+
+
+def _stock(work_order):
+    from apps.inventory.models import StockMovement
+
+    return sorted(
+        (
+            {
+                "id": _id(m.id),
+                "item": _id(m.item_id),
+                "movement_type": m.movement_type,
+                "quantity": _num(m.quantity),
+            }
+            for m in StockMovement.objects.filter(work_order=work_order)
+        ),
+        key=lambda row: row["id"],
+    )
+
+
+def _payload_v1(work_order):
+    """Forma de la version 1. No se toca: hay actas firmadas con ella."""
+    from apps.evidence.models import Photo
+
+    tarea = work_order.tasks.order_by("sort_order", "created_at").first()
 
     photos = sorted(
         (
@@ -95,36 +151,8 @@ def build_integrity_payload(work_order):
         key=lambda row: row["id"],
     )
 
-    signatures = sorted(
-        (
-            {
-                "id": _id(s.id),
-                "signature_type": s.signature_type,
-                "file_hash": s.file_hash,
-                "signer_name": s.signer_name,
-                "signer_role": s.signer_role,
-                "signed_at": _dt(s.signed_at),
-            }
-            for s in Signature.objects.filter(work_order=work_order)
-        ),
-        key=lambda row: row["id"],
-    )
-
-    stock = sorted(
-        (
-            {
-                "id": _id(m.id),
-                "item": _id(m.item_id),
-                "movement_type": m.movement_type,
-                "quantity": _num(m.quantity),
-            }
-            for m in StockMovement.objects.filter(work_order=work_order)
-        ),
-        key=lambda row: row["id"],
-    )
-
     return {
-        "algorithm_version": INTEGRITY_ALGORITHM_VERSION,
+        "algorithm_version": "1",
         "work_order": {
             "id": _id(work_order.id),
             "wo_number": work_order.wo_number,
@@ -133,27 +161,158 @@ def build_integrity_payload(work_order):
             "title": work_order.title,
             "description": work_order.description,
             "notes": work_order.notes,
-            "asset": _id(work_order.asset_id),
+            "asset": _id(tarea.asset_id if tarea else None),
             "assigned_to": _id(work_order.assigned_to_id),
-            "checklist_version": _id(work_order.checklist_version_id),
+            "checklist_version": _id(tarea.checklist_version_id if tarea else None),
             "scheduled_date": _dt(work_order.scheduled_date),
             "started_at": _dt(work_order.started_at),
             "completed_at": _dt(work_order.completed_at),
         },
-        "checklist_response": checklist_payload,
+        "checklist_response": _checklist_payload(_response_of(tarea)),
         "photos": photos,
-        "signatures": signatures,
-        "stock_movements": stock,
+        "signatures": _signatures(work_order),
+        "stock_movements": _stock(work_order),
     }
 
 
-def compute_wo_content_hash(work_order):
+def _payload_v2(work_order):
+    from apps.evidence.models import Photo
+
+    tareas = sorted(
+        (
+            {
+                "id": _id(t.id),
+                "asset": _id(t.asset_id),
+                "plan_task": _id(t.plan_task_id),
+                "status": t.status,
+                "title": t.title,
+                "task_type": t.task_type,
+                "checklist_version": _id(t.checklist_version_id),
+                "calculated_date": _dt(t.calculated_date),
+                "scheduled_date": _dt(t.scheduled_date),
+                "completed_at": _dt(t.completed_at),
+                "checklist_response": _checklist_payload(_response_of(t)),
+            }
+            for t in work_order.tasks.all()
+        ),
+        key=lambda row: row["id"],
+    )
+
+    photos = sorted(
+        (
+            {
+                "id": _id(p.id),
+                "task": _id(p.task_id),
+                "file_hash": p.file_hash,
+                "taken_at": _dt(p.taken_at),
+                "latitude": _num(p.latitude),
+                "longitude": _num(p.longitude),
+                "uploaded_by": _id(p.uploaded_by_id),
+            }
+            for p in Photo.objects.filter(work_order=work_order)
+        ),
+        key=lambda row: row["id"],
+    )
+
+    return {
+        "algorithm_version": "2",
+        "work_order": {
+            "id": _id(work_order.id),
+            "wo_number": work_order.wo_number,
+            "task_type": work_order.task_type,
+            "status": work_order.status,
+            "title": work_order.title,
+            "description": work_order.description,
+            "notes": work_order.notes,
+            "hospital": _id(work_order.hospital_id),
+            "location": _id(work_order.location_id),
+            "assigned_to": _id(work_order.assigned_to_id),
+            "scheduled_date": _dt(work_order.scheduled_date),
+            "started_at": _dt(work_order.started_at),
+            "completed_at": _dt(work_order.completed_at),
+        },
+        "tasks": tareas,
+        "photos": photos,
+        "signatures": _signatures(work_order),
+        "stock_movements": _stock(work_order),
+    }
+
+
+_BUILDERS = {"1": _payload_v1, "2": _payload_v2}
+
+
+def build_integrity_payload(work_order, version=INTEGRITY_ALGORITHM_VERSION):
+    """
+    Serializacion canonica del contenido probatorio de una OT.
+
+    Ordenada por identificador en cada coleccion para que el resultado no
+    dependa del orden que devuelva la base de datos.
+    """
+    try:
+        builder = _BUILDERS[version]
+    except KeyError:
+        raise ValueError(f"Version de integridad desconocida: {version!r}") from None
+    return builder(work_order)
+
+
+def compute_wo_content_hash(work_order, version=INTEGRITY_ALGORITHM_VERSION):
     """sha256 de la serializacion canonica del contenido probatorio de la OT."""
     canonical = json.dumps(
-        build_integrity_payload(work_order),
+        build_integrity_payload(work_order, version),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
         default=str,
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# ── Verificacion ─────────────────────────────────────────────────────────────
+
+VERIFIED = "VERIFIED"
+ALTERED = "ALTERED"
+NO_REPORT = "NO_REPORT"
+NO_HASH = "NO_HASH"
+UNKNOWN_VERSION = "UNKNOWN_VERSION"
+
+
+@dataclass(frozen=True)
+class Verification:
+    outcome: str
+    report: object = None
+    recomputed_hash: str = ""
+
+    @property
+    def verified(self):
+        """True o False si se pudo comprobar; None si no hay con que comparar."""
+        if self.outcome == VERIFIED:
+            return True
+        if self.outcome == ALTERED:
+            return False
+        return None
+
+
+def verify_work_order(work_order):
+    """
+    Compara el hash guardado en la ultima acta de la OT con el que da hoy la
+    base, calculado con la version con que se firmo el acta.
+
+    La usan el endpoint de integridad y el comando verify_integrity, para que
+    los dos respondan lo mismo.
+    """
+    from apps.reports.models import GeneratedReport
+
+    report = (
+        GeneratedReport.objects.filter(work_order=work_order)
+        .order_by("-generated_at")
+        .first()
+    )
+    if report is None:
+        return Verification(NO_REPORT)
+    if not report.content_hash:
+        return Verification(NO_HASH, report)
+    if report.integrity_version not in SUPPORTED_VERSIONS:
+        return Verification(UNKNOWN_VERSION, report)
+    recomputed = compute_wo_content_hash(work_order, report.integrity_version)
+    outcome = VERIFIED if recomputed == report.content_hash else ALTERED
+    return Verification(outcome, report, recomputed)

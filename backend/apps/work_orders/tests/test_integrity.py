@@ -39,6 +39,7 @@ from apps.work_orders.integrity import (
     compute_wo_content_hash,
 )
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.testing import make_work_order
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -111,21 +112,18 @@ def checklist_version(db, admin):
 @pytest.fixture
 def completed_wo(db, asset, admin, tec, checklist_version):
     """OT cerrada con checklist respondido, foto y firma del tecnico."""
-    wo = WorkOrder.objects.create(
-        asset=asset,
-        task_type=WorkOrder.TaskType.CORRECTIVE,
+    wo = make_work_order(
+        asset, admin,
         title="Fuga en regulador",
         description="Se detecta fuga audible en el regulador principal.",
         status=WorkOrder.Status.COMPLETED,
         priority=WorkOrder.Priority.HIGH,
-        scheduled_date=date.today(),
         assigned_to=tec,
-        created_by=admin,
         checklist_version=checklist_version,
         completed_at=timezone.now(),
     )
     response = ChecklistResponse.objects.create(
-        work_order=wo,
+        task=wo.primary_task,
         version=checklist_version,
         completed_by=tec,
         completed_at=timezone.now(),
@@ -208,7 +206,7 @@ class TestIntegrityDetectsTampering:
     def test_detects_modified_checklist_answer(self, completed_wo, admin):
         seal(completed_wo)
         fr = ChecklistFieldResponse.objects.get(
-            response__work_order=completed_wo
+            response__task__work_order=completed_wo
         )
         fr.value = "9.9"
         fr.save()

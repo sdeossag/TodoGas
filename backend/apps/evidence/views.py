@@ -29,7 +29,7 @@ def _can_read_wo(user, wo):
     if user.role == User.Role.CLI:
         return (
             wo.status == WorkOrder.Status.COMPLETED
-            and wo.asset.hospital_id == user.hospital_id
+            and wo.hospital_id == user.hospital_id
         )
     return False
 
@@ -51,7 +51,7 @@ def _get_wo_or_error(work_order_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
     try:
-        wo = WorkOrder.objects.select_related("asset").get(pk=work_order_id)
+        wo = WorkOrder.objects.select_related("hospital").get(pk=work_order_id)
     except (WorkOrder.DoesNotExist, Exception):
         return None, Response(
             {"detail": "OT no encontrada."},

@@ -20,6 +20,15 @@ def send_push_notification(user, title, body, data=None):
     print(f"PUSH -> {user.email}: {title}")
 
 
+def _que_se_atiende(work_order):
+    """Un activo por su nombre; varios, por cuantos son."""
+    tareas = list(work_order.tasks.select_related("asset")[:2])
+    if len(tareas) == 1:
+        return tareas[0].asset.name
+    total = work_order.tasks.count()
+    return f"{total} activos" if total else work_order.title
+
+
 def send_assignment_notification(work_order):
     if not work_order.assigned_to:
         return
@@ -27,7 +36,7 @@ def send_assignment_notification(work_order):
     send_push_notification(
         user=user,
         title=f"Nueva OT asignada: {work_order.wo_code}",
-        body=f"{work_order.asset.name} — {work_order.asset.hospital.name}",
+        body=f"{_que_se_atiende(work_order)} — {work_order.hospital.name}",
         data={
             "type": NotificationLog.NotificationType.WO_ASSIGNED,
             "entity_type": "WorkOrder",
@@ -43,7 +52,7 @@ def send_overdue_alert(work_order):
     send_push_notification(
         user=user,
         title=f"OT vencida: {work_order.wo_code}",
-        body=f"{work_order.asset.name} — fecha programada: {work_order.scheduled_date}",
+        body=f"{_que_se_atiende(work_order)} — fecha programada: {work_order.scheduled_date}",
         data={
             "type": NotificationLog.NotificationType.WO_OVERDUE,
             "entity_type": "WorkOrder",

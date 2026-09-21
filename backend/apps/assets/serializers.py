@@ -182,13 +182,17 @@ class AssetMaintenanceFieldsMixin:
     """
 
     def _next_due(self, obj):
+        # La proxima fecha es la de la tarea abierta mas proxima del activo:
+        # su pendiente (o la que ya esta en una OT). Sin tarea abierta no hay
+        # plan que cumplir.
         if hasattr(obj, "_next_due"):
             return obj._next_due
+        from apps.maintenance.models import Task
         return (
-            obj.maintenance_plans
-            .filter(is_active=True, next_due_date__isnull=False)
-            .order_by("next_due_date")
-            .values_list("next_due_date", flat=True)
+            obj.tasks
+            .filter(Task.next_maintenance_q())
+            .order_by("scheduled_date")
+            .values_list("scheduled_date", flat=True)
             .first()
         )
 
@@ -196,10 +200,10 @@ class AssetMaintenanceFieldsMixin:
         if hasattr(obj, "_last_maint"):
             last = obj._last_maint
         else:
-            from apps.work_orders.models import WorkOrder
+            from apps.maintenance.models import Task
             last = (
-                obj.work_orders
-                .filter(status=WorkOrder.Status.COMPLETED)
+                obj.tasks
+                .filter(status=Task.Status.DONE)
                 .order_by("-completed_at")
                 .values_list("completed_at", flat=True)
                 .first()
@@ -233,6 +237,7 @@ class AssetSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
     last_maintenance_date = serializers.SerializerMethodField()
     next_maintenance_date = serializers.SerializerMethodField()
     maintenance_status = serializers.SerializerMethodField()
+    plan = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
@@ -244,6 +249,7 @@ class AssetSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
             "qr_code", "photo_url", "installation_date", "warranty_expiry",
             "created_at", "updated_at", "custom_field_values",
             "last_maintenance_date", "next_maintenance_date", "maintenance_status",
+            "plan",
         ]
         read_only_fields = ["id", "qr_code", "created_at", "updated_at"]
 
@@ -255,10 +261,16 @@ class AssetSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
             return {"id": str(obj.node_id), "name": obj.node.name, "path": obj.node.path}
         return None
 
+    def get_plan(self, obj):
+        if obj.plan_id:
+            return {"id": str(obj.plan_id), "name": obj.plan.name}
+        return None
+
 
 class AssetListSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
     hospital = serializers.SerializerMethodField()
     node = serializers.SerializerMethodField()
+    plan = serializers.SerializerMethodField()
     last_maintenance_date = serializers.SerializerMethodField()
     next_maintenance_date = serializers.SerializerMethodField()
     maintenance_status = serializers.SerializerMethodField()
@@ -266,7 +278,7 @@ class AssetListSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializ
     class Meta:
         model = Asset
         fields = [
-            "id", "name", "code", "hospital", "node",
+            "id", "name", "code", "hospital", "node", "plan",
             "asset_type", "status", "priority",
             # Columnas planas que el portal del cliente muestra en su tabla.
             "manufacturer", "model", "equipment_location",
@@ -281,6 +293,11 @@ class AssetListSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializ
             return {"id": str(obj.node_id), "path": obj.node.path}
         return None
 
+    def get_plan(self, obj):
+        if obj.plan_id:
+            return {"id": str(obj.plan_id), "name": obj.plan.name}
+        return None
+
 
 class AssetCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -290,9 +307,24 @@ class AssetCreateUpdateSerializer(serializers.ModelSerializer):
             "serial_number", "equipment_location", "barcode", "priority",
             "asset_type", "classification_1", "classification_2", "supplier",
             "purchase_date", "avg_daily_usage_hours", "status", "notes",
-            "photo_url", "installation_date", "warranty_expiry",
+            "photo_url", "installation_date", "warranty_expiry", "plan",
         ]
         read_only_fields = ["id"]
+
+    def create(self, validated_data):
+        plan = validated_data.pop("plan", None)
+        asset = super().create(validated_data)
+        if plan is not None:
+            _set_plan(asset, plan, self.context)
+        return asset
+
+    def update(self, instance, validated_data):
+        sentinel = object()
+        plan = validated_data.pop("plan", sentinel)
+        asset = super().update(instance, validated_data)
+        if plan is not sentinel:
+            _set_plan(asset, plan, self.context)
+        return asset
 
     def validate_code(self, value):
         qs = Asset.objects.filter(code=value)
@@ -309,4 +341,18 @@ class AssetCreateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"node": "El nodo no pertenece al mismo hospital que el activo."}
             )
+        plan = attrs.get("plan")
+        if plan and plan.restrict_to_hospital_id and hospital and plan.restrict_to_hospital_id != hospital.pk:
+            raise serializers.ValidationError(
+                {"plan": f"El plan «{plan.name}» es solo para {plan.restrict_to_hospital.name}."}
+            )
         return attrs
+
+
+def _set_plan(asset, plan, context):
+    """El plan del activo cambia por el servicio: la nueva pendiente hereda la
+    fecha de la anterior y las del plan viejo se anulan (decision D7)."""
+    from apps.maintenance.services import set_asset_plan
+
+    request = context.get("request")
+    set_asset_plan(asset, plan, getattr(request, "user", None))

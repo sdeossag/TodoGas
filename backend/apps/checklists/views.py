@@ -89,10 +89,10 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = ChecklistResponse.objects.select_related(
-            "version", "completed_by", "work_order"
+            "version", "completed_by", "task__work_order"
         ).prefetch_related("field_responses__field")
         if user.role == "TEC":
-            qs = qs.filter(work_order__assigned_to=user)
+            qs = qs.filter(task__work_order__assigned_to=user)
         return qs
 
     def destroy(self, request, *args, **kwargs):

@@ -31,6 +31,7 @@ from apps.evidence.models import Photo, Signature
 from apps.reports.models import GeneratedReport
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.testing import make_work_order
 
 # PNG 1x1 valido: sirve como firma y como foto sin depender de ficheros.
 PNG_1PX = base64.b64decode(
@@ -292,15 +293,11 @@ class TestAislamientoEntreClientes:
     def test_un_cliente_no_ve_ots_sin_completar(
         self, cliente, activo, admin, tecnico
     ):
-        abierta = WorkOrder.objects.create(
-            asset=activo,
-            task_type=WorkOrder.TaskType.CORRECTIVE,
+        abierta = make_work_order(
+            activo, admin,
             title="Trabajo en curso",
             status=WorkOrder.Status.IN_PROGRESS,
-            priority=WorkOrder.Priority.MEDIUM,
-            scheduled_date=date.today(),
             assigned_to=tecnico,
-            created_by=admin,
         )
         data = client_for(cliente).get(reverse("work-orders-list")).data
         assert str(abierta.id) not in [str(w["id"]) for w in data["results"]], (

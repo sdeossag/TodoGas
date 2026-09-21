@@ -1,4 +1,4 @@
-"""Un plan PM no debe quedar atado a una plantilla sin version publicada.
+"""Una tarea del plan no debe quedar atada a una plantilla sin version publicada.
 
 Regresion: el formulario de planes ofrecia todas las plantillas y el serializer
 las aceptaba. El motor ata la OT a la version (is_current), asi que con una
@@ -19,6 +19,7 @@ from apps.maintenance.engine import generate_work_orders_for_plan
 from apps.maintenance.models import MaintenancePlan
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.testing import make_plan as _make_plan
 
 
 def auth_client(user):
@@ -61,68 +62,71 @@ def published_template(db, admin_user):
     return template
 
 
-def plan_payload(asset, **extra):
+@pytest.fixture
+def plan(db):
+    return MaintenancePlan.objects.create(name='Plan de prueba')
+
+
+def task_payload(plan, **extra):
     payload = {
-        'name': 'Plan de prueba',
+        'plan': str(plan.id),
+        'name': 'Preventivo semestral',
         'task_type': MaintenancePlan.TaskType.PREVENTIVE,
         'frequency_value': 6,
         'frequency_unit': MaintenancePlan.FrequencyUnit.MONTHS,
-        'assets': [str(asset.id)],
-        'priority': MaintenancePlan.Priority.MEDIUM,
     }
     payload.update(extra)
     return payload
 
 
-# ── Validacion en el serializer ──────────────────────────────────────────────
+# ── Validacion en el serializer (tarea del plan) ─────────────────────────────
 
-def test_create_plan_rejects_template_without_published_version(
-    asset, admin_user, unpublished_template
+def test_create_task_rejects_template_without_published_version(
+    plan, admin_user, unpublished_template
 ):
     client = auth_client(admin_user)
     resp = client.post(
-        '/api/maintenance/plans/',
-        plan_payload(asset, checklist_template=str(unpublished_template.id)),
+        '/api/maintenance/plan-tasks/',
+        task_payload(plan, checklist_template=str(unpublished_template.id)),
         format='json',
     )
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     assert 'checklist_template' in resp.json()
 
 
-def test_create_plan_accepts_template_with_published_version(
-    asset, admin_user, published_template
+def test_create_task_accepts_template_with_published_version(
+    plan, admin_user, published_template
 ):
     client = auth_client(admin_user)
     resp = client.post(
-        '/api/maintenance/plans/',
-        plan_payload(asset, checklist_template=str(published_template.id)),
+        '/api/maintenance/plan-tasks/',
+        task_payload(plan, checklist_template=str(published_template.id)),
         format='json',
     )
     assert resp.status_code == status.HTTP_201_CREATED
-    plan = MaintenancePlan.objects.get(id=resp.json()['id'])
-    assert plan.checklist_template_id == published_template.id
+    assert plan.tasks.get().checklist_template_id == published_template.id
 
 
-def test_create_plan_still_accepts_no_checklist(asset, admin_user):
+def test_create_task_still_accepts_no_checklist(plan, admin_user):
     """«Sin checklist» sigue siendo una opcion valida: la validacion no la rompe."""
     client = auth_client(admin_user)
-    resp = client.post('/api/maintenance/plans/', plan_payload(asset), format='json')
+    resp = client.post('/api/maintenance/plan-tasks/', task_payload(plan), format='json')
     assert resp.status_code == status.HTTP_201_CREATED
 
 
-def test_update_plan_rejects_template_without_published_version(
-    asset, admin_user, published_template, unpublished_template
+def test_update_task_rejects_template_without_published_version(
+    plan, admin_user, published_template, unpublished_template
 ):
     client = auth_client(admin_user)
     created = client.post(
-        '/api/maintenance/plans/',
-        plan_payload(asset, checklist_template=str(published_template.id)),
+        '/api/maintenance/plan-tasks/',
+        task_payload(plan, checklist_template=str(published_template.id)),
         format='json',
     )
-    plan_id = created.json()['id']
+    task_id = created.json()['id']
 
     resp = client.patch(
-        f'/api/maintenance/plans/{plan_id}/',
+        f'/api/maintenance/plan-tasks/{task_id}/',
         {'checklist_template': str(unpublished_template.id)},
         format='json',
     )
@@ -135,19 +139,15 @@ def make_plan(asset, template=None):
     """Crea el plan por el ORM, saltandose el serializer.
 
     Reproduce los planes que ya existian antes de la validacion y el caso de
-    despublicar una version despues de crear el plan.
+    despublicar una version despues de crear el plan. La pendiente ya vence,
+    para que la corrida programada la convierta en OT.
     """
-    plan = baker.make(
-        MaintenancePlan,
-        is_active=True,
-        task_type=MaintenancePlan.TaskType.PREVENTIVE,
-        frequency_value=6,
-        frequency_unit=MaintenancePlan.FrequencyUnit.MONTHS,
-        next_due_date=date.today() + timedelta(days=30),
+    return _make_plan(
+        f"Plan {template.name if template else 'sin checklist'}",
+        assets=[asset],
         checklist_template=template,
+        next_due_date=date.today() - timedelta(days=1),
     )
-    plan.assets.add(asset)
-    return plan
 
 
 def test_generate_attaches_current_version(asset, admin_user, published_template):
@@ -155,8 +155,8 @@ def test_generate_attaches_current_version(asset, admin_user, published_template
     result = generate_work_orders_for_plan(plan, triggered_by=admin_user)
 
     assert result['created'] == 1
-    wo = WorkOrder.objects.get(maintenance_plan=plan)
-    assert wo.checklist_version_id is not None
+    wo = WorkOrder.objects.get(tasks__plan_task__plan=plan)
+    assert wo.primary_task.checklist_version_id is not None
 
 
 def test_generate_warns_when_template_has_no_published_version(
@@ -167,8 +167,8 @@ def test_generate_warns_when_template_has_no_published_version(
 
     # La OT se crea igual: no generarla cancelaria el preventivo en silencio.
     assert result['created'] == 1
-    wo = WorkOrder.objects.get(maintenance_plan=plan)
-    assert wo.checklist_version_id is None
+    wo = WorkOrder.objects.get(tasks__plan_task__plan=plan)
+    assert wo.primary_task.checklist_version_id is None
     # Pero el fallo tiene que ser visible en la respuesta del disparo.
     assert any('no tiene version publicada' in w for w in result['warnings'])
 

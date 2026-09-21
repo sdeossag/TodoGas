@@ -112,3 +112,32 @@ export function flattenTree(nodes, depth = 0) {
 export function indentedLabel(name, depth) {
   return `${'    '.repeat(depth)}${depth > 0 ? '└ ' : ''}${name}`
 }
+
+/** Mapa id → id del padre (null en las raíces), recorriendo el árbol de /tree/. */
+export function parentMap(roots) {
+  const map = new Map()
+  const stack = (roots ?? []).map((n) => [n, null])
+  while (stack.length) {
+    const [node, parent] = stack.pop()
+    map.set(node.id, parent)
+    for (const child of node.children ?? []) stack.push([child, node.id])
+  }
+  return map
+}
+
+/**
+ * La ubicación más profunda que contiene a todas las dadas: si las tareas son
+ * de habitaciones del Piso 3, el Piso 3. null si alguna no tiene ubicación (o
+ * está inactiva y no vino en el árbol) o no comparten ninguna.
+ */
+export function commonAncestor(nodeIds, parents) {
+  if (!nodeIds.length || nodeIds.some((id) => !id || !parents.has(id))) return null
+  const chain = (id) => {
+    const out = []
+    for (let current = id; current; current = parents.get(current)) out.push(current)
+    return out
+  }
+  const [first, ...rest] = nodeIds.map(chain)
+  const others = rest.map((c) => new Set(c))
+  return first.find((id) => others.every((s) => s.has(id))) ?? null
+}

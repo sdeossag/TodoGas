@@ -7,7 +7,8 @@ from django.utils import timezone
 
 class WorkOrder(models.Model):
     """
-    Orden de Trabajo. 1 OT = 1 Asset (simplificación para offline).
+    Orden de Trabajo: una visita a un hospital que agrupa varias tareas, cada
+    una sobre un activo y con su propio checklist (apps.maintenance.Task).
     Fracttal: OT con Kanban de estados Pendiente → En Proceso → En Revisión → Finalizada.
     """
 
@@ -43,9 +44,17 @@ class WorkOrder(models.Model):
         null=True, blank=True, db_index=True,
         help_text="Año de creación. Solo compone el número legible (wo_code)."
     )
-    asset = models.ForeignKey(
-        "assets.Asset", on_delete=models.PROTECT,
-        related_name="work_orders"
+    # Una OT es una visita a un hospital (decision D4): todas sus tareas son de
+    # activos de ese hospital. Filtrar por hospital deja de pasar por el activo.
+    hospital = models.ForeignKey(
+        "assets.Hospital", on_delete=models.PROTECT,
+        related_name="work_orders",
+    )
+    location = models.ForeignKey(
+        "assets.AssetNode", on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="work_orders",
+        help_text="Zona de la visita (\"Piso 3\"). Opcional.",
     )
     task_type = models.CharField(max_length=15, choices=TaskType.choices)
     title = models.CharField(max_length=500)
@@ -87,17 +96,7 @@ class WorkOrder(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(5)]
     )
     notes = models.TextField(blank=True, default="")
-    maintenance_plan = models.ForeignKey(
-        "maintenance.MaintenancePlan", on_delete=models.PROTECT,
-        null=True, blank=True,
-        related_name="generated_work_orders"
-    )
     request_number = models.IntegerField(null=True, blank=True)
-    checklist_version = models.ForeignKey(
-        "checklists.ChecklistTemplateVersion", on_delete=models.PROTECT,
-        null=True, blank=True,
-        related_name="work_orders"
-    )
     synced_at = models.DateTimeField(null=True, blank=True)
     offline_uuid = models.UUIDField(null=True, blank=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -108,13 +107,12 @@ class WorkOrder(models.Model):
         ordering = ["-wo_number"]
         indexes = [
             models.Index(fields=["status", "assigned_to"], name="idx_wo_status_assignee"),
-            models.Index(fields=["asset", "status"], name="idx_wo_asset_status"),
+            models.Index(fields=["hospital", "status"], name="idx_wo_hospital_status"),
             models.Index(fields=["scheduled_date"], name="idx_wo_scheduled_date"),
             # Los tres siguientes los creo la migracion 0002 pero nunca se
             # declararon aqui: sin esto `makemigrations` los da por sobrantes y
             # genera una migracion que los borra.
             models.Index(fields=["status", "scheduled_date"], name="idx_wo_status_scheduled"),
-            models.Index(fields=["maintenance_plan", "status"], name="idx_wo_plan_status"),
             models.Index(fields=["assigned_to", "status"], name="idx_wo_assignee_status"),
         ]
 
@@ -132,6 +130,17 @@ class WorkOrder(models.Model):
         if año is None:
             return f"OT-{self.wo_number:05d}"
         return f"OT-{año}-{self.wo_number:05d}"
+
+    @property
+    def primary_task(self):
+        """
+        La primera tarea de la OT.
+
+        Solo para la compatibilidad de la fase 1: la API y el acta siguen
+        mostrando "el activo" de la OT mientras las pantallas se reescriben para
+        varias tareas (fases 3 y 4). Usa la cache de prefetch_related si existe.
+        """
+        return next(iter(self.tasks.all()), None)
 
     def save(self, *args, **kwargs):
         if not self.wo_number:

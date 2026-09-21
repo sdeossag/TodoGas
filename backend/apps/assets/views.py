@@ -196,12 +196,11 @@ class AssetViewSet(viewsets.ModelViewSet):
         from django.db.models import OuterRef, Subquery
         from django.utils import timezone
 
-        from apps.maintenance.models import MaintenancePlan
-        from apps.work_orders.models import WorkOrder
+        from apps.maintenance.models import Task
 
         user = self.request.user
         qs = Asset.objects.select_related(
-            "hospital", "node", "node__parent"
+            "hospital", "node", "node__parent", "plan"
         ).prefetch_related(
             "custom_field_values__field",
         )
@@ -212,14 +211,14 @@ class AssetViewSet(viewsets.ModelViewSet):
         # antes se calculaba en el cliente y por eso AssetsPage tenia que traer
         # todos los activos para poder filtrar por color.
         next_due_sq = (
-            MaintenancePlan.objects
-            .filter(assets=OuterRef("pk"), is_active=True, next_due_date__isnull=False)
-            .order_by("next_due_date")
-            .values("next_due_date")[:1]
+            Task.objects
+            .filter(Task.next_maintenance_q(), asset=OuterRef("pk"))
+            .order_by("scheduled_date")
+            .values("scheduled_date")[:1]
         )
         last_maint_sq = (
-            WorkOrder.objects
-            .filter(asset=OuterRef("pk"), status=WorkOrder.Status.COMPLETED)
+            Task.objects
+            .filter(asset=OuterRef("pk"), status=Task.Status.DONE)
             .order_by("-completed_at")
             .values("completed_at")[:1]
         )
@@ -245,7 +244,18 @@ class AssetViewSet(viewsets.ModelViewSet):
 
         node_id = self.request.query_params.get("node_id")
         if node_id:
-            qs = qs.filter(node_id=node_id)
+            # Por defecto la ubicacion exacta, como en /activos. Al asignar un
+            # plan a "todo el Piso 3" hace falta tambien su sububicacion.
+            if self.request.query_params.get("include_sublocations") in ("1", "true"):
+                qs = qs.filter(node_id__in=AssetNode.subtree_ids(node_id))
+            else:
+                qs = qs.filter(node_id=node_id)
+
+        plan_id = self.request.query_params.get("plan_id")
+        if plan_id == "none":
+            qs = qs.filter(plan__isnull=True)
+        elif plan_id:
+            qs = qs.filter(plan_id=plan_id)
 
         # RF-AC-07: filtro por estado de mantenimiento (el "color" del activo).
         # Mismas fronteras que AssetListSerializer.get_maintenance_status para
@@ -294,6 +304,32 @@ class AssetViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    @action(detail=True, methods=["get"], url_path="tasks")
+    def tasks(self, request, pk=None):
+        """
+        Tareas del activo: las abiertas (la proxima fecha de cada tarea de su
+        plan) y el historial con las tres fechas de Fracttal, calculada,
+        programada y de realizacion, enlazado a su OT y a su acta.
+        """
+        from apps.maintenance.models import Task
+        from apps.maintenance.serializers import TaskSerializer
+
+        asset = self.get_object()
+        tareas = (
+            Task.objects.filter(asset=asset)
+            .select_related("asset__hospital", "asset__node", "plan_task__plan", "work_order")
+            .prefetch_related("work_order__reports")
+        )
+        abiertas = tareas.filter(status__in=Task.OPEN_STATUSES).order_by("scheduled_date")
+        historial = tareas.exclude(status__in=Task.OPEN_STATUSES).order_by(
+            "-scheduled_date", "-created_at"
+        )
+        contexto = {"request": request, "with_reports": True}
+        return Response({
+            "open": TaskSerializer(abiertas, many=True, context=contexto).data,
+            "history": TaskSerializer(historial, many=True, context=contexto).data,
+        })
 
     @action(detail=True, methods=["get"], url_path="qr-label", permission_classes=[IsAdminOrSup])
     def qr_label(self, request, pk=None):
@@ -350,9 +386,9 @@ class ClientPortalView(APIView):
 
         from apps.work_orders.models import WorkOrder
         recent_wos = WorkOrder.objects.filter(
-            asset__hospital=hospital,
+            hospital=hospital,
             status=WorkOrder.Status.COMPLETED,
-        ).select_related('asset').order_by('-completed_at')[:5]
+        ).prefetch_related('tasks__asset').order_by('-completed_at')[:5]
 
         wo_data = [
             {
@@ -361,7 +397,10 @@ class ClientPortalView(APIView):
                 'wo_code': wo.wo_code,
                 'title': wo.title,
                 'status': wo.status,
-                'asset': {'id': str(wo.asset_id), 'name': wo.asset.name},
+                'asset': (
+                    {'id': str(wo.primary_task.asset_id), 'name': wo.primary_task.asset.name}
+                    if wo.primary_task else None
+                ),
                 'completed_at': wo.completed_at.isoformat() if wo.completed_at else None,
             }
             for wo in recent_wos
@@ -369,7 +408,7 @@ class ClientPortalView(APIView):
 
         from apps.reports.models import GeneratedReport
         reports = GeneratedReport.objects.filter(
-            work_order__asset__hospital=hospital
+            work_order__hospital=hospital
         ).select_related('work_order').order_by('-generated_at')[:10]
 
         from django.core.files.storage import default_storage

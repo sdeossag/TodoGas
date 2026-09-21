@@ -168,12 +168,13 @@ class ChecklistField(models.Model):
 
 class ChecklistResponse(models.Model):
     """
-    Respuestas de un checklist asociadas a una OT. Una por OT.
+    Respuestas del checklist de una tarea. Una por tarea: en una OT con varios
+    activos, cada uno tiene la suya.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    work_order = models.OneToOneField(
-        "work_orders.WorkOrder", on_delete=models.PROTECT,
+    task = models.OneToOneField(
+        "maintenance.Task", on_delete=models.PROTECT,
         related_name="checklist_response",
     )
     version = models.ForeignKey(
@@ -184,6 +185,7 @@ class ChecklistResponse(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
     completed_by = models.ForeignKey(
         "users.User", on_delete=models.PROTECT,
+        null=True, blank=True,
         related_name="checklist_responses"
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -195,7 +197,7 @@ class ChecklistResponse(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Respuesta OT {self.work_order.wo_number}"
+        return f"Respuesta de {self.task}"
 
 
 class ChecklistFieldResponse(models.Model):

@@ -1,219 +1,193 @@
+"""
+Proceso diario de mantenimiento, sobre el modelo de tareas.
+
+Hace dos cosas:
+
+1. Red de seguridad: cada tarea de plan x activo tiene su tarea pendiente. En
+   condiciones normales ya existe (se crea al asignar el plan y al cerrar la
+   anterior); esto repone la que falte.
+
+2. Si la configuracion lo pide, convierte en OT las pendientes que vencen. Es el
+   equivalente de "Permitir que la generacion automatica de OTs se active por la
+   fecha de programacion" de Fracttal, que el cliente tiene apagado (decision
+   D1): alli las OTs las arma el planificador desde las tareas pendientes.
+   Aqui queda encendido durante la fase 1 solo para que la aplicacion siga
+   funcionando como antes hasta que exista la pantalla de pendientes.
+"""
+
 import logging
 import uuid
-from datetime import date, timedelta
 
-from dateutil.relativedelta import relativedelta
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from .models import MaintenancePlan, MaintenancePlanExecution
+from . import services
+from .models import MaintenancePlan, MaintenancePlanExecution, PlanTask, Task
 
 logger = logging.getLogger(__name__)
 
 
-def calculate_next_due_date(plan, from_date=None):
-    """Returns the next due date for a plan based on its frequency."""
-    if from_date is None:
-        from_date = date.today()
+def auto_create_enabled():
+    return getattr(settings, "MAINTENANCE_AUTO_CREATE_WORK_ORDERS", False)
 
-    fu = plan.frequency_unit
-    fv = plan.frequency_value
 
-    if fu == MaintenancePlan.FrequencyUnit.DAYS:
-        return from_date + timedelta(days=fv)
-    elif fu == MaintenancePlan.FrequencyUnit.WEEKS:
-        return from_date + timedelta(weeks=fv)
-    elif fu == MaintenancePlan.FrequencyUnit.MONTHS:
-        return from_date + relativedelta(months=fv)
-    elif fu == MaintenancePlan.FrequencyUnit.YEARS:
-        return from_date + relativedelta(years=fv)
+def ensure_open_tasks():
+    """Abre la pendiente de cada tarea de plan x activo que no la tenga."""
+    creadas = 0
+    tareas = PlanTask.objects.filter(
+        is_active=True, plan__is_active=True, trigger=PlanTask.Trigger.DATE
+    ).select_related("plan")
+    for plan_task in tareas:
+        creadas += services.sync_plan_task(plan_task)
+    return creadas
 
-    return from_date + timedelta(days=fv)
+
+def _creator(triggered_by):
+    if triggered_by is not None:
+        return triggered_by
+    from apps.users.models import User
+
+    return User.objects.filter(role=User.Role.ADMIN).first()
 
 
 def get_plans_due_today():
-    """Returns active plans whose next_due_date <= today and that have at least one asset."""
-    today = date.today()
+    """Planes activos con alguna tarea pendiente vencida o que vence hoy."""
+    hoy = timezone.localdate()
     return (
-        MaintenancePlan.objects
-        .filter(is_active=True, next_due_date__lte=today)
-        .filter(assets__isnull=False)
-        .prefetch_related('assets')
-        .select_related('checklist_template')
+        MaintenancePlan.objects.filter(
+            is_active=True,
+            tasks__is_active=True,
+            tasks__occurrences__status=Task.Status.PENDING,
+            tasks__occurrences__scheduled_date__lte=hoy,
+        )
         .distinct()
     )
 
 
 def generate_work_orders_for_plan(plan, triggered_by=None, manual=False):
     """
-    Creates one WorkOrder per asset in the plan (skips assets with active OTs).
-    Returns {'created': int, 'skipped': int, 'warnings': list, 'execution_id': str}.
+    Crea una OT por cada tarea pendiente del plan que toca.
 
-    `manual=True` marca el disparo desde la interfaz ("Disparar ahora"), que no
-    es lo mismo que la corrida programada: ver `is_cycle_run` mas abajo.
+    Corrida programada: las pendientes con fecha programada de hoy o antes.
+
+    Disparo manual ("Disparar ahora"): todas las pendientes del plan. Las que
+    vencian mas adelante se reprograman a hoy con causa ADELANTADO, que es
+    exactamente lo que el cliente registra en Fracttal cuando adelanta una
+    visita; queda en el historial de la tarea. Antes esto era un caso especial
+    que no tocaba el calendario; ahora la fecha calculada no cambia nunca y la
+    siguiente se cuenta segun la programacion de la tarea.
+
+    Devuelve {'created', 'skipped', 'warnings', 'execution_id'}.
     """
-    from apps.work_orders.models import WorkOrder
-    from apps.checklists.models import ChecklistTemplateVersion
+    hoy = timezone.localdate()
+    creador = _creator(triggered_by)
+    if creador is None:
+        return {
+            "created": 0,
+            "skipped": 0,
+            "warnings": ["No se encontró usuario administrador para crear OTs."],
+            "execution_id": None,
+        }
 
-    created_count = 0
-    skipped_count = 0
-    warnings = []
-    execution = None
-
-    today = date.today()
-    due_date = plan.next_due_date or today
-
-    # Un disparo manual ANTES del vencimiento es un mantenimiento extraordinario:
-    # la OT es para hoy y el calendario no se toca. Antes se trataba igual que la
-    # corrida programada, asi que adelantaba next_due_date un periodo completo y
-    # la ejecucion que tocaba desaparecia sin dejar rastro.
-    #
-    # Si el plan ya vencia, el disparo manual SI ejecuta el ciclo: es la corrida
-    # programada hecha a mano. La corrida automatica siempre entra por aqui,
-    # porque get_plans_due_today() solo devuelve planes con next_due_date <= hoy.
-    is_cycle_run = (
-        not manual
-        or plan.next_due_date is None
-        or plan.next_due_date <= today
-    )
-    scheduled_for = due_date if is_cycle_run else today
-
-    checklist_version = None
-    if plan.checklist_template_id:
-        checklist_version = (
-            ChecklistTemplateVersion.objects
-            .filter(template_id=plan.checklist_template_id, is_current=True)
-            .first()
-        )
-        # El serializer ya no deja asociar una plantilla sin version publicada,
-        # pero se puede despublicar despues de crear el plan, y los planes
-        # anteriores a esa validacion siguen en la base. Se generan igual: no
-        # crear la OT cancelaria el preventivo en silencio, que es peor que una
-        # OT sin checklist. Lo que no puede pasar es que nadie se entere.
-        if checklist_version is None:
-            warnings.append(
-                f"La plantilla '{plan.checklist_template.name}' no tiene version "
-                "publicada: las OT se crean sin checklist que diligenciar."
-            )
-
-    active_statuses = [
-        WorkOrder.Status.PENDING,
-        WorkOrder.Status.IN_PROGRESS,
-        WorkOrder.Status.IN_REVIEW,
-    ]
+    creadas = 0
+    omitidas = 0
+    avisos = []
 
     with transaction.atomic():
-        creator = triggered_by
-        if creator is None:
-            from apps.users.models import User
-            creator = User.objects.filter(role=User.Role.ADMIN).first()
+        for plan_task in plan.tasks.filter(is_active=True, trigger=PlanTask.Trigger.DATE):
+            services.sync_plan_task(plan_task)
 
-        if creator is None:
-            return {
-                'created': 0,
-                'skipped': 0,
-                'warnings': ['No se encontró usuario administrador para crear OTs.'],
-                'execution_id': None,
-            }
+        abiertas = (
+            Task.objects.filter(plan_task__plan=plan, status__in=Task.OPEN_STATUSES)
+            .select_related("asset__hospital", "plan_task__checklist_template")
+            .order_by("scheduled_date")
+        )
+        adelanto = services.get_cause(services.ADELANTADO) if manual else None
 
-        for asset in plan.assets.all():
-            if WorkOrder.objects.filter(
-                maintenance_plan=plan,
-                asset=asset,
-                status__in=active_statuses,
-            ).exists():
-                skipped_count += 1
-                warnings.append(f"Activo '{asset.code}': ya tiene una OT activa para este plan.")
+        for tarea in abiertas:
+            if tarea.status == Task.Status.SCHEDULED:
+                omitidas += 1
+                avisos.append(
+                    f"Activo '{tarea.asset.code}': ya tiene una OT activa para este plan."
+                )
                 continue
+            if tarea.scheduled_date > hoy:
+                if not manual:
+                    continue
+                services.reschedule_task(
+                    tarea, hoy, adelanto, triggered_by,
+                    note="Disparo manual desde el plan de tareas.",
+                )
+                avisos.append(
+                    f"Activo '{tarea.asset.code}': la tarea se adelantó al {hoy} "
+                    "(causa ADELANTADO)."
+                )
+            _ot, avisos_ot = services.create_work_order_for_tasks([tarea], creador)
+            avisos.extend(a for a in avisos_ot if a not in avisos)
+            creadas += 1
 
-            title = f"[PM] {plan.name} — {asset.name}"[:500]
-            wo = WorkOrder(
-                asset=asset,
-                task_type=plan.task_type,
-                title=title,
-                description=plan.description,
-                classification_1=plan.classification_1,
-                classification_2=plan.classification_2,
-                priority=plan.priority,
-                status=WorkOrder.Status.PENDING,
-                maintenance_plan=plan,
-                checklist_version=checklist_version,
-                scheduled_date=scheduled_for,
-                created_by=creator,
-                estimated_duration=plan.estimated_duration,
-            )
-            wo.save()
-            created_count += 1
-
-        execution = MaintenancePlanExecution.objects.create(
+        ejecucion = MaintenancePlanExecution.objects.create(
             plan=plan,
             executed_by=triggered_by,
-            work_orders_created=created_count,
-            notes=f"Creadas: {created_count}, omitidas: {skipped_count}.",
+            work_orders_created=creadas,
+            notes=f"Creadas: {creadas}, omitidas: {omitidas}.",
         )
 
-        plan.last_generated_at = timezone.now()
-        if is_cycle_run:
-            plan.next_due_date = calculate_next_due_date(plan, from_date=due_date)
-            plan.save(update_fields=['last_generated_at', 'next_due_date'])
-        else:
-            # Extraordinario: el calendario se queda donde estaba. Se avisa,
-            # porque "Disparar ahora" sin mas da a entender que consumio el ciclo.
-            plan.save(update_fields=['last_generated_at'])
-            warnings.append(
-                "Mantenimiento extraordinario: el proximo vencimiento programado "
-                f"sigue siendo el {plan.next_due_date}."
-            )
-
     return {
-        'created': created_count,
-        'skipped': skipped_count,
-        'warnings': warnings,
-        'execution_id': str(execution.id),
+        "created": creadas,
+        "skipped": omitidas,
+        "warnings": avisos,
+        "execution_id": str(ejecucion.id),
     }
 
 
 def run_daily_generation():
     """
-    Processes all due maintenance plans and logs each execution to AuditLog.
-    Returns {'plans_processed': int, 'total_created': int, 'total_skipped': int, 'errors': list}.
+    Corrida diaria (Celery beat). Repone pendientes y, si esta encendida la
+    creacion automatica, convierte en OT las que vencen.
+
+    Returns {'plans_processed', 'total_created', 'total_skipped', 'errors',
+    'tasks_opened'}.
     """
     from apps.audit.models import AuditLog
 
-    plans = list(get_plans_due_today())
     summary = {
-        'plans_processed': 0,
-        'total_created': 0,
-        'total_skipped': 0,
-        'errors': [],
+        "plans_processed": 0,
+        "total_created": 0,
+        "total_skipped": 0,
+        "errors": [],
+        "tasks_opened": ensure_open_tasks(),
     }
+    if not auto_create_enabled():
+        return summary
 
-    for plan in plans:
+    for plan in list(get_plans_due_today()):
         try:
             result = generate_work_orders_for_plan(plan)
-            summary['plans_processed'] += 1
-            summary['total_created'] += result['created']
-            summary['total_skipped'] += result['skipped']
+            summary["plans_processed"] += 1
+            summary["total_created"] += result["created"]
+            summary["total_skipped"] += result["skipped"]
 
-            if result['execution_id']:
+            if result["execution_id"]:
                 AuditLog.objects.create(
                     user=None,
                     action=AuditLog.Action.CREATE,
-                    entity_type='MaintenancePlanExecution',
-                    entity_id=uuid.UUID(result['execution_id']),
+                    entity_type="MaintenancePlanExecution",
+                    entity_id=uuid.UUID(result["execution_id"]),
                     changes={
-                        'plan': str(plan.id),
-                        'created': result['created'],
-                        'skipped': result['skipped'],
-                        'warnings': result['warnings'],
+                        "plan": str(plan.id),
+                        "created": result["created"],
+                        "skipped": result["skipped"],
+                        "warnings": result["warnings"],
                     },
                 )
             logger.info(
                 "[engine] Plan '%s': %d OTs creadas, %d omitidas.",
-                plan.name, result['created'], result['skipped'],
+                plan.name, result["created"], result["skipped"],
             )
         except Exception as exc:
-            summary['errors'].append({'plan': str(plan.id), 'error': str(exc)})
+            summary["errors"].append({"plan": str(plan.id), "error": str(exc)})
             logger.error("[engine] Error en plan '%s': %s", plan.name, exc, exc_info=True)
 
     return summary

@@ -1,3 +1,4 @@
+import uuid
 """La ficha de un activo debe exponer el mismo estado de mantenimiento que el listado.
 
 Regresion: AssetSerializer (retrieve) no incluia last_maintenance_date,
@@ -17,6 +18,7 @@ from apps.assets.models import Asset, Hospital
 from apps.maintenance.models import MaintenancePlan
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
+from apps.maintenance.testing import make_plan, make_work_order
 
 MAINTENANCE_FIELDS = (
     'last_maintenance_date',
@@ -68,14 +70,11 @@ def test_detail_exposes_maintenance_fields(asset, admin_user):
 
 def test_detail_reports_plan_due_date(asset, admin_user):
     due = date.today() + timedelta(days=30)
-    plan = baker.make(
-        MaintenancePlan,
-        is_active=True,
+    plan = make_plan(
+        f"Plan {uuid.uuid4()}",
         next_due_date=due,
-        frequency_value=6,
-        frequency_unit=MaintenancePlan.FrequencyUnit.MONTHS,
+        assets=[asset],
     )
-    plan.assets.add(asset)
 
     data = detail(auth_client(admin_user), asset)
     assert data['next_maintenance_date'] == str(due)
@@ -84,14 +83,11 @@ def test_detail_reports_plan_due_date(asset, admin_user):
 
 def test_detail_matches_list_for_same_asset(asset, admin_user):
     """El bug se veia justo aqui: listado con fecha, ficha diciendo "Sin plan"."""
-    plan = baker.make(
-        MaintenancePlan,
-        is_active=True,
+    plan = make_plan(
+        f"Plan {uuid.uuid4()}",
         next_due_date=date.today() + timedelta(days=200),
-        frequency_value=6,
-        frequency_unit=MaintenancePlan.FrequencyUnit.MONTHS,
+        assets=[asset],
     )
-    plan.assets.add(asset)
     client = auth_client(admin_user)
 
     row = list_item(client, asset)
@@ -111,19 +107,14 @@ def test_detail_without_plan_reports_no_plan(asset, admin_user):
 def test_detail_reports_last_completed_work_order(asset, admin_user):
     from django.utils import timezone
 
-    wo = WorkOrder(
-        asset=asset,
+    completed = timezone.now()
+    wo = make_work_order(
+        asset, admin_user,
         task_type=WorkOrder.TaskType.PREVENTIVE,
         title='OT de cierre',
         status=WorkOrder.Status.COMPLETED,
-        priority=WorkOrder.Priority.MEDIUM,
-        scheduled_date=date.today(),
-        created_by=admin_user,
+        completed_at=completed,
     )
-    wo.save()
-    completed = timezone.now()
-    wo.completed_at = completed
-    wo.save(update_fields=['completed_at'])
 
     data = detail(auth_client(admin_user), asset)
     assert data['last_maintenance_date'] == completed.date().isoformat()
