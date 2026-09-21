@@ -48,12 +48,63 @@ export function useToggleHospitalActive(id) {
 
 // ── Asset nodes / tree ─────────────────────────────────────────────────────
 
-export function useAssetTree(hospitalId) {
+export function useAssetTree(hospitalId, options = {}) {
   return useQuery({
     queryKey: ['asset-tree', hospitalId],
     queryFn: () =>
       client.get('/api/asset-nodes/tree/', { params: { hospital_id: hospitalId } }).then((r) => r.data),
     enabled: !!hospitalId,
+    ...options,
+  })
+}
+
+/**
+ * Todas las ubicaciones de un hospital en lista plana, activas e inactivas,
+ * con `children_count` y `asset_count`. Es lo que usa el editor de ubicaciones;
+ * /tree/ no sirve ahí porque oculta las inactivas y no trae conteos.
+ */
+export function useAssetNodes(hospitalId) {
+  return useQuery({
+    queryKey: ['asset-nodes', hospitalId],
+    queryFn: () => fetchAllPages(client, '/api/asset-nodes/', { hospital_id: hospitalId }),
+    enabled: !!hospitalId,
+  })
+}
+
+// Cualquier cambio en una ubicación toca las dos vistas del árbol: el editor
+// (lista plana) y los selectores de ubicación de los formularios (/tree/).
+function invalidateNodes(qc) {
+  qc.invalidateQueries({ queryKey: ['asset-nodes'] })
+  qc.invalidateQueries({ queryKey: ['asset-tree'] })
+}
+
+export function useCreateAssetNode() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => client.post('/api/asset-nodes/', data).then((r) => r.data),
+    onSuccess: () => invalidateNodes(qc),
+  })
+}
+
+export function useUpdateAssetNode() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }) =>
+      client.patch(`/api/asset-nodes/${id}/`, data).then((r) => r.data),
+    onSuccess: () => {
+      invalidateNodes(qc)
+      // Mover o renombrar cambia el `path` que muestran los activos.
+      qc.invalidateQueries({ queryKey: ['assets'] })
+      qc.invalidateQueries({ queryKey: ['assets-page'] })
+    },
+  })
+}
+
+export function useDeleteAssetNode() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => client.delete(`/api/asset-nodes/${id}/`),
+    onSuccess: () => invalidateNodes(qc),
   })
 }
 
@@ -98,6 +149,7 @@ export function useCreateAsset() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['assets'] })
       qc.invalidateQueries({ queryKey: ['asset-tree'] })
+      qc.invalidateQueries({ queryKey: ['asset-nodes'] })
     },
   })
 }
@@ -110,6 +162,7 @@ export function useUpdateAsset(id) {
       qc.invalidateQueries({ queryKey: ['assets', id] })
       qc.invalidateQueries({ queryKey: ['assets'] })
       qc.invalidateQueries({ queryKey: ['asset-tree'] })
+      qc.invalidateQueries({ queryKey: ['asset-nodes'] })
     },
   })
 }

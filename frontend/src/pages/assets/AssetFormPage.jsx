@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useHospitals, useAsset, useAssetTree, useCreateAsset, useUpdateAsset } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
+import { flattenTree, indentedLabel } from '../../utils/locationTree'
 
 const EMPTY = {
   hospital: '',
@@ -20,17 +21,6 @@ const EMPTY = {
   supplier: '',
   avg_daily_usage_hours: '',
   notes: '',
-}
-
-function flattenTree(nodes, depth = 0) {
-  const result = []
-  for (const node of nodes) {
-    result.push({ ...node, depth })
-    if (node.children?.length) {
-      result.push(...flattenTree(node.children, depth + 1))
-    }
-  }
-  return result
 }
 
 function generateCode(hospitalCode, assetType) {
@@ -52,7 +42,10 @@ export default function AssetFormPage() {
   const [errors, setErrors] = useState({})
 
   const { data: hospitals = [] } = useHospitals({ is_active: true })
-  const { data: tree = [] } = useAssetTree(form.hospital || null)
+  // Las ubicaciones se crean en otra pestaña (enlace "Gestionar ubicaciones")
+  // para no perder lo escrito aquí. Al volver, el árbol se relee aunque la
+  // caché de 5 minutos lo diera por fresco.
+  const { data: tree = [] } = useAssetTree(form.hospital || null, { refetchOnWindowFocus: 'always' })
   const { data: existing, isLoading: loadingExisting } = useAsset(id)
 
   const createMut = useCreateAsset()
@@ -61,6 +54,13 @@ export default function AssetFormPage() {
   const saving = mut.isPending
 
   const flatNodes = flattenTree(tree)
+  // /tree/ omite las ubicaciones inactivas. Si el activo que se edita está en
+  // una, el <select> mostraría "Sin ubicación específica" mientras el estado
+  // conserva el id: se veía una cosa y se guardaba otra.
+  const hiddenCurrentNode =
+    form.node && existing?.node?.id === form.node && !flatNodes.some((n) => n.id === form.node)
+      ? existing.node
+      : null
   const selectedHospital = hospitals.find((h) => h.id === form.hospital)
 
   useEffect(() => {
@@ -202,12 +202,23 @@ export default function AssetFormPage() {
                 <select value={form.node} onChange={(e) => set('node', e.target.value)}
                   disabled={!form.hospital} className={sel(errors.node)}>
                   <option value="">Sin ubicación específica</option>
+                  {hiddenCurrentNode && (
+                    <option value={hiddenCurrentNode.id}>
+                      {hiddenCurrentNode.path.split('/').join(' / ')} (inactiva)
+                    </option>
+                  )}
                   {flatNodes.map((n) => (
                     <option key={n.id} value={n.id}>
-                      {'  '.repeat(n.depth)}{n.name}
+                      {indentedLabel(n.name, n.depth)}
                     </option>
                   ))}
                 </select>
+                {form.hospital && (
+                  <Link to={`/hospitales/${form.hospital}/ubicaciones`} target="_blank" rel="noopener"
+                    className="inline-block mt-1 text-xs text-brand hover:underline">
+                    {flatNodes.length ? 'Gestionar ubicaciones' : 'Este hospital no tiene ubicaciones: créalas aquí'}
+                  </Link>
+                )}
               </Field>
 
               <Field label="Nombre del activo *" error={errors.name}>
@@ -316,13 +327,17 @@ export default function AssetFormPage() {
                   Anterior
                 </button>
               )}
+              {/* Las `key` distintas no son decorativas. Sin ellas React reutiliza el
+                  mismo <button> y le cambia type="button" por type="submit" mientras
+                  el clic aún se procesa: el navegador envía el formulario y un solo
+                  clic en "Siguiente" guardaba el activo saltándose la ficha técnica. */}
               {step === 1 ? (
-                <button type="button" onClick={handleNext} className="btn-primary">
+                <button key="siguiente" type="button" onClick={handleNext} className="btn-primary">
                   Siguiente
                   <Icon name="chevronRight" className="w-4 h-4" />
                 </button>
               ) : (
-                <button type="submit" disabled={saving}
+                <button key="guardar" type="submit" disabled={saving}
                   className="btn-primary">
                   {saving && <Spinner />}
                   {isEdit ? 'Guardar cambios' : 'Crear activo'}

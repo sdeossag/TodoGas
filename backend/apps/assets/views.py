@@ -1,4 +1,5 @@
-from django.db.models import Q
+from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Coalesce
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -54,6 +55,18 @@ class HospitalViewSet(viewsets.ModelViewSet):
         return Response({"id": str(hospital.id), "is_active": hospital.is_active})
 
 
+def _conteo_por_nodo(modelo, campo):
+    """Cuantas filas de `modelo` apuntan al nodo por `campo`, como subconsulta."""
+    filas = (
+        modelo.objects.filter(**{campo: OuterRef("pk")})
+        .order_by()
+        .values(campo)
+        .annotate(n=Count("pk"))
+        .values("n")
+    )
+    return Coalesce(Subquery(filas, output_field=IntegerField()), Value(0))
+
+
 class AssetNodeViewSet(viewsets.ModelViewSet):
     queryset = AssetNode.objects.select_related("hospital", "parent")
     serializer_class = AssetNodeSerializer
@@ -86,20 +99,26 @@ class AssetNodeViewSet(viewsets.ModelViewSet):
         # con contenido salia como ProtectedError, es decir otro 500.
         if nodo.children.exists():
             return Response(
-                {"detail": "No se puede eliminar: la ubicacion tiene "
-                           "sububicaciones. Elimina o mueve primero las de dentro."},
+                {"detail": "No se puede eliminar: la ubicación tiene "
+                           "sububicaciones. Elimínalas o muévelas primero."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if nodo.assets.exists():
             return Response(
-                {"detail": "No se puede eliminar: hay activos en esta ubicacion. "
-                           "Muevelos antes de eliminarla."},
+                {"detail": "No se puede eliminar: hay activos en esta ubicación. "
+                           "Muévelos antes de eliminarla."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return super().destroy(request, *args, **kwargs)
 
     def get_queryset(self):
-        qs = AssetNode.objects.select_related("hospital", "parent")
+        # Subconsultas y no dos Count() con join: contar hijos y activos a la
+        # vez por join multiplica filas (hijos x activos) antes de agrupar.
+        # Antes children_count lanzaba ademas una consulta por cada nodo.
+        qs = AssetNode.objects.select_related("hospital", "parent").annotate(
+            children_total=_conteo_por_nodo(AssetNode, "parent"),
+            asset_total=_conteo_por_nodo(Asset, "node"),
+        )
         hospital_id = self.request.query_params.get("hospital_id")
         if hospital_id:
             qs = qs.filter(hospital_id=hospital_id)

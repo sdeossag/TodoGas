@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import { useHospitals, useAssetTree, useAssetsPage } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
+import { compareNodes } from '../../utils/locationTree'
 
 const STATUS_LABELS = {
   ACTIVE: { label: 'Activo', cls: 'bg-green-100 text-green-700' },
@@ -42,7 +43,8 @@ export default function AssetsPage() {
   const [selectedHospitalId, setSelectedHospitalId] = useState(
     searchParams.get('hospital_id') ?? null
   )
-  const [selectedNodeId, setSelectedNodeId] = useState(null)
+  // Llega en la URL desde el enlace "N activos" de la pantalla de ubicaciones.
+  const [selectedNodeId, setSelectedNodeId] = useState(searchParams.get('node_id') ?? null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   // Estado de mantenimiento (el "color" del activo). Llega desde las tarjetas
@@ -136,7 +138,7 @@ export default function AssetsPage() {
                     ${!selectedNodeId ? 'bg-brand/10 text-brand font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
                   <Icon name="hospital" className="w-4 h-4 flex-shrink-0" /> Todos los activos
                 </button>
-                {tree.map((node) => (
+                {[...tree].sort(compareNodes).map((node) => (
                   <TreeNode key={node.id} node={node} selected={selectedNodeId}
                     onSelect={setSelectedNodeId} level={0} />
                 ))}
@@ -312,7 +314,9 @@ export default function AssetsPage() {
 const PAGE_SIZE = 50
 
 function TreeNode({ node, selected, onSelect, level }) {
-  const [open, setOpen] = useState(level === 0)
+  // Abierto si es raíz o si contiene la ubicación seleccionada: al llegar con
+  // node_id en la URL, la ubicación elegida tiene que verse marcada.
+  const [open, setOpen] = useState(() => level === 0 || containsNode(node.children, selected))
   const hasChildren = node.children?.length > 0
   const isSelected = selected === node.id
 
@@ -337,7 +341,7 @@ function TreeNode({ node, selected, onSelect, level }) {
       </div>
       {hasChildren && open && (
         <div>
-          {node.children.map((child) => (
+          {[...node.children].sort(compareNodes).map((child) => (
             <TreeNode key={child.id} node={child} selected={selected}
               onSelect={onSelect} level={level + 1} />
           ))}
@@ -345,6 +349,11 @@ function TreeNode({ node, selected, onSelect, level }) {
       )}
     </div>
   )
+}
+
+function containsNode(nodes, id) {
+  if (!id || !nodes?.length) return false
+  return nodes.some((n) => n.id === id || containsNode(n.children, id))
 }
 
 function nodeIcon(type) {

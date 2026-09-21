@@ -229,3 +229,42 @@ def test_delete_empty_node_works(hospital, admin_user):
 
     assert resp.status_code == status.HTTP_204_NO_CONTENT
     assert not AssetNode.objects.filter(id=nodo).exists()
+
+
+def test_duplicate_name_under_a_parent_reports_on_name_field(hospital, admin_user):
+    """Con padre, el UniqueTogetherValidator automatico de DRF respondia antes
+    que validate() con "Los campos hospital, parent, name deben formar un
+    conjunto unico", en non_field_errors: jerga que la interfaz mostraba tal
+    cual. El test de arriba no lo veia porque en la raiz parent es NULL y ese
+    validador no comprueba nada."""
+    client = auth_client(admin_user)
+    torre = node_id(client.post(URL, payload(hospital, name="Torre A"), format="json"))
+    client.post(URL, payload(hospital, name="Piso 2", parent=torre), format="json")
+
+    resp = client.post(URL, payload(hospital, name="Piso 2", parent=torre), format="json")
+
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    cuerpo = resp.json()
+    assert "non_field_errors" not in cuerpo
+    assert "Ya existe" in " ".join(cuerpo["name"])
+
+
+def test_same_name_allowed_under_different_parents(hospital, admin_user):
+    client = auth_client(admin_user)
+    torre_a = node_id(client.post(URL, payload(hospital, name="Torre A"), format="json"))
+    torre_b = node_id(client.post(URL, payload(hospital, name="Torre B"), format="json"))
+
+    client.post(URL, payload(hospital, name="Piso 1", parent=torre_a), format="json")
+    resp = client.post(URL, payload(hospital, name="Piso 1", parent=torre_b), format="json")
+
+    assert resp.status_code == status.HTTP_201_CREATED
+
+
+def test_parent_is_optional_on_create(hospital, admin_user):
+    # Con el validador automatico, DRF marcaba `parent` como obligatorio por
+    # formar parte de la restriccion unica, aunque el modelo lo admite nulo.
+    resp = auth_client(admin_user).post(
+        URL, {"hospital": str(hospital.id), "name": "Raiz"}, format="json"
+    )
+
+    assert resp.status_code == status.HTTP_201_CREATED

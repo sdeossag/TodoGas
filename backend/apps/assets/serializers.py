@@ -34,12 +34,13 @@ class AssetNodeSerializer(serializers.ModelSerializer):
     hospital = serializers.SerializerMethodField()
     parent = serializers.SerializerMethodField()
     children_count = serializers.SerializerMethodField()
+    asset_count = serializers.SerializerMethodField()
 
     class Meta:
         model = AssetNode
         fields = [
             "id", "hospital", "parent", "name", "node_type", "code",
-            "path", "sort_order", "is_active", "children_count",
+            "path", "sort_order", "is_active", "children_count", "asset_count",
         ]
 
     def get_hospital(self, obj):
@@ -50,8 +51,19 @@ class AssetNodeSerializer(serializers.ModelSerializer):
             return {"id": str(obj.parent_id), "name": obj.parent.name}
         return None
 
+    # Los dos conteos llegan anotados desde AssetNodeViewSet.get_queryset, en la
+    # misma consulta del listado. El respaldo con .count() queda para la
+    # respuesta de un create, cuyo nodo recien guardado no trae anotaciones.
+    # Ambos son directos (no incluyen descendientes) y cuentan cualquier
+    # estado: es exactamente lo que bloquea el borrado por on_delete=PROTECT.
+
     def get_children_count(self, obj):
-        return obj.children.count()
+        anotado = getattr(obj, "children_total", None)
+        return anotado if anotado is not None else obj.children.count()
+
+    def get_asset_count(self, obj):
+        anotado = getattr(obj, "asset_total", None)
+        return anotado if anotado is not None else obj.assets.count()
 
 
 class AssetNodeCreateUpdateSerializer(serializers.ModelSerializer):
@@ -73,6 +85,12 @@ class AssetNodeCreateUpdateSerializer(serializers.ModelSerializer):
             "sort_order", "is_active",
         ]
         read_only_fields = ["id"]
+        # Sin el UniqueTogetherValidator que DRF deriva de la restriccion unica:
+        # respondia antes que validate() con "Los campos hospital, parent, name
+        # deben formar un conjunto unico", y en la raiz ni siquiera comprobaba
+        # nada porque parent es NULL. validate() cubre ambos casos y dice que
+        # campo corregir.
+        validators = []
 
     def _hospital_de(self, attrs, campo):
         if campo in attrs:
@@ -86,7 +104,7 @@ class AssetNodeCreateUpdateSerializer(serializers.ModelSerializer):
         if parent is not None:
             if hospital and parent.hospital_id != hospital.pk:
                 raise serializers.ValidationError(
-                    {"parent": "El nodo padre pertenece a otro hospital."}
+                    {"parent": "La ubicación superior pertenece a otro hospital."}
                 )
             # Un ciclo dejaria path() en recursion infinita y el arbol
             # inalcanzable. Solo puede darse al reasignar el padre de un nodo
@@ -96,8 +114,8 @@ class AssetNodeCreateUpdateSerializer(serializers.ModelSerializer):
                 while actual is not None:
                     if actual.pk == self.instance.pk:
                         raise serializers.ValidationError(
-                            {"parent": "Un nodo no puede colgar de si mismo ni de "
-                                       "uno de sus descendientes."}
+                            {"parent": "Una ubicación no puede quedar dentro de sí "
+                                       "misma ni de una de sus sububicaciones."}
                         )
                     actual = actual.parent
 
@@ -112,7 +130,7 @@ class AssetNodeCreateUpdateSerializer(serializers.ModelSerializer):
                 # Sin esto la restriccion unica (hospital, parent, name) saltaba
                 # como IntegrityError, otro 500.
                 raise serializers.ValidationError(
-                    {"name": "Ya existe una ubicacion con ese nombre en el mismo "
+                    {"name": "Ya existe una ubicación con ese nombre en el mismo "
                              "nivel."}
                 )
 

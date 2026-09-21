@@ -244,6 +244,7 @@ export default function HospitalsPage() {
               {filtered.map((h) => (
                 <HospitalRow key={h.id} hospital={h} isAdmin={isAdmin}
                   onEdit={() => openEdit(h)}
+                  onViewLocations={() => navigate(`/hospitales/${h.id}/ubicaciones`)}
                   onViewAssets={() => navigate(`/activos?hospital_id=${h.id}`)}
                 />
               ))}
@@ -260,7 +261,7 @@ export default function HospitalsPage() {
   )
 }
 
-function HospitalRow({ hospital: h, isAdmin, onEdit, onViewAssets }) {
+function HospitalRow({ hospital: h, isAdmin, onEdit, onViewLocations, onViewAssets }) {
   const toggleMut = useToggleHospitalActive(h.id)
 
   return (
@@ -281,6 +282,10 @@ function HospitalRow({ hospital: h, isAdmin, onEdit, onViewAssets }) {
       </td>
       <td className="px-4 py-3">
         <div className="flex justify-end gap-2">
+          <button onClick={onViewLocations}
+            className="text-xs px-2 py-1 rounded bg-brand/10 text-brand hover:bg-brand/20">
+            Ubicaciones
+          </button>
           <button onClick={onViewAssets}
             className="text-xs px-2 py-1 rounded bg-brand/10 text-brand hover:bg-brand/20">
             Ver activos

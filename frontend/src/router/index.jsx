@@ -6,6 +6,7 @@ import ChangePasswordPage from '../pages/auth/ChangePasswordPage'
 import DashboardPage from '../pages/dashboard/DashboardPage'
 import MisActivosPage from '../pages/assets/MisActivosPage'
 import HospitalsPage from '../pages/assets/HospitalsPage'
+import LocationsPage from '../pages/assets/LocationsPage'
 import AssetsPage from '../pages/assets/AssetsPage'
 import AssetDetailPage from '../pages/assets/AssetDetailPage'
 import AssetFormPage from '../pages/assets/AssetFormPage'
@@ -79,6 +80,7 @@ export const router = createBrowserRouter(
           children: [
             { path: '/dashboard', element: <DashboardPage /> },
             { path: '/hospitales', element: <HospitalsPage /> },
+            { path: '/hospitales/:id/ubicaciones', element: <LocationsPage /> },
             { path: '/activos', element: <AssetsPage /> },
             { path: '/activos/nuevo', element: <AssetFormPage /> },
             { path: '/activos/:id', element: <AssetDetailPage /> },
