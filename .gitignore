@@ -34,3 +34,9 @@ postgres_data/
 frontend/android/todogas-release.keystore
 *.keystore
 *.jks
+
+
+backend/media/
+graphify-out/
+*.m4a
+transcripts/
