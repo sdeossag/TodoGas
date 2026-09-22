@@ -25,6 +25,8 @@ import {
   markWorkOrderStatusSynced,
 } from '../db/repositories'
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const errorText = (error) => {
   const data = error?.response?.data
   if (typeof data === 'string') return data.slice(0, 300)
@@ -139,6 +141,11 @@ export async function syncPhotos(onItemDone) {
       if (row.longitude != null) form.append('longitude', row.longitude)
       form.append('taken_at', row.taken_at)
       if (row.caption) form.append('caption', row.caption)
+      // Con el identificador del telefono un reintento no duplica la foto, y el
+      // campo foto del checklist ('sin-conexion:<uuid>') la encuentra despues.
+      // Sin crypto.randomUUID newId() da 'local-...', que el servidor
+      // rechazaria junto con la foto: ese no se manda.
+      if (UUID.test(row.offline_uuid ?? '')) form.append('offline_uuid', row.offline_uuid)
 
       const { data } = await client.post('/api/evidence/photos/', form, {
         headers: { 'Content-Type': undefined },

@@ -140,6 +140,59 @@ def test_upload_photo_calculates_correct_sha256(mock_storage, db, tec, wo_in_pro
     assert photo.file_hash == expected_hash
 
 
+def _subir(client, wo, offline_uuid):
+    img = io.BytesIO(make_image_bytes())
+    img.name = "photo.jpg"
+    return client.post(
+        PHOTOS_URL,
+        {
+            "work_order": str(wo.id),
+            "file": img,
+            "taken_at": "2026-08-19T10:00:00Z",
+            "offline_uuid": str(offline_uuid),
+        },
+        format="multipart",
+    )
+
+
+@patch("apps.evidence.serializers.default_storage")
+def test_reintentar_una_foto_sin_red_no_la_duplica(mock_storage, db, tec, wo_in_progress):
+    """
+    La app reintenta si no le llega la respuesta. offline_uuid es unico: antes
+    el reintento daba un 500 y la cola lo repetia para siempre.
+    """
+    mock_storage.save.return_value = FAKE_S3_KEY
+    mock_storage.url.return_value = FAKE_S3_URL
+    client = auth_client(tec)
+    local = uuid.uuid4()
+
+    primera = _subir(client, wo_in_progress, local)
+    # La OT ya paso a revision cuando llega el reintento.
+    WorkOrder.objects.filter(pk=wo_in_progress.pk).update(status=WorkOrder.Status.IN_REVIEW)
+    reintento = _subir(client, wo_in_progress, local)
+
+    assert primera.status_code == status.HTTP_201_CREATED, primera.data
+    assert reintento.status_code == status.HTTP_200_OK, reintento.data
+    assert reintento.data["id"] == primera.data["id"]
+    assert Photo.objects.filter(offline_uuid=local).count() == 1
+    assert mock_storage.save.call_count == 1, "el reintento no vuelve a subir el archivo"
+
+
+@patch("apps.evidence.serializers.default_storage")
+def test_el_offline_uuid_de_otra_ot_se_rechaza(mock_storage, db, tec, asset, admin, wo_in_progress):
+    mock_storage.save.return_value = FAKE_S3_KEY
+    mock_storage.url.return_value = FAKE_S3_URL
+    client = auth_client(tec)
+    local = uuid.uuid4()
+    otra = make_wo(asset, admin, assigned_to=tec)
+
+    _subir(client, wo_in_progress, local)
+    resp = _subir(client, otra, local)
+
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert "otra OT" in str(resp.data["offline_uuid"])
+
+
 @patch("apps.evidence.serializers.default_storage")
 def test_upload_photo_rejects_file_over_10mb(mock_storage, db, tec, wo_in_progress):
     """Archivos mayores a 10 MB deben ser rechazados con 400."""

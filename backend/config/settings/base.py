@@ -92,10 +92,18 @@ AWS_S3_FILE_OVERWRITE = False
 AWS_QUERYSTRING_EXPIRE = 86400  # URLs pre-firmadas validas 24 h
 AWS_S3_OBJECT_PARAMETERS = {"CacheControl": "max-age=86400"}
 
-if AWS_ACCESS_KEY_ID:
-    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
-else:
-    DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
+# Django 5.1 elimino DEFAULT_FILE_STORAGE: sigue siendo un setting valido pero
+# nadie lo lee, y con el las fotos, firmas y actas iban al disco local aunque
+# hubiera claves de AWS. El almacenamiento se configura en STORAGES.
+S3_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+LOCAL_STORAGE = "django.core.files.storage.FileSystemStorage"
+# Con claves AWS, S3; sin ellas, disco local (desarrollo). Produccion usa S3
+# siempre: en ECS las credenciales vienen del rol de la tarea y no hay claves.
+USE_S3 = config("USE_S3", default=bool(AWS_ACCESS_KEY_ID), cast=bool)
+STORAGES = {
+    "default": {"BACKEND": S3_STORAGE if USE_S3 else LOCAL_STORAGE},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

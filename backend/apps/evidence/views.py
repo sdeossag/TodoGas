@@ -1,3 +1,5 @@
+import uuid
+
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -60,6 +62,17 @@ def _get_wo_or_error(work_order_id):
     return wo, None
 
 
+def _foto_ya_subida(offline_uuid):
+    """La foto que ya llego con este offline_uuid, o None. Un uuid invalido es None:
+    lo rechaza despues la validacion del serializer."""
+    if not offline_uuid:
+        return None
+    try:
+        return Photo.objects.filter(offline_uuid=uuid.UUID(str(offline_uuid))).first()
+    except ValueError:
+        return None
+
+
 # ── Photos ─────────────────────────────────────────────────────────────────────
 
 class PhotoViewSet(viewsets.GenericViewSet):
@@ -81,6 +94,24 @@ class PhotoViewSet(viewsets.GenericViewSet):
             return err
         if not _can_write_evidence(request.user, wo):
             return Response(status=status.HTTP_403_FORBIDDEN)
+
+        # La app reintenta la subida cuando no le llega la respuesta. Si la foto
+        # ya entro, se devuelve la misma: offline_uuid es unico y crearla de
+        # nuevo daria un 500 que la cola reintentaria para siempre. Va antes del
+        # control de estado porque el reintento puede llegar con la OT ya en
+        # revision.
+        existente = _foto_ya_subida(request.data.get("offline_uuid"))
+        if existente is not None:
+            if existente.work_order_id != wo.id:
+                return Response(
+                    {"offline_uuid": "Ese identificador es de una foto de otra OT."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(
+                PhotoSerializer(existente, context={"request": request}).data,
+                status=status.HTTP_200_OK,
+            )
+
         if wo.status != WorkOrder.Status.IN_PROGRESS:
             return Response(
                 {"detail": "Solo se puede agregar evidencia a OTs en estado IN_PROGRESS."},

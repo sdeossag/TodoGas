@@ -30,7 +30,7 @@ import SignatureList from '../../components/evidence/SignatureList'
 import SignaturePad from '../../components/evidence/SignaturePad'
 import PhotoGallery from '../../components/evidence/PhotoGallery'
 import PhotoCapture, { dataUrlToFile } from '../../components/evidence/PhotoCapture'
-import { useUploadPhoto } from '../../api/evidence'
+import { useUploadPhoto, useWorkOrderPhotos } from '../../api/evidence'
 import { mediaUrl } from '../../api/client'
 import { Capacitor } from '@capacitor/core'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
@@ -1539,14 +1539,58 @@ function ChecklistFieldInput({ field, workOrderId, taskId, value, fieldResponse,
  * Campo PHOTO del checklist.
  *
  * Sube la imagen a la evidencia de la OT, ligada a la tarea para que en el
- * acta salga en el bloque de su activo, y guarda la URL como valor del campo.
+ * acta salga en el bloque de su activo, y guarda `foto:<id>` como valor del
+ * campo. No guarda la URL: en S3 va firmada y caduca a las 24 horas, y el
+ * enlace "ver" dejaba de abrir al dia siguiente.
  *
  * En el telefono abre la camara, como la pestaña Evidencia: el selector de
  * archivos de Android abre la galeria, y en campo la foto se toma ahi mismo.
  * Sin red la foto queda en la cola de SQLite y el campo guarda
  * `sin-conexion:<uuid>`; la foto se sube con el resto al reconectar.
  */
+const FOTO = 'foto:'
 const SIN_CONEXION = 'sin-conexion:'
+
+/**
+ * Enlace a la foto de un campo del checklist, con su URL recien firmada.
+ *
+ * La busca en la evidencia de la OT: por id (`foto:<id>`) o, si se tomo sin
+ * red, por el offline_uuid con que se sincronizo. Los valores de antes de este
+ * cambio son la URL misma.
+ */
+function FotoDelChecklist({ workOrderId, value }) {
+  const isOnline = useNetworkStore((s) => s.isOnline)
+  const guardaReferencia = value.startsWith(FOTO) || value.startsWith(SIN_CONEXION)
+  const { data: fotos = [], isLoading } = useWorkOrderPhotos(
+    isOnline && guardaReferencia ? workOrderId : null
+  )
+
+  let url = guardaReferencia ? null : value
+  if (value.startsWith(FOTO)) {
+    url = fotos.find((f) => f.id === value.slice(FOTO.length))?.file_url
+  } else if (value.startsWith(SIN_CONEXION)) {
+    url = fotos.find((f) => f.offline_uuid === value.slice(SIN_CONEXION.length))?.file_url
+  }
+
+  let nota = null
+  if (!url && value.startsWith(SIN_CONEXION)) nota = 'tomada sin conexión, se sube con la evidencia'
+  else if (!url && !isOnline) nota = 'se puede ver con conexión'
+  else if (!url && !isLoading) nota = 'no se encontró en la evidencia de la OT'
+
+  return (
+    <span className="inline-flex items-center gap-1 text-green-600">
+      <Icon name="camera" className="w-3.5 h-3.5 flex-shrink-0" />
+      Foto adjunta
+      {url ? (
+        <a href={mediaUrl(url)} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
+          ver
+        </a>
+      ) : nota && (
+        <span className="text-gray-500">· {nota}</span>
+      )}
+    </span>
+  )
+}
 
 function ChecklistPhotoField({ workOrderId, taskId, value, disabled, onCommit }) {
   const uploadPhoto = useUploadPhoto()
@@ -1587,7 +1631,7 @@ function ChecklistPhotoField({ workOrderId, taskId, value, disabled, onCommit })
         taken_at: takenAt,
         caption: 'Checklist',
       })
-      onCommit(photo.file_url ?? photo.id)
+      onCommit(`${FOTO}${photo.id}`)
     } catch (err) {
       // No llego al servidor: en el telefono se guarda para subirla despues.
       if (!err?.response && dataUrl) return guardarSinRed(dataUrl, takenAt)
@@ -1633,7 +1677,6 @@ function ChecklistPhotoField({ workOrderId, taskId, value, disabled, onCommit })
     }
   }
 
-  const sinConexion = value?.startsWith(SIN_CONEXION)
   const botonCls = `inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm transition-colors ${
     ocupado ? 'text-gray-400 cursor-wait' : 'text-gray-600 hover:bg-gray-50 cursor-pointer'
   }`
@@ -1647,21 +1690,8 @@ function ChecklistPhotoField({ workOrderId, taskId, value, disabled, onCommit })
   return (
     <div>
       {value && !ocupado && (
-        <p className="text-xs text-green-600 mb-1 flex items-center gap-1">
-          <Icon name="camera" className="w-3.5 h-3.5 flex-shrink-0" />
-          Foto adjunta
-          {sinConexion ? (
-            <span className="text-gray-500">· tomada sin conexión, se sube con la evidencia</span>
-          ) : (
-            <a
-              href={mediaUrl(value)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand hover:underline"
-            >
-              ver
-            </a>
-          )}
+        <p className="text-xs mb-1">
+          <FotoDelChecklist workOrderId={workOrderId} value={value} />
         </p>
       )}
       {!disabled && (nativo ? (
@@ -2224,7 +2254,13 @@ function CompletedChecklistView({ response }) {
                       : 'bg-gray-50 border-gray-200 text-gray-700'
                   }`}
                 >
-                  {fr?.value || <span className="text-gray-500 italic">Sin respuesta</span>}
+                  {!fr?.value ? (
+                    <span className="text-gray-500 italic">Sin respuesta</span>
+                  ) : field.field_type === 'PHOTO' ? (
+                    <FotoDelChecklist workOrderId={response.work_order} value={fr.value} />
+                  ) : (
+                    fr.value
+                  )}
                 </div>
               </div>
             )
