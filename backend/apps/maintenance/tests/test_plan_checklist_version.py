@@ -156,7 +156,7 @@ def test_generate_attaches_current_version(asset, admin_user, published_template
 
     assert result['created'] == 1
     wo = WorkOrder.objects.get(tasks__plan_task__plan=plan)
-    assert wo.primary_task.checklist_version_id is not None
+    assert wo.tasks.first().checklist_version_id is not None
 
 
 def test_generate_warns_when_template_has_no_published_version(
@@ -168,7 +168,7 @@ def test_generate_warns_when_template_has_no_published_version(
     # La OT se crea igual: no generarla cancelaria el preventivo en silencio.
     assert result['created'] == 1
     wo = WorkOrder.objects.get(tasks__plan_task__plan=plan)
-    assert wo.primary_task.checklist_version_id is None
+    assert wo.tasks.first().checklist_version_id is None
     # Pero el fallo tiene que ser visible en la respuesta del disparo.
     assert any('no tiene version publicada' in w for w in result['warnings'])
 

@@ -397,10 +397,11 @@ class ClientPortalView(APIView):
                 'wo_code': wo.wo_code,
                 'title': wo.title,
                 'status': wo.status,
-                'asset': (
-                    {'id': str(wo.primary_task.asset_id), 'name': wo.primary_task.asset.name}
-                    if wo.primary_task else None
-                ),
+                # Una visita puede intervenir varios activos (decision D4).
+                'assets': [
+                    {'id': str(t.asset_id), 'name': t.asset.name}
+                    for t in wo.tasks.all() if t.status != 'CANCELLED'
+                ],
                 'completed_at': wo.completed_at.isoformat() if wo.completed_at else None,
             }
             for wo in recent_wos

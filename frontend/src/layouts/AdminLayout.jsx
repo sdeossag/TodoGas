@@ -167,7 +167,7 @@ export default function AdminLayout() {
       <OfflineBanner />
 
       {/* Sidebar desplegable + vista del router */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-frame relative">
         {/* Fondo oscuro que cierra el panel al tocarlo (solo movil) */}
         {sidebarOpen && (
           <div

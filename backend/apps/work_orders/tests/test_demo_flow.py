@@ -130,14 +130,16 @@ class TestFlujoCompletoDeLaDemo:
         resp = admin_c.post(
             reverse("work-orders-list"),
             {
-                "asset": str(activo.id),
+                "tasks": [{
+                    "asset": str(activo.id),
+                    "checklist_version": str(checklist.id),
+                }],
                 "task_type": WorkOrder.TaskType.CORRECTIVE,
                 "title": "Fuga audible en el regulador principal",
                 "description": "El personal de enfermeria reporta silbido constante.",
                 "priority": WorkOrder.Priority.HIGH,
                 "scheduled_date": str(date.today() + timedelta(days=1)),
                 "assigned_to": str(tecnico.id),
-                "checklist_version": str(checklist.id),
             },
             format="json",
         )
@@ -162,18 +164,11 @@ class TestFlujoCompletoDeLaDemo:
         assert resp.status_code == status.HTTP_200_OK, resp.data
 
         # ── 3. Responde el checklist ────────────────────────────────────────
-        resp = tec_c.post(
-            reverse("checklist-responses-list"),
-            {"work_order": str(wo_id), "version": str(checklist.id)},
-            format="json",
-        )
-        assert resp.status_code == status.HTTP_201_CREATED, resp.data
-        # El serializer de creacion solo devuelve work_order y version, sin id.
-        # La app lo resuelve releyendo el detalle de la OT, asi que el test
-        # hace lo mismo en vez de ir a la base de datos por atras.
+        # El checklist ya viene creado con la OT (fase 3): el tecnico lo
+        # responde sin pasar por "Iniciar checklist", que exigia red.
         detalle = tec_c.get(reverse("work-orders-detail", kwargs={"pk": wo_id})).data
-        cr_id = detalle["checklist_response_id"]
-        assert cr_id, "el detalle de la OT no expone checklist_response_id"
+        cr_id = detalle["tasks"][0]["checklist_response_id"]
+        assert cr_id, "la OT deberia traer su checklist ya creado"
 
         resp = tec_c.post(
             reverse("checklist-responses-submit-field", kwargs={"pk": cr_id}),
@@ -255,6 +250,12 @@ class TestFlujoCompletoDeLaDemo:
         assert WorkOrder.objects.get(pk=wo_id).wo_number in wo_numbers, (
             "la OT completada no aparece en el portal del cliente"
         )
+        # El portal lista los activos de la visita, no "el activo" de la OT.
+        fila = next(
+            w for w in resp.data["recent_work_orders"]
+            if w["wo_number"] == WorkOrder.objects.get(pk=wo_id).wo_number
+        )
+        assert [a["name"] for a in fila["assets"]] == [activo.name]
         assert resp.data["recent_reports"], "el portal del cliente no ofrece el acta"
         # El APK ya publicado lee la clave antigua: si desaparece, las tablets
         # en campo dejan de ver los reportes sin que nadie lo note.

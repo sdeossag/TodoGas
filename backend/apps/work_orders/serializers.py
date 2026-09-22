@@ -9,11 +9,23 @@ from apps.users.models import User
 
 from .models import WorkOrder, WorkOrderStatusHistory
 
-# Fase 1 del modelo de tareas: la OT agrupa tareas y ya no tiene activo,
-# version de checklist ni plan propios. Mientras las pantallas y la app
-# movil se reescriben para varias tareas (fases 3 y 4), la API sigue
-# devolviendo esos campos tomados de la primera tarea, y el alta sigue
-# aceptando un activo y una version. Son campos del serializer, no columnas.
+# La OT agrupa tareas: no tiene activo, version de checklist ni plan propios.
+# Cada tarea lleva los suyos, y la OT solo el hospital y la ubicacion de la
+# visita. Los campos de compatibilidad que tomaban lo de la primera tarea se
+# retiraron en la fase 4.
+
+
+def _tareas_vigentes(work_order):
+    """
+    Las tareas que cuentan como trabajo de la OT.
+
+    Una tarea anulada sigue en la OT por historial, pero no suma activos: la
+    tarjeta diria "3 activos" cuando el tecnico solo va a intervenir dos. En
+    una OT anulada no queda ninguna vigente y se muestran todas.
+    """
+    tareas = list(work_order.tasks.all())
+    vigentes = [t for t in tareas if t.status != Task.Status.CANCELLED]
+    return vigentes or tareas
 
 
 class WorkOrderStatusHistorySerializer(serializers.ModelSerializer):
@@ -29,7 +41,7 @@ class WorkOrderStatusHistorySerializer(serializers.ModelSerializer):
 
 
 class WorkOrderListSerializer(serializers.ModelSerializer):
-    asset = serializers.SerializerMethodField()
+    assets = serializers.SerializerMethodField()
     hospital = serializers.SerializerMethodField()
     assigned_to = serializers.SerializerMethodField()
     is_overdue = serializers.SerializerMethodField()
@@ -39,30 +51,35 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
     # el APK publicado y el esquema SQLite offline siguen leyendo el entero.
     wo_code = serializers.CharField(read_only=True)
     assets_count = serializers.SerializerMethodField()
+    location = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkOrder
         fields = [
             "id", "wo_number", "wo_code", "title", "task_type", "status", "priority",
-            "scheduled_date", "asset", "assets_count", "hospital", "assigned_to",
+            "scheduled_date", "assets", "assets_count", "hospital", "location", "assigned_to",
             "created_at", "is_overdue", "has_report", "report_id",
         ]
 
-    def get_asset(self, obj):
-        tarea = obj.primary_task
-        if tarea is None:
-            return None
-        a = tarea.asset
-        return {"id": str(a.id), "code": a.code, "name": a.name}
+    def get_assets(self, obj):
+        """Los activos de la visita, sin repetir y en el orden de las tareas."""
+        activos = {}
+        for t in _tareas_vigentes(obj):
+            a = t.asset
+            activos.setdefault(a.id, {"id": str(a.id), "code": a.code, "name": a.name})
+        return list(activos.values())
 
     def get_assets_count(self, obj):
-        # Una OT armada desde pendientes lleva varios activos; `asset` es solo
-        # el primero (compatibilidad hasta la fase 4).
-        return len({t.asset_id for t in obj.tasks.all()})
+        return len({t.asset_id for t in _tareas_vigentes(obj)})
 
     def get_hospital(self, obj):
         h = obj.hospital
         return {"id": str(h.id), "name": h.name}
+
+    def get_location(self, obj):
+        if not obj.location_id:
+            return None
+        return {"id": str(obj.location_id), "name": obj.location.name, "path": obj.location.path}
 
     def get_assigned_to(self, obj):
         if not obj.assigned_to:
@@ -97,22 +114,23 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
 
 class WorkOrderDetailSerializer(WorkOrderListSerializer):
     created_by = serializers.SerializerMethodField()
-    maintenance_plan = serializers.SerializerMethodField()
-    checklist_version = serializers.SerializerMethodField()
     status_history = WorkOrderStatusHistorySerializer(many=True, read_only=True)
-    checklist_response_id = serializers.SerializerMethodField()
     report_status = serializers.SerializerMethodField()
     tasks = serializers.SerializerMethodField()
+    # Para que la app sepa sin red si ya hay foto y firma en el servidor: pasar
+    # a revision las exige, y sin red no puede preguntarlo.
+    photos_count = serializers.SerializerMethodField()
+    signatures_count = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkOrder
         fields = WorkOrderListSerializer.Meta.fields + [
+            "photos_count", "signatures_count",
             "description", "classification_1", "classification_2",
             "progress", "progress_measure", "request_number",
             "started_at", "completed_at", "estimated_duration",
             "actual_duration", "downtime", "total_cost", "rating", "notes",
-            "created_by", "maintenance_plan", "checklist_version",
-            "checklist_response_id", "report_status", "status_history",
+            "created_by", "report_status", "status_history",
             "tasks",
             "synced_at", "offline_uuid",
         ]
@@ -144,22 +162,15 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
             return "failed"
         return "missing"
 
+    def get_photos_count(self, obj):
+        return len(obj.photos.all())
+
+    def get_signatures_count(self, obj):
+        return len(obj.signatures.all())
+
     def get_created_by(self, obj):
         u = obj.created_by
         return {"id": str(u.id), "full_name": f"{u.first_name} {u.last_name}".strip()}
-
-    def get_maintenance_plan(self, obj):
-        tarea = obj.primary_task
-        if tarea is None or tarea.plan_task is None:
-            return None
-        mp = tarea.plan_task.plan
-        return {"id": str(mp.id), "name": mp.name}
-
-    def get_checklist_response_id(self, obj):
-        return _response_id(obj.primary_task)
-
-    def get_checklist_version(self, obj):
-        return _version_dict(obj.primary_task)
 
     def get_tasks(self, obj):
         return [
@@ -180,12 +191,38 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
                 ),
                 "checklist_version": _version_dict(t),
                 "checklist_response_id": _response_id(t),
+                "checklist": _checklist_progress(t),
+                "description": t.description,
+                "estimated_duration": serializers.DurationField().to_representation(t.estimated_duration)
+                if t.estimated_duration else None,
                 "calculated_date": t.calculated_date,
                 "scheduled_date": t.scheduled_date,
                 "completed_at": t.completed_at,
             }
             for t in obj.tasks.all()
         ]
+
+
+def _checklist_progress(tarea):
+    """
+    Avance del checklist de la tarea, para la lista de tareas de la OT: cuantos
+    campos van, cuantos obligatorios faltan y si ya se finalizo.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+
+    try:
+        respuesta = tarea.checklist_response
+    except ObjectDoesNotExist:
+        return None
+    campos = list(respuesta.version.fields.all())
+    respondidos = {fr.field_id for fr in respuesta.field_responses.all()}
+    return {
+        "response_id": str(respuesta.id),
+        "answered": sum(1 for f in campos if f.id in respondidos),
+        "total": len(campos),
+        "required_missing": sum(1 for f in campos if f.is_required and f.id not in respondidos),
+        "completed_at": respuesta.completed_at,
+    }
 
 
 def _response_id(tarea):
@@ -209,24 +246,44 @@ def _version_dict(tarea):
     }
 
 
-class WorkOrderCreateSerializer(serializers.ModelSerializer):
-    # Compatibilidad: el alta de hoy es de un activo con un checklist
-    # opcional. Se convierte en una OT con una tarea manual.
+class ManualTaskSerializer(serializers.Serializer):
+    """Un activo de la visita, con su checklist opcional."""
+
     asset = serializers.PrimaryKeyRelatedField(
-        queryset=Asset.objects.select_related("hospital"), write_only=True
+        queryset=Asset.objects.select_related("hospital")
     )
     checklist_version = serializers.PrimaryKeyRelatedField(
         queryset=ChecklistTemplateVersion.objects.all(),
-        required=False, allow_null=True, write_only=True,
+        required=False, allow_null=True,
+    )
+
+    def validate_asset(self, value):
+        if value.status != Asset.Status.ACTIVE:
+            raise serializers.ValidationError(
+                f"El activo '{value.code}' no está ACTIVE (status actual: {value.status})."
+            )
+        return value
+
+
+class WorkOrderCreateSerializer(serializers.ModelSerializer):
+    """
+    Alta manual (correctivos). Una OT es una visita a un hospital y lleva una
+    tarea por activo, cada una con su checklist.
+    """
+
+    tasks = ManualTaskSerializer(many=True, write_only=True, allow_empty=False)
+    location = serializers.PrimaryKeyRelatedField(
+        queryset=AssetNode.objects.select_related("hospital"),
+        required=False, allow_null=True,
     )
 
     class Meta:
         model = WorkOrder
         fields = [
-            "asset", "task_type", "title", "description",
+            "tasks", "location", "task_type", "title", "description",
             "classification_1", "classification_2",
             "priority", "scheduled_date", "estimated_duration",
-            "assigned_to", "checklist_version", "notes", "request_number",
+            "assigned_to", "notes", "request_number",
         ]
 
     def validate_task_type(self, value):
@@ -235,13 +292,6 @@ class WorkOrderCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Solo se pueden crear OTs de tipo CORRECTIVE o VERIFICATION. "
                 "Las OTs PREVENTIVE las genera el sistema automáticamente."
-            )
-        return value
-
-    def validate_asset(self, value):
-        if value.status != Asset.Status.ACTIVE:
-            raise serializers.ValidationError(
-                f"El activo '{value.code}' no está ACTIVE (status actual: {value.status})."
             )
         return value
 
@@ -254,16 +304,49 @@ class WorkOrderCreateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate(self, attrs):
+        entradas = attrs["tasks"]
+        activos = [e["asset"] for e in entradas]
+
+        repetidos = sorted({a.code for a in activos if activos.count(a) > 1})
+        if repetidos:
+            raise serializers.ValidationError(
+                {"tasks": f"El activo {', '.join(repetidos)} está repetido en la OT."}
+            )
+
+        # Decision D4: una OT es una visita a un hospital.
+        hospitales = {a.hospital_id for a in activos}
+        if len(hospitales) > 1:
+            raise serializers.ValidationError(
+                {"tasks": "Todos los activos de una OT deben ser del mismo hospital."}
+            )
+
+        ubicacion = attrs.get("location")
+        if ubicacion is not None and ubicacion.hospital_id != next(iter(hospitales)):
+            raise serializers.ValidationError(
+                {"location": "La ubicación es de otro hospital."}
+            )
+        return attrs
+
     def create(self, validated_data):
         from apps.maintenance.services import create_manual_work_order
 
-        asset = validated_data.pop("asset")
-        version = validated_data.pop("checklist_version", None)
+        entradas = [
+            (e["asset"], e.get("checklist_version")) for e in validated_data.pop("tasks")
+        ]
+        ubicacion = validated_data.pop("location", None)
         validated_data.setdefault("status", WorkOrder.Status.PENDING)
         return create_manual_work_order(
-            asset, self.context["request"].user,
-            checklist_version=version, **validated_data,
+            entradas, self.context["request"].user, location=ubicacion, **validated_data,
         )
+
+
+class TaskIdsSerializer(serializers.Serializer):
+    task_ids = serializers.PrimaryKeyRelatedField(
+        many=True, allow_empty=False,
+        queryset=Task.objects.select_related("asset", "plan_task__checklist_template"),
+        error_messages={"does_not_exist": "La tarea {pk_value} no existe."},
+    )
 
 
 class WorkOrderFromTasksSerializer(serializers.Serializer):
@@ -341,18 +424,13 @@ class WorkOrderFromTasksSerializer(serializers.Serializer):
 
 
 class WorkOrderUpdateSerializer(serializers.ModelSerializer):
-    # Compatibilidad: cambia el checklist de la primera tarea, mientras no
-    # se haya empezado a diligenciar.
-    checklist_version = serializers.PrimaryKeyRelatedField(
-        queryset=ChecklistTemplateVersion.objects.all(),
-        required=False, allow_null=True, write_only=True,
-    )
+    """Datos de la visita. El checklist es de cada tarea: ver TaskChecklistSerializer."""
 
     class Meta:
         model = WorkOrder
         fields = [
             "title", "description", "priority", "scheduled_date",
-            "estimated_duration", "assigned_to", "checklist_version",
+            "estimated_duration", "assigned_to",
             "notes", "classification_1", "classification_2",
         ]
 
@@ -365,24 +443,32 @@ class WorkOrderUpdateSerializer(serializers.ModelSerializer):
             )
         return value
 
-    def validate_checklist_version(self, value):
-        tarea = self.instance.primary_task if self.instance else None
-        if tarea is not None and _response_id(tarea) is not None:
-            raise serializers.ValidationError(
-                "El checklist de esta OT ya se empezo a diligenciar; no se "
-                "puede cambiar."
-            )
-        return value
 
-    def update(self, instance, validated_data):
-        sentinel = object()
-        version = validated_data.pop("checklist_version", sentinel)
-        instance = super().update(instance, validated_data)
-        tarea = instance.primary_task
-        if version is not sentinel and tarea is not None:
-            tarea.checklist_version = version
-            tarea.save(update_fields=["checklist_version", "updated_at"])
-        return instance
+class TaskChecklistSerializer(serializers.Serializer):
+    """
+    Cambiar el checklist de una tarea de la OT. El checklist es de la tarea,
+    no de la OT: con varios activos cada uno lleva el suyo.
+    """
+
+    task = serializers.PrimaryKeyRelatedField(queryset=Task.objects.all())
+    checklist_version = serializers.PrimaryKeyRelatedField(
+        queryset=ChecklistTemplateVersion.objects.all(), allow_null=True
+    )
+
+    def validate(self, attrs):
+        from apps.maintenance.services import _answered
+
+        tarea = attrs["task"]
+        if tarea.work_order_id != self.context["work_order"].id:
+            raise serializers.ValidationError({"task": "La tarea no es de esta OT."})
+        if _answered(tarea):
+            raise serializers.ValidationError(
+                {"checklist_version": (
+                    "El checklist de esta tarea ya se empezó a diligenciar; no se "
+                    "puede cambiar."
+                )}
+            )
+        return attrs
 
 
 class WorkOrderTechnicianUpdateSerializer(serializers.ModelSerializer):

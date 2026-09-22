@@ -18,6 +18,8 @@ from .models import WorkOrder, WorkOrderStatusHistory
 from .serializers import (
     WorkOrderCreateSerializer,
     WorkOrderDetailSerializer,
+    TaskChecklistSerializer,
+    TaskIdsSerializer,
     WorkOrderFromTasksSerializer,
     WorkOrderListSerializer,
     WorkOrderStatusHistorySerializer,
@@ -79,7 +81,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             "tasks__asset__node",
             "tasks__plan_task__plan",
             "tasks__checklist_version__template",
-            "tasks__checklist_response",
+            "tasks__checklist_response__version__fields",
+            "tasks__checklist_response__field_responses",
             "status_history",
             "status_history__changed_by",
             "photos",
@@ -326,6 +329,92 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         return Response(
             WorkOrderDetailSerializer(wo, context={"request": request}).data
         )
+
+    # ── Tareas de la OT (fase 3) ──────────────────────────────────────────────
+
+    def _detalle(self, wo, **extra):
+        wo = self.get_queryset().get(pk=wo.pk)
+        datos = WorkOrderDetailSerializer(wo, context={"request": self.request}).data
+        datos.update(extra)
+        return Response(datos)
+
+    @action(detail=True, methods=["post"])
+    def tasks(self, request, pk=None):
+        """Agrega tareas pendientes a una OT que aun no empezo."""
+        from apps.maintenance import services
+
+        if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        wo = self.get_object()
+        entrada = TaskIdsSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        try:
+            avisos = services.add_tasks_to_work_order(wo, entrada.validated_data["task_ids"])
+        except services.TaskStateError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return self._detalle(wo, warnings=avisos)
+
+    @action(detail=True, methods=["post"], url_path="remove-task")
+    def remove_task(self, request, pk=None):
+        """
+        Saca una tarea de una OT que aun no empezo; vuelve a pendientes. Es POST
+        y no DELETE porque la OT no admite DELETE: habilitarlo abriria el
+        borrado de OTs.
+        """
+        from apps.maintenance import services
+
+        if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        wo = self.get_object()
+        entrada = TaskIdsSerializer(data={"task_ids": [request.data.get("task_id")]})
+        entrada.is_valid(raise_exception=True)
+        tarea = entrada.validated_data["task_ids"][0]
+        if tarea.work_order_id != wo.id:
+            return Response(
+                {"task_id": "La tarea no es de esta OT."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            services.remove_task_from_work_order(wo, tarea)
+        except services.TaskStateError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return self._detalle(wo)
+
+    @action(detail=True, methods=["post"], url_path="task-checklist")
+    def task_checklist(self, request, pk=None):
+        """Cambia el checklist de una tarea de la OT, mientras nadie lo respondio."""
+        from apps.maintenance import services
+
+        if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        wo = self.get_object()
+        entrada = TaskChecklistSerializer(data=request.data, context={"work_order": wo})
+        entrada.is_valid(raise_exception=True)
+        services.change_task_checklist(
+            entrada.validated_data["task"], entrada.validated_data["checklist_version"]
+        )
+        return self._detalle(wo)
+
+    @action(detail=True, methods=["get"], url_path="offline-bundle")
+    def offline_bundle(self, request, pk=None):
+        """
+        Todo lo que el tecnico necesita para ejecutar la OT sin red: el detalle
+        con sus tareas y el checklist de cada una con sus campos y respuestas.
+        La app lo guarda en SQLite al tener conexion.
+        """
+        from apps.checklists.models import ChecklistResponse
+        from apps.checklists.serializers import ChecklistResponseSerializer
+
+        wo = self.get_object()
+        respuestas = (
+            ChecklistResponse.objects.filter(task__work_order=wo)
+            .select_related("version", "completed_by", "task")
+            .prefetch_related("version__fields", "field_responses__field")
+            .order_by("task__sort_order", "task__created_at")
+        )
+        return Response({
+            "work_order": WorkOrderDetailSerializer(wo, context={"request": request}).data,
+            "checklists": ChecklistResponseSerializer(respuestas, many=True).data,
+        })
 
 
 class WorkOrderStatusHistoryViewSet(

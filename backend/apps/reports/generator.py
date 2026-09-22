@@ -18,6 +18,17 @@ from apps.work_orders.integrity import (
 from .models import GeneratedReport
 
 
+def _duration_label(value):
+    """'1 h 25 min' en vez del timedelta crudo ('1:25:03.851900')."""
+    if not value:
+        return ""
+    minutos = int(value.total_seconds() // 60)
+    horas, minutos = divmod(minutos, 60)
+    if horas:
+        return f"{horas} h {minutos} min" if minutos else f"{horas} h"
+    return f"{minutos} min" if minutos else "menos de 1 min"
+
+
 def _resolve_url(file_key):
     """Devuelve la URL publica o pre-firmada de una clave de storage."""
     if not file_key:
@@ -34,18 +45,21 @@ def generate_service_report_pdf(work_order):
     """
     from weasyprint import HTML
 
-    # Fase 1: el acta sigue mostrando un activo y su checklist, los de la
-    # primera tarea. La fase 3 la pasa a un bloque por tarea.
-    tarea = work_order.primary_task
-    asset = tarea.asset if tarea else None
     technician = work_order.assigned_to
 
-    checklist_response = (
-        ChecklistResponse.objects.prefetch_related("field_responses__field")
-        .filter(task=tarea)
-        .first()
-        if tarea else None
+    # Un bloque por tarea: el activo, su checklist y sus fotos. Las tareas
+    # canceladas no se hicieron y no van en el acta.
+    tareas = list(
+        work_order.tasks.exclude(status="CANCELLED")
+        .select_related("asset__hospital", "asset__node", "plan_task__plan", "checklist_version__template")
+        .order_by("sort_order", "created_at")
     )
+    respuestas = {
+        r.task_id: r
+        for r in ChecklistResponse.objects.filter(task__in=tareas).prefetch_related(
+            "field_responses__field"
+        )
+    }
 
     photos_qs = Photo.objects.filter(work_order=work_order).order_by("taken_at")
     signatures_qs = Signature.objects.filter(work_order=work_order)
@@ -57,6 +71,22 @@ def generate_service_report_pdf(work_order):
     photos = list(photos_qs)
     for p in photos:
         p.file_url = _resolve_url(p.file_url)
+    fotos_por_tarea = {}
+    fotos_visita = []
+    for p in photos:
+        if p.task_id:
+            fotos_por_tarea.setdefault(p.task_id, []).append(p)
+        else:
+            fotos_visita.append(p)
+    bloques = [
+        {
+            "task": t,
+            "asset": t.asset,
+            "checklist_response": respuestas.get(t.id),
+            "photos": fotos_por_tarea.get(t.id, []),
+        }
+        for t in tareas
+    ]
 
     signatures = list(signatures_qs)
     for s in signatures:
@@ -70,9 +100,10 @@ def generate_service_report_pdf(work_order):
 
     context = {
         "work_order": work_order,
-        "asset": asset,
         "technician": technician,
-        "checklist_response": checklist_response,
+        "actual_duration": _duration_label(work_order.actual_duration),
+        "blocks": bloques,
+        "visit_photos": fotos_visita,
         "photos": photos,
         "signatures": signatures,
         "stock_movements": stock_movements,

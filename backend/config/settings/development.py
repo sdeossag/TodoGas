@@ -16,6 +16,9 @@ CACHES = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    # App Android (Capacitor sirve la web desde https://localhost). Con
+    # `adb reverse tcp:8000 tcp:8000` el emulador llega a este runserver.
+    "https://localhost",
 ]
 CORS_ALLOW_CREDENTIALS = True
 

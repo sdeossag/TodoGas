@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { fetchWorkOrders } from '../api/workOrders'
+import { downloadOfflineBundles, fetchWorkOrders } from '../api/workOrders'
 import {
   getOfflineWorkOrders,
   getWorkOrderIdsWithPendingSync,
@@ -29,9 +29,11 @@ export function useOfflineWorkOrders(params = {}) {
     queryFn: async () => {
       if (isOnline) {
         const rows = await fetchWorkOrders(params)
-        // Cachear para poder servirlas sin red mas adelante.
+        // Cachear para poder servirlas sin red mas adelante: la lista ya, y en
+        // segundo plano el detalle y los checklists de cada OT abierta.
         try {
           await saveWorkOrdersOffline(rows)
+          downloadOfflineBundles(rows)
         } catch (error) {
           console.warn('[offline] no se pudieron cachear las OT:', error?.message ?? error)
         }
@@ -48,6 +50,10 @@ export function useOfflineWorkOrders(params = {}) {
     // mientras se resuelve la nueva fuente.
     placeholderData: (previous) => previous,
     staleTime: 0,
+    // Sin red lee SQLite. Con el modo por defecto TanStack pausa la consulta
+    // en cuanto navigator.onLine es false y la lista se queda con lo ultimo
+    // que trajo el servidor.
+    networkMode: 'always',
   })
 
   return {
@@ -71,6 +77,8 @@ export function useWorkOrdersWithPendingSync() {
     queryKey: ['work-orders', 'pending-sync', pendingSyncCount, isSyncing],
     queryFn: getWorkOrderIdsWithPendingSync,
     staleTime: 0,
+    // Solo lee SQLite: justamente importa sin red.
+    networkMode: 'always',
   })
 
   return new Set(data ?? [])

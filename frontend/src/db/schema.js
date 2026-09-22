@@ -5,12 +5,15 @@
  * Las tablas de evidencia llevan `synced` para que el motor de sincronizacion
  * sepa que falta por subir; las OT llevan `local_status_changed` para las
  * transiciones hechas sin conexion.
+ *
+ * CREATE_TABLES_V1 es el esquema de la version 1 y NO se edita: es lo que
+ * tienen los telefonos instalados. Los cambios van como migracion nueva en
+ * migrations.js.
  */
 
 export const DB_NAME = 'todogas_offline'
-export const DB_VERSION = 1
 
-export const CREATE_TABLES = [
+export const CREATE_TABLES_V1 = [
   `CREATE TABLE IF NOT EXISTS offline_work_orders (
     id TEXT PRIMARY KEY,
     wo_number INTEGER,

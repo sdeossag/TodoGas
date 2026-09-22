@@ -1,4 +1,5 @@
 import { useWorkOrderPhotos, useWorkOrderSignatures } from '../../api/evidence'
+import { mediaUrl } from '../../api/client'
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -45,7 +46,7 @@ export default function EvidenceGallery({ workOrderId }) {
             {photos.data.map((photo) => (
               <div key={photo.id} className="space-y-1.5">
                 <img
-                  src={photo.file_url}
+                  src={mediaUrl(photo.file_url)}
                   alt={photo.caption || 'Foto de evidencia'}
                   className="w-full aspect-video object-cover rounded-lg border border-gray-200"
                 />
@@ -87,7 +88,7 @@ export default function EvidenceGallery({ workOrderId }) {
                 className="flex flex-col sm:flex-row items-start gap-4 p-4 border border-gray-100 rounded-lg"
               >
                 <img
-                  src={sig.file_url}
+                  src={mediaUrl(sig.file_url)}
                   alt="Firma"
                   className="h-20 border border-gray-200 rounded bg-white object-contain"
                 />

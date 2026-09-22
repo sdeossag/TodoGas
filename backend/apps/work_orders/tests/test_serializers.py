@@ -74,7 +74,7 @@ def make_create_context(user):
 class TestWorkOrderCreateSerializer:
     def _valid_data(self, asset, assigned_to):
         return {
-            "asset": str(asset.id),
+            "tasks": [{"asset": str(asset.id)}],
             "task_type": WorkOrder.TaskType.CORRECTIVE,
             "title": "Cambio de válvula",
             "scheduled_date": str(date.today()),
@@ -110,7 +110,7 @@ class TestWorkOrderCreateSerializer:
         data = self._valid_data(inactive_asset, tec)
         s = WorkOrderCreateSerializer(data=data, context=make_create_context(admin))
         assert not s.is_valid()
-        assert "asset" in s.errors
+        assert "tasks" in s.errors
 
     def test_non_tec_assigned_to_is_rejected(self, admin, sup, active_asset):
         data = self._valid_data(active_asset, sup)

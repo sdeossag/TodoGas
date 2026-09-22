@@ -310,13 +310,36 @@ def test_ot_manual_crea_una_tarea_sin_plan(hospital, admin):
     a = activo(hospital)
 
     ot = services.create_manual_work_order(
-        a, admin, task_type="CORRECTIVE", title="Fuga", scheduled_date=HOY,
+        [(a, None)], admin, task_type="CORRECTIVE", title="Fuga", scheduled_date=HOY,
     )
 
     tarea = ot.tasks.get()
     assert tarea.plan_task is None
     assert tarea.status == Task.Status.SCHEDULED
     assert ot.hospital == hospital
+
+
+def test_ot_manual_con_varios_activos(hospital, admin):
+    """Fase 4: un correctivo puede cubrir varios activos de la misma visita."""
+    a, b = activo(hospital), activo(hospital)
+
+    ot = services.create_manual_work_order(
+        [(a, None), (b, None)], admin,
+        task_type="CORRECTIVE", title="Revision del piso", scheduled_date=HOY,
+    )
+
+    assert [t.asset for t in ot.tasks.order_by("sort_order")] == [a, b]
+    assert ot.hospital == hospital
+
+
+def test_ot_manual_no_mezcla_hospitales(hospital, admin):
+    otro = baker.make(Hospital, is_active=True)
+
+    with pytest.raises(services.TaskStateError, match="mismo hospital"):
+        services.create_manual_work_order(
+            [(activo(hospital), None), (activo(otro), None)], admin,
+            task_type="CORRECTIVE", title="Mezcla", scheduled_date=HOY,
+        )
 
 
 # ── Reprogramar y anular ─────────────────────────────────────────────────────
@@ -349,7 +372,7 @@ def test_no_se_reprograma_una_tarea_en_una_ot(hospital, admin):
     causa = RescheduleCause.objects.get(name="APLAZADO")
 
     with pytest.raises(services.TaskStateError, match="Solo se reprograman"):
-        services.reschedule_task(ot.primary_task, HOY, causa, admin)
+        services.reschedule_task(ot.tasks.first(), HOY, causa, admin)
 
 
 def test_causa_inactiva_no_se_acepta(hospital, admin):

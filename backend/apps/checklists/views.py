@@ -128,6 +128,11 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
 
         field_response = serializer.save()
         field_response._out_of_range = extra.get("out_of_range", False)
+        # El checklist se crea vacio al programar la tarea: empieza de verdad
+        # con la primera respuesta.
+        if response.started_at is None:
+            response.started_at = timezone.now()
+            response.save(update_fields=["started_at"])
 
         return Response(ChecklistFieldResponseSerializer(field_response).data)
 

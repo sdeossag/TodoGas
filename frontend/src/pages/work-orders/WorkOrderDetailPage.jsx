@@ -5,8 +5,14 @@ import {
   useWorkOrder,
   useWorkOrderHistory,
   useUpdateWorkOrder,
+  useSetTaskChecklist,
   useAssignWorkOrder,
+  useAddWorkOrderTasks,
+  useRemoveWorkOrderTask,
 } from '../../api/workOrders'
+import { useTasks } from '../../api/tasks'
+import Modal from '../../components/ui/Modal'
+import { formatDate } from '../../utils/maintenance'
 import { useUsers } from '../../api/users'
 import { formatWoCode } from '../../utils/workOrder'
 import {
@@ -23,8 +29,11 @@ import TransitionButton from '../../components/workOrders/TransitionButton'
 import SignatureList from '../../components/evidence/SignatureList'
 import SignaturePad from '../../components/evidence/SignaturePad'
 import PhotoGallery from '../../components/evidence/PhotoGallery'
-import PhotoCapture from '../../components/evidence/PhotoCapture'
+import PhotoCapture, { dataUrlToFile } from '../../components/evidence/PhotoCapture'
 import { useUploadPhoto } from '../../api/evidence'
+import { mediaUrl } from '../../api/client'
+import { Capacitor } from '@capacitor/core'
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 import {
   REPORT_POLL_ATTEMPTS,
   useWorkOrderReports,
@@ -39,10 +48,12 @@ import { taskTypeLabel, woStatusLabel } from '../../constants/labels'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import useNetworkStore from '../../store/networkStore'
 import {
+  markChecklistCompletedOffline,
   markFieldResponseSynced,
   newId,
   saveChecklistResponse,
   saveFieldResponse,
+  savePhotoOffline,
 } from '../../db/repositories'
 
 // Margen sobre la ventana de sondeo de useWorkOrderReports (24 intentos x 5s).
@@ -92,11 +103,11 @@ export default function WorkOrderDetailPage() {
   const isAdmin = role === 'ADMIN'
   const isAdminOrSup = ['ADMIN', 'SUP'].includes(role)
 
-  const [tab, setTab] = useState(0)
+  const [tab, setTab] = useState(role === 'TEC' ? 1 : 0)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
 
-  const { data: wo, isLoading, isError, refetch } = useWorkOrder(id)
+  const { data: wo, isLoading, isError, error, refetch } = useWorkOrder(id)
 
   // Determine back route by role
   const backPath = role === 'TEC' ? '/mis-ordenes' : '/ordenes'
@@ -106,7 +117,7 @@ export default function WorkOrderDetailPage() {
     return (
       <div className="text-center py-20 text-gray-500">
         <Icon name="warning" className="w-10 h-10 mx-auto mb-3 text-amber-500" />
-        <p>No se encontró la OT</p>
+        <p>{error?.message && !error?.response ? error.message : 'No se encontró la OT'}</p>
         <button onClick={() => navigate(backPath)} className="mt-3 text-sm text-brand hover:underline">
           Volver
         </button>
@@ -160,12 +171,26 @@ export default function WorkOrderDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Activo y hospital */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
-          <h2 className="font-semibold text-gray-800 text-sm">Activo</h2>
-          <dl className="grid grid-cols-2 gap-4">
-            <InfoRow label="Código" value={<span className="font-mono">{wo.asset?.code}</span>} />
-            <InfoRow label="Nombre" value={wo.asset?.name} />
-            <InfoRow label="Hospital" value={wo.hospital?.name} />
-          </dl>
+          {(wo.tasks?.length ?? 0) > 1 ? (
+            <>
+              <h2 className="font-semibold text-gray-800 text-sm">Activos</h2>
+              <dl className="grid grid-cols-2 gap-4">
+                <InfoRow label="Hospital" value={wo.hospital?.name} />
+                <InfoRow label="Ubicación" value={wo.location?.path} />
+                <InfoRow label="Activos" value={`${wo.tasks.length} — ver la pestaña Tareas`} />
+              </dl>
+            </>
+          ) : (
+            <>
+              <h2 className="font-semibold text-gray-800 text-sm">Activo</h2>
+              <dl className="grid grid-cols-2 gap-4">
+                <InfoRow label="Código" value={<span className="font-mono">{wo.assets?.[0]?.code}</span>} />
+                <InfoRow label="Nombre" value={wo.assets?.[0]?.name} />
+                <InfoRow label="Hospital" value={wo.hospital?.name} />
+                {wo.location && <InfoRow label="Ubicación" value={wo.location.path} />}
+              </dl>
+            </>
+          )}
         </div>
 
         {/* Asignación */}
@@ -236,7 +261,9 @@ export default function WorkOrderDetailPage() {
                 ) : null
               }
             />
-            {wo.maintenance_plan && <InfoRow label="Plan PM" value={wo.maintenance_plan.name} />}
+            {wo.tasks?.length === 1 && wo.tasks[0].plan && (
+              <InfoRow label="Plan de tareas" value={wo.tasks[0].plan.name} />
+            )}
           </dl>
         </div>
       </div>
@@ -253,7 +280,13 @@ export default function WorkOrderDetailPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         <div className="border-b border-gray-100">
           <div className="flex overflow-x-auto">
-            {['Historial de estados', 'Checklist', 'Evidencia', 'Repuestos', 'Reportes'].map((label, i) => (
+            {[
+              'Historial de estados',
+              (wo.tasks?.length ?? 0) > 1 ? `Tareas (${wo.tasks.length})` : 'Checklist',
+              'Evidencia',
+              'Repuestos',
+              'Reportes',
+            ].map((label, i) => (
               <button
                 key={label}
                 onClick={() => setTab(i)}
@@ -271,7 +304,7 @@ export default function WorkOrderDetailPage() {
 
         <div className="p-6">
           {tab === 0 && <HistoryTab id={id} isAdminOrSup={isAdminOrSup} />}
-          {tab === 1 && <ChecklistTab wo={wo} user={user} refetch={refetch} />}
+          {tab === 1 && <TasksTab wo={wo} user={user} refetch={refetch} />}
           {tab === 3 && <RepuestosTab wo={wo} user={user} />}
           {tab === 4 && (
             <ReportsTab
@@ -308,7 +341,7 @@ export default function WorkOrderDetailPage() {
                   <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                     Agregar foto
                   </h3>
-                  <PhotoCapture workOrderId={id} disabled={wo.status !== 'IN_PROGRESS'} />
+                  <PhotoCapture workOrderId={id} tasks={wo.tasks ?? []} disabled={wo.status !== 'IN_PROGRESS'} />
                 </div>
               )}
             </div>
@@ -447,10 +480,16 @@ function EditModal({ wo, onClose, onSuccess }) {
   const { data: _editUsers = [] } = useUsers({})
   const tecUsers = _editUsers.filter((u) => u.role === 'TEC' && u.is_active)
   const updateMut = useUpdateWorkOrder(wo.id)
+  const taskChecklistMut = useSetTaskChecklist(wo.id)
 
-  // Una vez iniciado el checklist la version queda fija: cambiarla dejaria las
-  // respuestas apuntando a campos de otra version.
-  const checklistLocked = !!wo.checklist_response_id
+  // Una vez respondido el checklist la version queda fija: cambiarla dejaria
+  // las respuestas apuntando a campos de otra version. Desde la fase 3 el
+  // checklist existe desde que la tarea entra en la OT, asi que lo que cuenta
+  // es si ya tiene respuestas. Con varias tareas cada una tiene el suyo.
+  const primera = wo.tasks?.[0]
+  const variasTareas = (wo.tasks?.length ?? 0) > 1
+  const checklistLocked =
+    variasTareas || !!primera?.checklist?.completed_at || (primera?.checklist?.answered ?? 0) > 0
   const { data: checklistTemplates = [] } = useChecklistTemplates({ is_active: true })
   const publishedChecklists = checklistTemplates.filter((t) => t.current_version_id)
 
@@ -461,7 +500,7 @@ function EditModal({ wo, onClose, onSuccess }) {
     scheduled_date: wo.scheduled_date ?? '',
     estimated_duration: wo.estimated_duration ? wo.estimated_duration.substring(0, 5) : '',
     assigned_to: wo.assigned_to?.id ?? '',
-    checklist_version: wo.checklist_version?.id ?? '',
+    checklist_version: wo.tasks?.[0]?.checklist_version?.id ?? '',
     notes: wo.notes ?? '',
     classification_1: wo.classification_1 ?? '',
     classification_2: wo.classification_2 ?? '',
@@ -482,9 +521,16 @@ function EditModal({ wo, onClose, onSuccess }) {
       classification_2: form.classification_2,
       ...(form.estimated_duration && { estimated_duration: form.estimated_duration + ':00' }),
       ...(form.assigned_to && { assigned_to: form.assigned_to }),
-      ...(!checklistLocked && { checklist_version: form.checklist_version || null }),
     }
     await updateMut.mutateAsync(payload)
+    // El checklist es de la tarea: va por su propia ruta.
+    const versionActual = primera?.checklist_version?.id ?? ''
+    if (!checklistLocked && primera && form.checklist_version !== versionActual) {
+      await taskChecklistMut.mutateAsync({
+        task: primera.id,
+        checklist_version: form.checklist_version || null,
+      })
+    }
     onSuccess?.()
     onClose()
   }
@@ -571,7 +617,9 @@ function EditModal({ wo, onClose, onSuccess }) {
             </select>
             {checklistLocked && (
               <p className="text-xs text-gray-500 mt-1">
-                El checklist ya fue iniciado y no se puede cambiar.
+                {variasTareas
+                  ? 'La OT tiene varias tareas: cada una lleva el checklist de su plan.'
+                  : 'El checklist ya tiene respuestas y no se puede cambiar.'}
               </p>
             )}
           </Field>
@@ -611,67 +659,200 @@ function Field({ label, children }) {
 
 // ── Checklist tab ─────────────────────────────────────────────────────────────
 
-function ChecklistTab({ wo, user, refetch }) {
-  if (!wo.checklist_version) {
-    return (
-      <p className="text-gray-500 text-sm text-center py-8">
-        Esta OT no tiene checklist asociado.
-      </p>
-    )
-  }
+// ── Tareas y checklists ──────────────────────────────────────────────────────
 
-  const isTecAssigned =
-    user?.role === 'TEC' && wo.assigned_to?.id === user?.id
+/**
+ * Las tareas de la OT, una por activo, cada una con su checklist. Con una sola
+ * tarea se ve directamente su checklist, como antes; con varias, la lista con
+ * el avance de cada activo, y al tocar una se abre su checklist debajo.
+ */
+function TasksTab({ wo, user, refetch }) {
+  const visibles = (wo.tasks ?? []).filter(
+    (t) => t.status !== 'CANCELLED' || wo.status === 'CANCELLED'
+  )
+  const [abierta, setAbierta] = useState(visibles.length === 1 ? visibles[0].id : null)
+  const [agregando, setAgregando] = useState(false)
+  const [quitando, setQuitando] = useState(null)
+  const [preguntarRevision, setPreguntarRevision] = useState(false)
 
+  const isTecAssigned = user?.role === 'TEC' && wo.assigned_to?.id === user?.id
   // Misma regla que firmas, fotos y repuestos: solo con la OT en curso.
   const isInProgress = wo.status === 'IN_PROGRESS'
   const canEdit = isTecAssigned && isInProgress
+  const puedeAjustar = ['ADMIN', 'SUP'].includes(user?.role) && wo.status === 'PENDING'
+  const varias = visibles.length > 1
 
-  const notStartedNotice = isTecAssigned && !isInProgress && (
+  /**
+   * Al cerrar un checklist se relee la OT; si con eso quedaron todos cerrados,
+   * se pregunta si enviarla a revision, como Fracttal al llegar al 100 %.
+   * Sugiere, no obliga.
+   */
+  async function alCerrarChecklist() {
+    const { data } = await refetch()
+    const conChecklist = (data?.tasks ?? []).filter((t) => t.status !== 'CANCELLED' && t.checklist_version)
+    if (canEdit && conChecklist.length > 0 && conChecklist.every((t) => t.checklist?.completed_at)) {
+      setPreguntarRevision(true)
+    }
+  }
+
+  const aviso = isTecAssigned && !isInProgress && (
     <div className="mb-4 flex items-start gap-2 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
       <Icon name="warning" className="w-4 h-4 flex-shrink-0 mt-0.5" />
       <span>
         {wo.status === 'PENDING'
-          ? 'Inicia la OT para responder el checklist y adjuntar fotos.'
-          : 'El checklist solo se puede editar mientras la OT esta en proceso.'}
+          ? 'Inicia la OT para responder los checklists y adjuntar fotos.'
+          : 'Los checklists solo se pueden editar mientras la OT esta en proceso.'}
       </span>
     </div>
   )
 
-  if (!wo.checklist_response_id) {
-    return (
-      <>
-        {notStartedNotice}
-        <NoResponseView wo={wo} canStart={canEdit} onStart={refetch} />
-      </>
-    )
-  }
-
   return (
-    <>
-      {notStartedNotice}
-      <ChecklistResponseView
-        responseId={wo.checklist_response_id}
-        workOrderId={wo.id}
-        canEdit={canEdit}
-        onComplete={refetch}
-      />
-    </>
+    <div className="space-y-4">
+      {aviso}
+
+      {(varias || puedeAjustar) && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-gray-600">
+            {visibles.length} activo{visibles.length !== 1 ? 's' : ''}
+            {wo.location && <span className="text-gray-500"> · {wo.location.path}</span>}
+          </p>
+          {puedeAjustar && (
+            <button onClick={() => setAgregando(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
+              <Icon name="plus" className="w-4 h-4" /> Agregar tareas
+            </button>
+          )}
+        </div>
+      )}
+
+      {!varias && visibles[0] ? (
+        <>
+          {puedeAjustar && <TaskRow task={visibles[0]} abierta={false} onToggle={() => {}} />}
+          <TaskChecklist wo={wo} task={visibles[0]} canEdit={canEdit} onChange={refetch} onComplete={alCerrarChecklist} />
+        </>
+      ) : (
+        <ul className="space-y-2">
+          {visibles.map((t) => (
+            <li key={t.id} className="border border-gray-200 rounded-xl overflow-hidden">
+              <TaskRow
+                task={t}
+                abierta={abierta === t.id}
+                onToggle={() => setAbierta(abierta === t.id ? null : t.id)}
+                onRemove={puedeAjustar ? () => setQuitando(t) : null}
+              />
+              {abierta === t.id && (
+                <div className="border-t border-gray-100 p-4 bg-gray-50/40">
+                  <TaskChecklist wo={wo} task={t} canEdit={canEdit} onChange={refetch} onComplete={alCerrarChecklist} />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {agregando && <AddTasksModal wo={wo} onClose={() => setAgregando(false)} onDone={refetch} />}
+      {quitando && (
+        <RemoveTaskModal wo={wo} task={quitando} onClose={() => setQuitando(null)} onDone={refetch} />
+      )}
+      {preguntarRevision && (
+        <Modal title="Todos los checklists están completos" onClose={() => setPreguntarRevision(false)} width="max-w-md">
+          <div className="space-y-4 text-sm text-gray-600">
+            <p>¿Envías la OT a revisión? Si todavía te falta algo, puedes hacerlo más tarde desde arriba.</p>
+            <TransitionButton workOrder={wo} onSuccess={() => { setPreguntarRevision(false); refetch() }} />
+            <div className="flex justify-end">
+              <button onClick={() => setPreguntarRevision(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+                Ahora no
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
   )
 }
 
-function NoResponseView({ wo, canStart, onStart }) {
-  const createMut = useCreateChecklistResponse()
+function checklistState(task) {
+  if (!task.checklist_version) return { label: 'Sin checklist', cls: 'bg-gray-100 text-gray-500' }
+  const c = task.checklist
+  if (c?.completed_at) return { label: 'Completo', cls: 'bg-green-50 text-green-700' }
+  if (c?.answered > 0) return { label: 'En curso', cls: 'bg-blue-50 text-blue-700' }
+  return { label: 'Sin empezar', cls: 'bg-gray-100 text-gray-600' }
+}
 
+function TaskRow({ task, abierta, onToggle, onRemove = null }) {
+  const estado = checklistState(task)
+  const c = task.checklist
+  const pct = c?.total ? Math.round((c.answered / c.total) * 100) : 0
+  return (
+    <div className="flex items-stretch">
+      <button type="button" onClick={onToggle} aria-expanded={abierta}
+        className="flex-1 min-w-0 text-left px-4 py-3 hover:bg-gray-50 transition-colors">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-800 truncate">
+              <span className="font-mono text-xs text-gray-500">{task.asset.code}</span> {task.asset.name}
+            </p>
+            <p className="text-xs text-gray-500 truncate">
+              {task.title}{task.plan && ` · ${task.plan.name}`}
+              {task.asset.location && ` · ${task.asset.location}`}
+            </p>
+          </div>
+          <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full ${estado.cls}`}>{estado.label}</span>
+        </div>
+        {c && !c.completed_at && (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-brand rounded-full" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-xs text-gray-500 whitespace-nowrap">
+              {c.answered} de {c.total}
+              {c.required_missing > 0 && ` · ${c.required_missing} obligatorio${c.required_missing !== 1 ? 's' : ''}`}
+            </span>
+          </div>
+        )}
+      </button>
+      {onRemove && (
+        <button type="button" onClick={onRemove} aria-label={`Quitar ${task.asset.code} de la OT`}
+          title="Quitar de la OT: vuelve a tareas pendientes"
+          className="px-3 text-gray-400 hover:text-red-600 hover:bg-red-50 border-l border-gray-100">
+          <Icon name="trash" className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TaskChecklist({ wo, task, canEdit, onChange, onComplete }) {
+  if (!task.checklist_version) {
+    return <p className="text-gray-500 text-sm text-center py-6">Esta tarea no tiene checklist asociado.</p>
+  }
+  const responseId = task.checklist?.response_id ?? task.checklist_response_id
+  if (!responseId) {
+    return <NoResponseView task={task} assigned={!!wo.assigned_to} canStart={canEdit} onStart={onChange} />
+  }
+  return (
+    <ChecklistResponseView
+      responseId={responseId}
+      workOrderId={wo.id}
+      canEdit={canEdit}
+      onChange={onChange}
+      onComplete={onComplete}
+    />
+  )
+}
+
+/**
+ * Solo para OTs anteriores a la fase 3: las nuevas traen el checklist creado
+ * desde que la tarea entra en la OT.
+ */
+function NoResponseView({ task, assigned, canStart, onStart }) {
+  const createMut = useCreateChecklistResponse()
   const [startError, setStartError] = useState('')
 
   async function handleStart() {
     setStartError('')
     try {
-      await createMut.mutateAsync({
-        work_order: wo.id,
-        version: wo.checklist_version.id,
-      })
+      await createMut.mutateAsync({ task: task.id, version: task.checklist_version.id })
       onStart()
     } catch (err) {
       const data = err?.response?.data
@@ -684,20 +865,17 @@ function NoResponseView({ wo, canStart, onStart }) {
     <div className="text-center py-8 space-y-4">
       <Icon name="checklist" className="w-10 h-10 mx-auto text-gray-400" />
       <div>
-        <p className="font-medium text-gray-700">{wo.checklist_version.template_name}</p>
-        <p className="text-sm text-gray-500">Versión v{wo.checklist_version.version_number}</p>
+        <p className="font-medium text-gray-700">{task.checklist_version.template_name}</p>
+        <p className="text-sm text-gray-500">Versión v{task.checklist_version.version_number}</p>
       </div>
       {canStart ? (
-        <button
-          onClick={handleStart}
-          disabled={createMut.isPending}
-          className="px-5 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 transition-colors"
-        >
+        <button onClick={handleStart} disabled={createMut.isPending}
+          className="px-5 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 transition-colors">
           {createMut.isPending ? 'Iniciando...' : 'Iniciar checklist'}
         </button>
       ) : (
         <p className="text-xs text-gray-500">
-          {wo.assigned_to
+          {assigned
             ? 'Solo el técnico asignado puede iniciar el checklist.'
             : 'Asigna un técnico a esta OT para iniciar el checklist.'}
         </p>
@@ -707,8 +885,8 @@ function NoResponseView({ wo, canStart, onStart }) {
   )
 }
 
-function ChecklistResponseView({ responseId, workOrderId, canEdit, onComplete }) {
-  const { data: response, isLoading, refetch } = useChecklistResponse(responseId)
+function ChecklistResponseView({ responseId, workOrderId, canEdit, onChange, onComplete }) {
+  const { data: response, isLoading, isError, error, refetch } = useChecklistResponse(responseId)
 
   if (isLoading) {
     return (
@@ -717,6 +895,7 @@ function ChecklistResponseView({ responseId, workOrderId, canEdit, onComplete })
       </div>
     )
   }
+  if (isError) return <p className="text-sm text-amber-700 text-center py-6">{error?.message}</p>
   if (!response) return null
 
   if (response.completed_at) {
@@ -725,15 +904,130 @@ function ChecklistResponseView({ responseId, workOrderId, canEdit, onComplete })
 
   return (
     <ActiveChecklistForm
+      key={response.id}
       response={response}
       workOrderId={workOrderId}
       canEdit={canEdit}
-      onFieldSaved={refetch}
+      onFieldSaved={() => {
+        refetch()
+        onChange?.()
+      }}
       onComplete={() => {
         refetch()
-        onComplete()
+        onComplete?.()
       }}
     />
+  )
+}
+
+// ── Agregar y quitar tareas (antes de empezar) ───────────────────────────────
+
+function AddTasksModal({ wo, onClose, onDone }) {
+  const { data: pendientes = [], isLoading } = useTasks({ status: 'PENDING', hospital_id: wo.hospital?.id })
+  const addMut = useAddWorkOrderTasks(wo.id)
+  const [marcadas, setMarcadas] = useState(() => new Set())
+  const [avisos, setAvisos] = useState(null)
+
+  function toggle(id) {
+    setMarcadas((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleAdd() {
+    try {
+      const res = await addMut.mutateAsync([...marcadas])
+      onDone()
+      if (res.warnings?.length) setAvisos(res.warnings)
+      else onClose()
+    } catch {
+      // el error se muestra abajo
+    }
+  }
+
+  return (
+    <Modal title="Agregar tareas a la OT" subtitle={`Pendientes de ${wo.hospital?.name}`} onClose={onClose} width="max-w-2xl">
+      <div className="space-y-4">
+        {avisos ? (
+          <>
+            {avisos.map((a) => (
+              <p key={a} className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">{a}</p>
+            ))}
+            <div className="flex justify-end">
+              <button onClick={onClose} className="px-4 py-2 bg-brand text-white text-sm rounded-lg">Cerrar</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="border border-gray-100 rounded-lg max-h-80 overflow-y-auto divide-y divide-gray-50">
+              {isLoading ? (
+                <div className="flex justify-center py-8"><Spinner small /></div>
+              ) : pendientes.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">No hay tareas pendientes en este hospital.</p>
+              ) : pendientes.map((t) => (
+                <label key={t.id} className="flex items-start gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                  <input type="checkbox" checked={marcadas.has(t.id)} onChange={() => toggle(t.id)} className="mt-1" />
+                  <span className="min-w-0 text-sm">
+                    <span className="font-mono text-xs text-gray-500">{t.asset.code}</span>{' '}
+                    <span className="text-gray-800">{t.asset.name}</span>
+                    <span className="block text-xs text-gray-500">
+                      {t.title} · {formatDate(t.scheduled_date)}{t.asset.node_path && ` · ${t.asset.node_path}`}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {addMut.isError && (
+              <p className="text-sm text-red-600">
+                {addMut.error?.response?.data?.detail ?? 'No se pudieron agregar las tareas.'}
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
+              <button onClick={handleAdd} disabled={marcadas.size === 0 || addMut.isPending}
+                className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60">
+                {addMut.isPending ? 'Agregando...' : `Agregar ${marcadas.size || ''}`.trim()}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function RemoveTaskModal({ wo, task, onClose, onDone }) {
+  const removeMut = useRemoveWorkOrderTask(wo.id)
+
+  async function handleRemove() {
+    try {
+      await removeMut.mutateAsync(task.id)
+      onDone()
+      onClose()
+    } catch {
+      // el error se muestra abajo
+    }
+  }
+
+  return (
+    <Modal title={`Quitar ${task.asset.code} de la OT`} onClose={onClose} width="max-w-md">
+      <div className="space-y-4 text-sm text-gray-600">
+        <p>{task.asset.name} vuelve a tareas pendientes con su fecha, lista para otra OT.</p>
+        {removeMut.isError && (
+          <p className="text-red-600">{removeMut.error?.response?.data?.detail ?? 'No se pudo quitar la tarea.'}</p>
+        )}
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:text-gray-800">Cancelar</button>
+          <button onClick={handleRemove} disabled={removeMut.isPending}
+            className="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:opacity-60">
+            {removeMut.isPending ? 'Quitando...' : 'Quitar'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -779,6 +1073,9 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
   // Cachear el checklist en SQLite: sin esta fila el tecnico no puede abrirlo
   // sin red, y el indicador de pendientes no sabria a que OT pertenece.
   useEffect(() => {
+    // Lo leido de SQLite ya esta ahi, con las respuestas locales encima: no
+    // se vuelve a guardar como si viniera del servidor.
+    if (response._fromOffline) return
     saveChecklistResponse({ ...response, work_order: workOrderId }).catch((error) =>
       console.warn('[Checklist] no se pudo cachear la respuesta:', error?.message ?? error)
     )
@@ -830,6 +1127,8 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
 
     if (!isOnline) {
       await refreshPendingCount()
+      // Relee el checklist y la OT desde SQLite para que el avance se mueva.
+      onFieldSaved()
       return
     }
 
@@ -869,6 +1168,13 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
 
   const [completeError, setCompleteError] = useState('')
 
+  /** Sin red el cierre queda en cola; el motor lo sube despues de las respuestas. */
+  async function completarSinRed() {
+    await markChecklistCompletedOffline(response.id)
+    await refreshPendingCount()
+    onComplete()
+  }
+
   async function handleComplete() {
     if (!canComplete) return
     setCompleteError('')
@@ -877,10 +1183,19 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
       for (const fieldId of pendingFieldIds()) {
         await handleBlur(fieldId)
       }
+      if (!isOnline) {
+        await completarSinRed()
+        return
+      }
       await completeMut.mutateAsync()
       onComplete()
     } catch (err) {
-      const data = err?.response?.data
+      // Sin respuesta del servidor es la red: se cierra en el telefono.
+      if (!err?.response) {
+        await completarSinRed()
+        return
+      }
+      const data = err.response.data
       setCompleteError(
         data?.detail ?? 'No se pudo finalizar el checklist. Revisa los campos e intenta de nuevo.'
       )
@@ -929,6 +1244,7 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
             <ChecklistFieldInput
               field={field}
               workOrderId={workOrderId}
+              taskId={response.task}
               value={localValues[field.id] ?? ''}
               fieldResponse={answeredMap[field.id]}
               disabled={!canEdit}
@@ -999,7 +1315,7 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
   )
 }
 
-function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disabled, onChange, onBlur, onCommit }) {
+function ChecklistFieldInput({ field, workOrderId, taskId, value, fieldResponse, disabled, onChange, onBlur, onCommit }) {
   const ft = getFieldType(field.field_type)
   const isAnswered = !!fieldResponse
   const isOutOfRange = fieldResponse?.out_of_range
@@ -1199,6 +1515,7 @@ function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disable
       {field.field_type === 'PHOTO' && (
         <ChecklistPhotoField
           workOrderId={workOrderId}
+          taskId={taskId}
           value={value}
           disabled={disabled}
           onCommit={onCommit}
@@ -1221,71 +1538,150 @@ function ChecklistFieldInput({ field, workOrderId, value, fieldResponse, disable
 /**
  * Campo PHOTO del checklist.
  *
- * Antes solo guardaba `file.name` y mostraba "Foto adjuntada": el archivo no
- * salia del navegador. Ahora sube la imagen a la evidencia de la OT y guarda
- * la URL devuelta como valor del campo.
+ * Sube la imagen a la evidencia de la OT, ligada a la tarea para que en el
+ * acta salga en el bloque de su activo, y guarda la URL como valor del campo.
+ *
+ * En el telefono abre la camara, como la pestaña Evidencia: el selector de
+ * archivos de Android abre la galeria, y en campo la foto se toma ahi mismo.
+ * Sin red la foto queda en la cola de SQLite y el campo guarda
+ * `sin-conexion:<uuid>`; la foto se sube con el resto al reconectar.
  */
-function ChecklistPhotoField({ workOrderId, value, disabled, onCommit }) {
+const SIN_CONEXION = 'sin-conexion:'
+
+function ChecklistPhotoField({ workOrderId, taskId, value, disabled, onCommit }) {
   const uploadPhoto = useUploadPhoto()
+  const isOnline = useNetworkStore((s) => s.isOnline)
+  const refreshPendingCount = useNetworkStore((s) => s.refreshPendingCount)
   const [error, setError] = useState('')
+  const [capturando, setCapturando] = useState(false)
+  const nativo = Capacitor.isNativePlatform()
+  const ocupado = uploadPhoto.isPending || capturando
 
-  async function handleFile(event) {
-    const file = event.target.files?.[0]
-    // Permite volver a elegir el mismo archivo despues de un fallo.
-    event.target.value = ''
-    if (!file) return
+  async function guardarSinRed(dataUrl, takenAt) {
+    const offlineUuid = await savePhotoOffline({
+      work_order_id: workOrderId,
+      file_path: dataUrl,
+      latitude: null,
+      longitude: null,
+      taken_at: takenAt,
+      caption: 'Checklist',
+      task_id: taskId || null,
+    })
+    if (!offlineUuid) {
+      setError('No hay base de datos local disponible para guardar la foto.')
+      return
+    }
+    await refreshPendingCount()
+    onCommit(`${SIN_CONEXION}${offlineUuid}`)
+  }
 
+  async function subir(file, dataUrl = null) {
     setError('')
+    const takenAt = new Date().toISOString()
+    if (dataUrl && !isOnline) return guardarSinRed(dataUrl, takenAt)
     try {
       const photo = await uploadPhoto.mutateAsync({
         work_order: workOrderId,
+        task: taskId || null,
         file,
-        taken_at: new Date().toISOString(),
+        taken_at: takenAt,
         caption: 'Checklist',
       })
       onCommit(photo.file_url ?? photo.id)
     } catch (err) {
-      const detail = err?.response?.data
+      // No llego al servidor: en el telefono se guarda para subirla despues.
+      if (!err?.response && dataUrl) return guardarSinRed(dataUrl, takenAt)
+      if (!err?.response) {
+        setError('No se pudo conectar con el servidor. Revisa la conexión e intenta de nuevo.')
+        return
+      }
+      const detail = err.response.data
       const first = detail && typeof detail === 'object' ? Object.values(detail).flat()[0] : detail
       setError(String(first ?? 'No se pudo subir la foto.'))
     }
   }
 
+  async function handleFile(event) {
+    const file = event.target.files?.[0]
+    // Permite volver a elegir el mismo archivo despues de un fallo.
+    event.target.value = ''
+    if (file) await subir(file)
+  }
+
+  async function tomarFoto() {
+    setError('')
+    setCapturando(true)
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 80,
+        allowEditing: false,
+        resultType: CameraResultType.Base64,
+        source: CameraSource.Camera,
+        saveToGallery: false,
+        correctOrientation: true,
+        width: 1920,
+      })
+      const mime = photo.format === 'png' ? 'image/png' : 'image/jpeg'
+      const dataUrl = `data:${mime};base64,${photo.base64String}`
+      await subir(await dataUrlToFile(dataUrl, `checklist-${Date.now()}`), dataUrl)
+    } catch (err) {
+      // Cancelar la camara tambien llega aqui; no es un error.
+      const message = err?.message ?? ''
+      if (!/cancel/i.test(message)) setError(message || 'No se pudo abrir la cámara.')
+    } finally {
+      setCapturando(false)
+    }
+  }
+
+  const sinConexion = value?.startsWith(SIN_CONEXION)
+  const botonCls = `inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm transition-colors ${
+    ocupado ? 'text-gray-400 cursor-wait' : 'text-gray-600 hover:bg-gray-50 cursor-pointer'
+  }`
+  const botonTexto = (
+    <>
+      {ocupado ? <Spinner small /> : <Icon name="camera" className="w-4 h-4" />}
+      {capturando ? 'Abriendo cámara...' : uploadPhoto.isPending ? 'Subiendo...' : nativo ? 'Tomar foto' : 'Seleccionar foto'}
+    </>
+  )
+
   return (
     <div>
-      {value && !uploadPhoto.isPending && (
+      {value && !ocupado && (
         <p className="text-xs text-green-600 mb-1 flex items-center gap-1">
           <Icon name="camera" className="w-3.5 h-3.5 flex-shrink-0" />
           Foto adjunta
-          <a
-            href={value}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-brand hover:underline"
-          >
-            ver
-          </a>
+          {sinConexion ? (
+            <span className="text-gray-500">· tomada sin conexión, se sube con la evidencia</span>
+          ) : (
+            <a
+              href={mediaUrl(value)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand hover:underline"
+            >
+              ver
+            </a>
+          )}
         </p>
       )}
-      {!disabled && (
-        <label
-          className={`inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm transition-colors ${
-            uploadPhoto.isPending
-              ? 'text-gray-400 cursor-wait'
-              : 'text-gray-600 hover:bg-gray-50 cursor-pointer'
-          }`}
-        >
-          {uploadPhoto.isPending ? <Spinner small /> : <Icon name="camera" className="w-4 h-4" />}
-          {uploadPhoto.isPending ? 'Subiendo...' : 'Seleccionar foto'}
+      {!disabled && (nativo ? (
+        <button type="button" onClick={tomarFoto} disabled={ocupado} className={botonCls}>
+          {botonTexto}
+        </button>
+      ) : (
+        // relative: el input sr-only es absoluto; sin esto se posiciona respecto
+        // al marco de la app y al enfocarlo el navegador desplaza el marco.
+        <label className={`relative ${botonCls}`}>
+          {botonTexto}
           <input
             type="file"
             accept="image/*"
             className="sr-only"
-            disabled={uploadPhoto.isPending}
+            disabled={ocupado}
             onChange={handleFile}
           />
         </label>
-      )}
+      ))}
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   )
@@ -1790,10 +2186,14 @@ function CompletedChecklistView({ response }) {
         <div>
           <p className="text-sm font-semibold text-green-800">Checklist completado</p>
           <p className="text-xs text-green-600">
-            Inicio: {new Date(response.started_at).toLocaleString('es-CO')}
-            {' · '}
+            {response.started_at && `Inicio: ${new Date(response.started_at).toLocaleString('es-CO')} · `}
             Cierre: {new Date(response.completed_at).toLocaleString('es-CO')}
           </p>
+          {response._completionPending && (
+            <p className="text-xs text-amber-700 mt-0.5">
+              Cerrado en el teléfono. Se enviará al servidor al recuperar la conexión.
+            </p>
+          )}
         </div>
       </div>
 

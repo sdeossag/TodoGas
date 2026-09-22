@@ -230,4 +230,16 @@
   .stagger > *:nth-child(5) { animation-delay: 180ms; }
   .stagger > *:nth-child(6) { animation-delay: 225ms; }
   .stagger > *:nth-child(n + 7) { animation-delay: 260ms; }
+
+  /* Recorta sin ser contenedor de scroll. Con overflow:hidden el navegador
+     igual lo desplaza por codigo: al enfocar un elemento posicionado respecto
+     a el (un input sr-only, por ejemplo) corre todo el marco y la pantalla
+     queda en blanco. clip no se deja desplazar; hidden queda de respaldo para
+     WebViews viejos. Sin scroll deja de valer min-height:0 implicito, por eso
+     va explicito. */
+  .overflow-frame {
+    overflow: hidden;
+    overflow: clip;
+    min-height: 0;
+  }
 }

@@ -3,17 +3,11 @@ import { useQueryClient } from '@tanstack/react-query'
 import useAuthStore from '../../store/authStore'
 import useNetworkStore from '../../store/networkStore'
 import { useCancelWorkOrder, useTransitionWorkOrder } from '../../api/workOrders'
-import { useWorkOrderSignatures } from '../../api/evidence'
 import { markStatusChangedOffline } from '../../db/repositories'
+import useReviewRequirements from '../../hooks/useReviewRequirements'
 import Icon from '../ui/Icon'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import Spinner from '../ui/Spinner'
-
-const NO_SIGNATURE_MSG =
-  'No se puede enviar a revision sin al menos una firma digital registrada.'
-
-const OFFLINE_SIGNATURE_MSG =
-  'Sin conexion no se puede verificar la firma. Reconecta para enviar a revision.'
 
 // Cancelar usa otro endpoint que el motor de sincronizacion no reproduce,
 // asi que no se permite sin conexion en vez de encolar algo que fallaria.
@@ -57,11 +51,9 @@ export default function TransitionButton({ workOrder, onSuccess }) {
   const transitionMut = useTransitionWorkOrder(workOrder?.id)
   const cancelMut = useCancelWorkOrder(workOrder?.id)
 
-  // Sin red esta consulta solo generaria ruido de errores.
-  const { data: signatures = [] } = useWorkOrderSignatures(
-    isOnline && status === 'IN_PROGRESS' ? workOrder?.id : null
-  )
-  const hasSignatures = signatures.length > 0
+  // Lo mismo que valida el servidor, calculado tambien sin red: los checklists
+  // de todas las tareas, una foto y la firma.
+  const requisitos = useReviewRequirements(workOrder)
 
   const isTecAssigned = role === 'TEC' && workOrder?.assigned_to?.id === user?.id
 
@@ -88,10 +80,8 @@ export default function TransitionButton({ workOrder, onSuccess }) {
         return
       }
 
-      // Refleja el cambio en la vista de detalle sin tocar la API.
-      queryClient.setQueryData(['work-orders', workOrder.id], (old) =>
-        old ? { ...old, status: new_status } : old
-      )
+      // El detalle sin red se lee de SQLite, donde ya quedo el estado nuevo.
+      await queryClient.invalidateQueries({ queryKey: ['work-orders', workOrder.id] })
 
       await refreshPendingCount()
       // El aviso va antes del refetch: este puede sacar la tarjeta de la
@@ -129,8 +119,8 @@ export default function TransitionButton({ workOrder, onSuccess }) {
   const isActive = activeStatuses.includes(status)
   const loading = transitionMut.isPending || cancelMut.isPending || savingOffline
 
-  const reviewBlocked = isTecAssigned && status === 'IN_PROGRESS' && !hasSignatures
-  const reviewBlockedReason = isOnline ? NO_SIGNATURE_MSG : OFFLINE_SIGNATURE_MSG
+  const reviewBlocked = isTecAssigned && status === 'IN_PROGRESS' && !requisitos.ready
+  const reviewBlockedReason = `Falta: ${requisitos.missing.join('; ')}.`
 
   return (
     <div className="space-y-2">
@@ -158,11 +148,6 @@ export default function TransitionButton({ workOrder, onSuccess }) {
               {loading ? <Spinner /> : <span>&#8593;</span>}
               Enviar a revision
             </button>
-            {reviewBlocked && (
-              <span className="absolute bottom-full left-0 mb-1 w-64 text-xs bg-gray-800 text-white rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                {reviewBlockedReason}
-              </span>
-            )}
           </div>
         )}
 
@@ -229,9 +214,9 @@ export default function TransitionButton({ workOrder, onSuccess }) {
         )}
       </div>
 
-      {/* Aviso de firma faltante debajo del boton (mobile-friendly) */}
+      {/* Lo que falta para enviar a revision, con el activo si son varios. */}
       {reviewBlocked && (
-        <p className="text-xs text-amber-600 sm:hidden">{reviewBlockedReason}</p>
+        <p className="text-xs text-amber-700">Para enviar a revisión {reviewBlockedReason.charAt(0).toLowerCase() + reviewBlockedReason.slice(1)}</p>
       )}
 
       {/* Error de transicion del backend */}

@@ -12,7 +12,8 @@
  */
 
 import { Capacitor } from '@capacitor/core'
-import { CREATE_TABLES, DB_NAME } from './schema'
+import { migrate } from './migrations'
+import { DB_NAME } from './schema'
 
 let driver = null
 let initPromise = null
@@ -37,9 +38,9 @@ async function loadDriver() {
 
 async function doInit() {
   driver = await loadDriver()
-  for (const statement of CREATE_TABLES) {
-    await driver.execute(statement)
-  }
+  // Crea las tablas en una base nueva o sube el esquema de una existente sin
+  // tocar lo que falta por sincronizar.
+  await migrate(driver)
   await driver.persist()
   available = true
   return driver

@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCreateWorkOrder } from '../../api/workOrders'
-import { useAssets } from '../../api/assets'
+import { useAssets, useAssetTree, useHospitals } from '../../api/assets'
 import { useUsers } from '../../api/users'
 import { useChecklistTemplates } from '../../api/checklists'
 import Icon from '../../components/ui/Icon'
-import { assetStatusLabel, fieldLabel } from '../../constants/labels'
+import { fieldLabel } from '../../constants/labels'
 import Spinner from '../../components/ui/Spinner'
+import { flattenTree, indentedLabel } from '../../utils/locationTree'
 
 
 function Field({ label, required, children, hint }) {
@@ -23,97 +24,49 @@ function Field({ label, required, children, hint }) {
 
 const INPUT = 'input-field'
 
-// ── Asset autocomplete ───────────────────────────────────────────────────────
+// ── Formulario ───────────────────────────────────────────────────────────────
 
-function AssetSearch({ value, onChange }) {
-  const [query, setQuery] = useState('')
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-
-  const { data: results = [], isFetching } = useAssets(
-    query.length >= 2 ? { search: query, status: 'ACTIVE' } : {}
-  )
-
-  useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
-
-  function select(asset) {
-    onChange(asset)
-    setQuery(`${asset.code} — ${asset.name}`)
-    setOpen(false)
-  }
-
-  function handleQueryChange(e) {
-    setQuery(e.target.value)
-    if (!e.target.value) onChange(null)
-    setOpen(true)
-  }
-
-  return (
-    <div className="relative" ref={ref}>
-      <input
-        value={value ? `${value.code} — ${value.name}` : query}
-        onChange={handleQueryChange}
-        onFocus={() => setOpen(true)}
-        placeholder="Buscar por código o nombre..."
-        className={INPUT}
-        readOnly={!!value}
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => { onChange(null); setQuery('') }}
-          className="absolute right-2 top-2 text-gray-500 hover:text-gray-600"
-          aria-label="Limpiar seleccion"
-        ><Icon name="close" className="w-4 h-4" /></button>
-      )}
-      {open && !value && query.length >= 2 && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-          {isFetching ? (
-            <div className="flex justify-center p-3"><Spinner /></div>
-          ) : results.length === 0 ? (
-            <p className="text-sm text-gray-500 p-3 text-center">Sin resultados</p>
-          ) : (
-            results.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => select(a)}
-                className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors"
-              >
-                <span className="font-mono text-xs text-gray-500">{a.code}</span>
-                <span className="mx-1 text-gray-400">|</span>
-                <span className="text-sm text-gray-700">{a.name}</span>
-                <span className="block text-xs text-gray-500">{a.hospital?.name ?? ''}</span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Main form ────────────────────────────────────────────────────────────────
-
+/**
+ * Alta manual de una OT (correctivos y verificaciones).
+ *
+ * Una OT es una visita a un hospital y puede cubrir varios activos: se elige
+ * hospital, se filtra por ubicación y se marcan los activos, cada uno con su
+ * checklist. La ubicación de la visita viaja con la OT para que el técnico sepa
+ * a dónde va.
+ */
 export default function CreateWorkOrderPage() {
   const navigate = useNavigate()
   const createMut = useCreateWorkOrder()
 
+  const { data: hospitals = [] } = useHospitals({ is_active: true })
   // El endpoint /api/users/ no filtra por rol — filtramos client-side
   const tecUsers = (useUsers({}).data ?? []).filter((u) => u.role === 'TEC' && u.is_active)
 
-  // Solo sirven las plantillas con una version publicada: la OT se ata a la
+  // Solo sirven las plantillas con una version publicada: la tarea se ata a la
   // version, no a la plantilla.
   const { data: checklistTemplates = [] } = useChecklistTemplates({ is_active: true })
   const publishedChecklists = checklistTemplates.filter((t) => t.current_version_id)
 
-  const [selectedAsset, setSelectedAsset] = useState(null)
+  const [hospital, setHospital] = useState('')
+  const [node, setNode] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  // activo elegido -> version de checklist ('' = sin checklist)
+  const [elegidos, setElegidos] = useState(() => new Map())
+
+  const { data: tree = [] } = useAssetTree(hospital)
+  const nodos = useMemo(() => flattenTree(tree), [tree])
+
+  const { data: assets = [], isFetching } = useAssets(
+    {
+      hospital_id: hospital,
+      status: 'ACTIVE',
+      ...(node && { node_id: node, include_sublocations: true }),
+      ...(search && { search }),
+    },
+    { enabled: !!hospital }
+  )
+
   const [form, setForm] = useState({
     task_type: 'CORRECTIVE',
     title: '',
@@ -123,7 +76,6 @@ export default function CreateWorkOrderPage() {
     estimated_hours: '',
     estimated_minutes: '',
     assigned_to: '',
-    checklist_version: '',
     notes: '',
     request_number: '',
   })
@@ -134,9 +86,42 @@ export default function CreateWorkOrderPage() {
     if (errors[field]) setErrors((e) => ({ ...e, [field]: null }))
   }
 
+  function toggle(asset) {
+    setElegidos((prev) => {
+      const next = new Map(prev)
+      if (next.has(asset.id)) next.delete(asset.id)
+      else next.set(asset.id, { asset, version: '' })
+      return next
+    })
+    if (errors.tasks) setErrors((e) => ({ ...e, tasks: null }))
+  }
+
+  function setChecklist(assetId, version) {
+    setElegidos((prev) => {
+      const next = new Map(prev)
+      const actual = next.get(assetId)
+      if (actual) next.set(assetId, { ...actual, version })
+      return next
+    })
+  }
+
+  const marcados = [...elegidos.values()]
+  const todosMarcados = assets.length > 0 && assets.every((a) => elegidos.has(a.id))
+
+  function toggleTodos() {
+    setElegidos((prev) => {
+      const next = new Map(prev)
+      for (const a of assets) {
+        if (todosMarcados) next.delete(a.id)
+        else if (!next.has(a.id)) next.set(a.id, { asset: a, version: '' })
+      }
+      return next
+    })
+  }
+
   function validate() {
     const errs = {}
-    if (!selectedAsset) errs.asset = 'Selecciona un activo'
+    if (marcados.length === 0) errs.tasks = 'Marca al menos un activo'
     if (!form.title.trim()) errs.title = 'El título es requerido'
     if (!form.scheduled_date) errs.scheduled_date = 'La fecha límite es requerida'
     return errs
@@ -153,15 +138,18 @@ export default function CreateWorkOrderPage() {
         : undefined
 
     const payload = {
-      asset: selectedAsset.id,
+      tasks: marcados.map(({ asset, version }) => ({
+        asset: asset.id,
+        ...(version && { checklist_version: version }),
+      })),
       task_type: form.task_type,
       title: form.title.trim(),
       description: form.description.trim(),
       priority: form.priority,
       scheduled_date: form.scheduled_date,
       notes: form.notes.trim(),
+      ...(node && { location: node }),
       ...(form.assigned_to && { assigned_to: form.assigned_to }),
-      ...(form.checklist_version && { checklist_version: form.checklist_version }),
       ...(estimatedDuration && { estimated_duration: estimatedDuration }),
       ...(form.request_number && { request_number: parseInt(form.request_number) }),
     }
@@ -175,7 +163,7 @@ export default function CreateWorkOrderPage() {
       if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
         const fieldErrors = {}
         Object.entries(detail).forEach(([k, v]) => {
-          fieldErrors[k] = Array.isArray(v) ? v[0] : String(v)
+          fieldErrors[k] = Array.isArray(v) ? JSON.stringify(v[0]) : String(v)
         })
         setErrors(fieldErrors)
       } else {
@@ -185,7 +173,7 @@ export default function CreateWorkOrderPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <button onClick={() => navigate('/ordenes')} className="text-gray-500 hover:text-gray-600" aria-label="Volver a ordenes">
@@ -199,7 +187,7 @@ export default function CreateWorkOrderPage() {
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 shadow-card p-6 space-y-5">
         {/* Banner de error general */}
-        {Object.keys(errors).length > 0 && (
+        {Object.keys(errors).some((k) => errors[k]) && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-sm font-semibold text-red-700 mb-1">No se pudo crear la OT:</p>
             <ul className="text-sm text-red-600 space-y-0.5 list-disc list-inside">
@@ -212,26 +200,123 @@ export default function CreateWorkOrderPage() {
           </div>
         )}
 
-        {/* Activo */}
-        <Field label="Activo" required>
-          <AssetSearch value={selectedAsset} onChange={setSelectedAsset} />
-          {errors.asset && <p className="text-red-500 text-xs mt-1">{errors.asset}</p>}
+        {/* Hospital y ubicacion de la visita */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Hospital" required>
+            <select
+              value={hospital}
+              onChange={(e) => { setHospital(e.target.value); setNode(''); setElegidos(new Map()) }}
+              className={INPUT}
+            >
+              <option value="">Elige un hospital</option>
+              {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Ubicación" hint="Incluye lo que tiene dentro. Queda como la ubicación de la visita.">
+            <select value={node} onChange={(e) => setNode(e.target.value)} disabled={!hospital} className={INPUT}>
+              <option value="">Todo el hospital</option>
+              {nodos.map((n) => <option key={n.id} value={n.id}>{indentedLabel(n.name, n.depth)}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        {/* Activos de la visita */}
+        <Field label="Activos" required hint="Una OT puede cubrir varios activos del mismo hospital.">
+          <div className="flex gap-2 mb-2">
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setSearch(searchInput.trim()) } }}
+              disabled={!hospital}
+              placeholder="Código o nombre"
+              aria-label="Buscar activo"
+              className={INPUT}
+            />
+            <button
+              type="button"
+              onClick={() => setSearch(searchInput.trim())}
+              disabled={!hospital}
+              className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+            >
+              Buscar
+            </button>
+          </div>
+
+          <div className="border border-gray-100 rounded-lg max-h-72 overflow-y-auto">
+            {!hospital ? (
+              <p className="text-sm text-gray-500 text-center py-8">Elige un hospital para ver sus activos.</p>
+            ) : isFetching && assets.length === 0 ? (
+              <div className="flex justify-center py-8"><Spinner /></div>
+            ) : assets.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">No hay activos activos con este filtro.</p>
+            ) : (
+              <>
+                <label className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 text-xs text-gray-500">
+                  <input type="checkbox" checked={todosMarcados} onChange={toggleTodos} />
+                  Marcar los {assets.length} de esta lista
+                </label>
+                {assets.map((a) => (
+                  <label key={a.id} className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={elegidos.has(a.id)}
+                      onChange={() => toggle(a)}
+                      className="mt-1"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm text-gray-800 truncate">
+                        <span className="font-mono text-xs text-gray-500">{a.code}</span> {a.name}
+                      </span>
+                      <span className="block text-xs text-gray-500 truncate">{a.node?.path || 'Sin ubicación'}</span>
+                    </span>
+                  </label>
+                ))}
+              </>
+            )}
+          </div>
+          {errors.tasks && <p className="text-red-500 text-xs mt-1">{errors.tasks}</p>}
         </Field>
 
-        {/* Info del activo seleccionado */}
-        {selectedAsset && (
-          <div className="bg-brand/5 border border-brand/20 rounded-lg p-3 text-sm">
-            <p className="font-medium text-gray-700">
-              <span className="font-mono text-xs text-gray-500">{selectedAsset.code}</span>{' '}
-              {selectedAsset.name}
+        {/* Checklist de cada activo marcado */}
+        {marcados.length > 0 && (
+          <div className="bg-brand/5 border border-brand/20 rounded-lg p-3 space-y-2">
+            <p className="text-sm font-medium text-gray-700">
+              {marcados.length} activo{marcados.length !== 1 ? 's' : ''} en esta OT
             </p>
-            <p className="text-gray-500 text-xs mt-0.5">{selectedAsset.hospital?.name}</p>
-            <p className="text-xs mt-1">
-              Estado:{' '}
-              <span className={selectedAsset.status === 'ACTIVE' ? 'text-green-600 font-medium' : 'text-red-500'}>
-                {assetStatusLabel(selectedAsset.status)}
-              </span>
+            <p className="text-xs text-gray-500">
+              {publishedChecklists.length === 0
+                ? 'No hay plantillas de checklist con una versión publicada.'
+                : 'Cada activo puede llevar su propio checklist.'}
             </p>
+            {marcados.map(({ asset, version }) => (
+              <div key={asset.id} className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-gray-700 flex-1 min-w-[12rem] truncate">
+                  <span className="font-mono text-xs text-gray-500">{asset.code}</span> {asset.name}
+                </span>
+                <select
+                  value={version}
+                  onChange={(e) => setChecklist(asset.id, e.target.value)}
+                  disabled={publishedChecklists.length === 0}
+                  aria-label={`Checklist de ${asset.code}`}
+                  className={`${INPUT} w-auto max-w-[16rem] text-sm`}
+                >
+                  <option value="">Sin checklist</option>
+                  {publishedChecklists.map((t) => (
+                    <option key={t.id} value={t.current_version_id}>
+                      {t.name} (v{t.current_version_number})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => toggle(asset)}
+                  className="text-gray-400 hover:text-red-600"
+                  aria-label={`Quitar ${asset.code} de la OT`}
+                >
+                  <Icon name="close" className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -243,7 +328,7 @@ export default function CreateWorkOrderPage() {
               { value: 'VERIFICATION', label: 'Verificación' },
             ].map(({ value, label }) => (
               <label key={value}
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border rounded-lg cursor-pointer text-sm font-medium transition-colors ${
+                className={`relative flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border rounded-lg cursor-pointer text-sm font-medium transition-colors ${
                   form.task_type === value
                     ? 'border-brand bg-brand/5 text-brand'
                     : 'border-gray-200 text-gray-500 hover:border-gray-300'
@@ -292,7 +377,7 @@ export default function CreateWorkOrderPage() {
         </div>
 
         {/* Duración estimada */}
-        <Field label="Duración estimada" hint="Opcional">
+        <Field label="Duración estimada" hint="Opcional. Es la de la visita completa.">
           <div className="flex gap-2 items-center">
             <input type="number" min="0" max="999" value={form.estimated_hours}
               onChange={(e) => set('estimated_hours', e.target.value)}
@@ -313,33 +398,6 @@ export default function CreateWorkOrderPage() {
               <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
             ))}
           </select>
-        </Field>
-
-        {/* Checklist */}
-        <Field
-          label="Checklist"
-          hint={
-            publishedChecklists.length === 0
-              ? 'No hay plantillas con una version publicada.'
-              : 'Opcional. El tecnico lo respondera desde el detalle de la OT.'
-          }
-        >
-          <select
-            value={form.checklist_version}
-            onChange={(e) => set('checklist_version', e.target.value)}
-            disabled={publishedChecklists.length === 0}
-            className={INPUT}
-          >
-            <option value="">Sin checklist</option>
-            {publishedChecklists.map((t) => (
-              <option key={t.id} value={t.current_version_id}>
-                {t.name} (v{t.current_version_number})
-              </option>
-            ))}
-          </select>
-          {errors.checklist_version && (
-            <p className="text-red-500 text-xs mt-1">{errors.checklist_version}</p>
-          )}
         </Field>
 
         {/* Notas */}

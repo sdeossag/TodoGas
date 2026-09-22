@@ -72,35 +72,21 @@
   </table>
 </div>
 
-<!-- SECCION 1: Datos del activo -->
+<!-- SECCION 1: Datos de la visita -->
 <div class="section">
-  <h2>1. Datos del activo y la intervención</h2>
+  <h2>1. Datos de la visita</h2>
   <table>
     <tr>
-      <th style="width:50%">Información del activo</th>
-      <th style="width:50%">Información de la intervención</th>
-    </tr>
-    <tr>
-      <td>
-        <table style="border:none; margin:0">
-          <tr><td style="border:none; padding:2px 0"><span class="label">Hospital / Cliente</span><br><strong>{{ asset.hospital.name }}</strong></td></tr>
-          {% if asset.node %}<tr><td style="border:none; padding:2px 0"><span class="label">Área / Ubicación</span><br>{{ asset.node.name }}</td></tr>{% endif %}
-          {% if asset.equipment_location %}<tr><td style="border:none; padding:2px 0"><span class="label">Ubicación</span><br>{{ asset.equipment_location }}</td></tr>{% endif %}
-          <tr><td style="border:none; padding:2px 0"><span class="label">Nombre del activo</span><br><strong>{{ asset.name }}</strong></td></tr>
-          <tr><td style="border:none; padding:2px 0"><span class="label">Código interno</span><br>{{ asset.code }}</td></tr>
-          {% if asset.asset_type %}<tr><td style="border:none; padding:2px 0"><span class="label">Tipo de activo</span><br>{{ asset.asset_type }}</td></tr>{% endif %}
-        </table>
+      <td style="width:50%">
+        <span class="label">Hospital / Cliente</span><br><strong>{{ work_order.hospital.name }}</strong>
+        {% if work_order.location %}<br><br><span class="label">Ubicación de la visita</span><br>{{ work_order.location.path }}{% endif %}
+        <br><br><span class="label">Activos intervenidos</span><br>{{ blocks|length }}
       </td>
-      <td>
-        <table style="border:none; margin:0">
-          {% if asset.manufacturer %}<tr><td style="border:none; padding:2px 0"><span class="label">Fabricante</span><br>{{ asset.manufacturer }}</td></tr>{% endif %}
-          {% if asset.model %}<tr><td style="border:none; padding:2px 0"><span class="label">Modelo</span><br>{{ asset.model }}</td></tr>{% endif %}
-          {% if asset.serial_number %}<tr><td style="border:none; padding:2px 0"><span class="label">Número de serie</span><br>{{ asset.serial_number }}</td></tr>{% endif %}
-          {% if work_order.completed_at %}<tr><td style="border:none; padding:2px 0"><span class="label">Fecha de intervención</span><br>{{ work_order.completed_at|date:"d/m/Y H:i" }}</td></tr>{% endif %}
-          {% if work_order.scheduled_date %}<tr><td style="border:none; padding:2px 0"><span class="label">Fecha programada</span><br>{{ work_order.scheduled_date|date:"d/m/Y" }}</td></tr>{% endif %}
-          <tr><td style="border:none; padding:2px 0"><span class="label">Técnico responsable</span><br><strong>{% if technician %}{{ technician.first_name }} {{ technician.last_name }}{% else %}No asignado{% endif %}</strong></td></tr>
-          {% if work_order.actual_duration %}<tr><td style="border:none; padding:2px 0"><span class="label">Duración real</span><br>{{ work_order.actual_duration }}</td></tr>{% endif %}
-        </table>
+      <td style="width:50%">
+        <span class="label">Técnico responsable</span><br><strong>{% if technician %}{{ technician.first_name }} {{ technician.last_name }}{% else %}No asignado{% endif %}</strong>
+        {% if work_order.scheduled_date %}<br><br><span class="label">Fecha programada</span><br>{{ work_order.scheduled_date|date:"d/m/Y" }}{% endif %}
+        {% if work_order.completed_at %}<br><br><span class="label">Fecha de intervención</span><br>{{ work_order.completed_at|date:"d/m/Y H:i" }}{% endif %}
+        {% if actual_duration %}<br><br><span class="label">Duración real</span><br>{{ actual_duration }}{% endif %}
       </td>
     </tr>
   </table>
@@ -112,11 +98,50 @@
   {% endif %}
 </div>
 
-<!-- SECCION 2: Checklist -->
+<!-- SECCION 2: Resumen de activos -->
 <div class="section">
-  <h2>2. Checklist ejecutado</h2>
-  {% if checklist_response %}
-    {% regroup checklist_response.field_responses.all by field.group as groups %}
+  <h2>2. Activos intervenidos</h2>
+  {% if blocks %}
+  <table>
+    <tr><th style="width:5%">#</th><th style="width:18%">Código</th><th>Activo</th><th>Tarea</th><th style="width:16%">Checklist</th></tr>
+    {% for b in blocks %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td>{{ b.asset.code }}</td>
+      <td>{{ b.asset.name }}{% if b.asset.node %}<br><span class="label">{{ b.asset.node.path }}</span>{% endif %}</td>
+      <td>{{ b.task.title }}{% if b.task.plan_task %}<br><span class="label">{{ b.task.plan_task.plan.name }}</span>{% endif %}</td>
+      <td>{% if b.checklist_response %}{% if b.checklist_response.completed_at %}Completo{% else %}Incompleto{% endif %}{% else %}Sin checklist{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="no-data">La OT no tiene activos registrados.</p>
+  {% endif %}
+</div>
+
+<!-- SECCION 3: Un bloque por activo -->
+{% for b in blocks %}
+<div class="section">
+  <h2>3.{{ forloop.counter }} {{ b.asset.name }} &mdash; {{ b.asset.code }}</h2>
+  <table>
+    <tr>
+      <td style="width:50%">
+        {% if b.asset.node %}<span class="label">Ubicación</span><br>{{ b.asset.node.path }}<br><br>{% endif %}
+        {% if b.asset.equipment_location %}<span class="label">Ubicación del equipo</span><br>{{ b.asset.equipment_location }}<br><br>{% endif %}
+        {% if b.asset.asset_type %}<span class="label">Tipo de activo</span><br>{{ b.asset.asset_type }}<br><br>{% endif %}
+        <span class="label">Tarea</span><br>{{ b.task.title }}
+      </td>
+      <td style="width:50%">
+        {% if b.asset.manufacturer %}<span class="label">Fabricante</span><br>{{ b.asset.manufacturer }}<br><br>{% endif %}
+        {% if b.asset.model %}<span class="label">Modelo</span><br>{{ b.asset.model }}<br><br>{% endif %}
+        {% if b.asset.serial_number %}<span class="label">Número de serie</span><br>{{ b.asset.serial_number }}<br><br>{% endif %}
+        {% if b.checklist_response %}<span class="label">Checklist</span><br>{{ b.task.checklist_version.template.name }} v{{ b.task.checklist_version.version_number }}{% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {% if b.checklist_response %}
+    {% regroup b.checklist_response.field_responses.all by field.group as groups %}
     {% for group in groups %}
       <table>
         <tr class="group-header"><td colspan="3">{% if group.grouper %}{{ group.grouper }}{% else %}General{% endif %}</td></tr>
@@ -124,28 +149,46 @@
         {% for fr in group.list %}
         <tr>
           <td>{{ fr.field.label }}</td>
-          <td>{{ fr.value|default:"—" }}</td>
+          {# Una foto guarda su URL (en S3 firmada y larguisima) o sin-conexion:<uuid>: la imagen va en las fotos del activo. #}
+          <td>{% if fr.field.field_type == "PHOTO" %}{% if fr.value %}Foto adjunta (ver fotos del activo){% else %}—{% endif %}{% else %}{{ fr.value|default:"—" }}{% endif %}</td>
           <td>{{ fr.notes|default:"" }}</td>
         </tr>
         {% endfor %}
       </table>
+    {% empty %}
+      <p class="no-data">El checklist no tiene respuestas.</p>
     {% endfor %}
     <div class="meta-row">
-      {% if checklist_response.started_at %}Inicio: {{ checklist_response.started_at|date:"d/m/Y H:i" }}{% endif %}
-      {% if checklist_response.completed_at %} &nbsp;|&nbsp; Fin: {{ checklist_response.completed_at|date:"d/m/Y H:i" }}{% endif %}
+      {% if b.checklist_response.started_at %}Inicio: {{ b.checklist_response.started_at|date:"d/m/Y H:i" }}{% endif %}
+      {% if b.checklist_response.completed_at %} &nbsp;|&nbsp; Fin: {{ b.checklist_response.completed_at|date:"d/m/Y H:i" }}{% endif %}
     </div>
   {% else %}
-    <p class="no-data">Esta OT no tenía checklist asociado.</p>
+    <p class="no-data">Esta tarea no tenía checklist asociado.</p>
+  {% endif %}
+
+  {% if b.photos %}
+  <table class="photo-grid">
+    {% for photo in b.photos|slice:":6" %}
+      {% if forloop.counter0|divisibleby:2 %}<tr>{% endif %}
+      <td style="width:50%">
+        <img src="{{ photo.file_url }}" alt="Foto de {{ b.asset.code }}">
+        {% if photo.caption %}<div class="photo-caption">{{ photo.caption }}</div>{% endif %}
+        <div class="photo-caption">{{ photo.taken_at|date:"d/m/Y H:i" }}{% if photo.latitude and photo.longitude %} · GPS: {{ photo.latitude }}, {{ photo.longitude }}{% endif %}</div>
+      </td>
+      {% if forloop.counter|divisibleby:2 or forloop.last %}</tr>{% endif %}
+    {% endfor %}
+  </table>
+  {% if b.photos|length > 6 %}<p class="no-data">Se muestran 6 de {{ b.photos|length }} fotos de este activo. Ver las demás en el sistema CMMS.</p>{% endif %}
   {% endif %}
 </div>
+{% endfor %}
 
-<!-- SECCION 3: Evidencia fotográfica -->
+<!-- SECCION 4: Evidencia fotográfica de la visita -->
 <div class="section">
-  <h2>3. Evidencia fotográfica</h2>
-  {% if photos %}
-    {% with photos_list=photos|slice:":10" %}
+  <h2>4. Evidencia fotográfica de la visita</h2>
+  {% if visit_photos %}
     <table class="photo-grid">
-      {% for photo in photos_list %}
+      {% for photo in visit_photos|slice:":10" %}
         {% if forloop.counter0|divisibleby:2 %}<tr>{% endif %}
         <td style="width:50%">
           <img src="{{ photo.file_url }}" alt="Foto {{ forloop.counter }}">
@@ -158,18 +201,19 @@
         {% if forloop.counter|divisibleby:2 or forloop.last %}</tr>{% endif %}
       {% endfor %}
     </table>
-    {% endwith %}
-    {% if photos|length > 10 %}
+    {% if visit_photos|length > 10 %}
     <p class="no-data">Nota: Se muestran las primeras 10 fotos. Ver fotos adicionales en el sistema CMMS.</p>
     {% endif %}
+  {% elif photos %}
+    <p class="no-data">Todas las fotos están con su activo, en la sección 3.</p>
   {% else %}
     <p class="no-data">No se registraron fotos de evidencia.</p>
   {% endif %}
 </div>
 
-<!-- SECCION 4: Materiales -->
+<!-- SECCION 5: Materiales -->
 <div class="section">
-  <h2>4. Materiales utilizados</h2>
+  <h2>5. Materiales utilizados</h2>
   {% if stock_movements %}
     <table>
       <tr><th>Repuesto / Insumo</th><th>Cantidad</th><th>Unidad</th></tr>
@@ -186,9 +230,9 @@
   {% endif %}
 </div>
 
-<!-- SECCION 5: Firmas -->
+<!-- SECCION 6: Firmas -->
 <div class="section">
-  <h2>5. Firmas</h2>
+  <h2>6. Firmas</h2>
   {% with tech_sig=None client_sig=None %}
   {% for sig in signatures %}{% if sig.signature_type == "TECHNICIAN" %}{% with tech_sig=sig %}{% endwith %}{% endif %}{% endfor %}
   {% for sig in signatures %}{% if sig.signature_type == "CLIENT" %}{% with client_sig=sig %}{% endwith %}{% endif %}{% endfor %}

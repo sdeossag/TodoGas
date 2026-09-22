@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
 import { fetchAllPages } from './pagination'
+import { getOfflineChecklistResponse, saveChecklistResponse } from '../db/repositories'
+import useNetworkStore from '../store/networkStore'
 
 export function useChecklistTemplates(params = {}) {
   return useQuery({
@@ -45,11 +47,33 @@ export function useCreateChecklistResponse() {
   })
 }
 
+/**
+ * Checklist de una tarea. Sin red sale de SQLite, con las respuestas que el
+ * tecnico escribio en el telefono encima de lo descargado.
+ */
 export function useChecklistResponse(id) {
+  const isOnline = useNetworkStore((s) => s.isOnline)
   return useQuery({
-    queryKey: ['checklist-responses', id],
-    queryFn: () => client.get(`/api/checklists/responses/${id}/`).then((r) => r.data),
+    queryKey: ['checklist-responses', id, isOnline ? 'online' : 'offline'],
+    queryFn: async () => {
+      if (!isOnline) {
+        const respuesta = await getOfflineChecklistResponse(id)
+        if (!respuesta) {
+          throw new Error('Este checklist no está descargado. Ábrelo con conexión para trabajarlo sin red.')
+        }
+        return respuesta
+      }
+      const { data } = await client.get(`/api/checklists/responses/${id}/`)
+      saveChecklistResponse(data).catch((error) =>
+        console.warn('[offline] no se pudo guardar el checklist:', error?.message ?? error)
+      )
+      return data
+    },
     enabled: !!id,
+    placeholderData: (previous) => previous,
+    // Sin red lee SQLite. Con el modo por defecto ('online') TanStack pausa la
+    // consulta en cuanto navigator.onLine es false y nunca llega a leerla.
+    networkMode: 'always',
   })
 }
 

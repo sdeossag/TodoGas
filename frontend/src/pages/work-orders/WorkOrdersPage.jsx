@@ -182,8 +182,8 @@ export default function WorkOrdersPage() {
                         {wo.title}
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
-                        <div className="font-mono">{wo.asset?.code}</div>
-                        <div className="truncate max-w-[120px]">{wo.asset?.name}</div>
+                        <div className="font-mono">{wo.assets?.[0]?.code}</div>
+                        <div className="truncate max-w-[120px]">{wo.assets?.[0]?.name}</div>
                         {wo.assets_count > 1 && (
                           <div className="text-brand">+{wo.assets_count - 1} activo{wo.assets_count > 2 ? 's' : ''}</div>
                         )}

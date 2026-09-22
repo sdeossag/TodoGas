@@ -84,7 +84,9 @@ export default function ClientDashboard() {
                       {formatWoCode(wo)} — {wo.title}
                     </p>
                     <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {wo.asset?.name ?? ''}
+                      {wo.assets?.length > 1
+                        ? `${wo.assets.length} activos`
+                        : (wo.assets?.[0]?.name ?? '')}
                     </p>
                   </div>
                   <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${WO_STATUS_COLORS[wo.status] ?? 'bg-gray-100 text-gray-500'}`}>

@@ -6,6 +6,7 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from rest_framework import serializers
 
+from apps.maintenance.models import Task
 from apps.work_orders.models import WorkOrder
 
 from .models import Photo, Signature
@@ -28,17 +29,25 @@ def _storage_url(path):
 class PhotoSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     uploaded_by = serializers.SerializerMethodField()
+    task_asset = serializers.SerializerMethodField()
 
     class Meta:
         model = Photo
         fields = [
-            "id", "work_order", "file_url", "thumbnail_url",
+            "id", "work_order", "task", "task_asset", "file_url", "thumbnail_url",
             "latitude", "longitude", "taken_at", "caption",
             "file_hash", "uploaded_by", "offline_uuid", "created_at",
         ]
 
     def get_file_url(self, obj):
         return _storage_url(obj.file_url)
+
+    def get_task_asset(self, obj):
+        """De que activo es la foto, cuando el tecnico lo indico."""
+        if not obj.task_id:
+            return None
+        a = obj.task.asset
+        return {"id": str(a.id), "code": a.code, "name": a.name}
 
     def get_uploaded_by(self, obj):
         if not obj.uploaded_by_id:
@@ -49,6 +58,11 @@ class PhotoSerializer(serializers.ModelSerializer):
 
 class PhotoCreateSerializer(serializers.Serializer):
     work_order = serializers.PrimaryKeyRelatedField(queryset=WorkOrder.objects.all())
+    # Opcional: el activo de la OT al que corresponde la foto. En el acta las
+    # fotos se agrupan por activo; sin tarea van como fotos de la visita.
+    task = serializers.PrimaryKeyRelatedField(
+        queryset=Task.objects.all(), required=False, allow_null=True
+    )
     file = serializers.FileField()
     latitude = serializers.DecimalField(
         max_digits=12, decimal_places=7, required=False, allow_null=True
@@ -69,6 +83,12 @@ class PhotoCreateSerializer(serializers.Serializer):
         if value is None:
             return value
         return round(value, 7)
+
+    def validate(self, attrs):
+        tarea = attrs.get("task")
+        if tarea is not None and tarea.work_order_id != attrs["work_order"].id:
+            raise serializers.ValidationError({"task": "La tarea no es de esta OT."})
+        return attrs
 
     def validate_file(self, file):
         if file.size > MAX_PHOTO_BYTES:
@@ -110,6 +130,7 @@ class PhotoCreateSerializer(serializers.Serializer):
             caption=validated_data.get("caption", ""),
             offline_uuid=validated_data.get("offline_uuid"),
             uploaded_by=uploaded_by,
+            task=validated_data.get("task"),
         )
 
 

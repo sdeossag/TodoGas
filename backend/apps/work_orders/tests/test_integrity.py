@@ -123,7 +123,7 @@ def completed_wo(db, asset, admin, tec, checklist_version):
         completed_at=timezone.now(),
     )
     response = ChecklistResponse.objects.create(
-        task=wo.primary_task,
+        task=wo.tasks.first(),
         version=checklist_version,
         completed_by=tec,
         completed_at=timezone.now(),

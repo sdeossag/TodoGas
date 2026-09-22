@@ -72,7 +72,7 @@ class PhotoViewSet(viewsets.GenericViewSet):
             return err
         if not _can_read_wo(request.user, wo):
             return Response(status=status.HTTP_403_FORBIDDEN)
-        photos = Photo.objects.filter(work_order=wo).select_related("uploaded_by").order_by("taken_at")
+        photos = Photo.objects.filter(work_order=wo).select_related("uploaded_by", "task__asset").order_by("taken_at")
         return Response(PhotoSerializer(photos, many=True, context={"request": request}).data)
 
     def create(self, request, *args, **kwargs):

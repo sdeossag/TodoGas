@@ -14,6 +14,11 @@ const MAX_CAPTION = 255
 const isNative = Capacitor.isNativePlatform()
 
 function extractError(err) {
+  // Sin respuesta la peticion no llego al servidor: "Network Error" de axios
+  // no le dice nada al tecnico.
+  if (!err?.response && err?.request) {
+    return 'No se pudo conectar con el servidor. Revisa la conexión e intenta de nuevo.'
+  }
   const data = err?.response?.data
   if (!data) return err?.message || 'Error al subir la foto.'
   if (typeof data === 'string') return data
@@ -29,7 +34,7 @@ function extractError(err) {
  *
  * El backend valida la extension del nombre, asi que no puede ir vacia.
  */
-async function dataUrlToFile(dataUrl, filename) {
+export async function dataUrlToFile(dataUrl, filename) {
   const blob = await (await fetch(dataUrl)).blob()
   const ext = (blob.type.split('/')[1] ?? 'jpg').replace('jpeg', 'jpg')
   return new File([blob], `${filename}.${ext}`, { type: blob.type || 'image/jpeg' })
@@ -48,13 +53,18 @@ async function getPosition() {
   }
 }
 
-export default function PhotoCapture({ workOrderId, disabled = false }) {
+export default function PhotoCapture({ workOrderId, tasks = [], disabled = false }) {
   const inputRef = useRef(null)
   const previewUrlRef = useRef(null)
 
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [caption, setCaption] = useState('')
+  // De que activo es la foto. Con un solo activo va con el; con varios lo
+  // elige el tecnico, y sin elegir queda como foto de la visita. Se conserva
+  // entre fotos: lo normal es tomar varias del mismo activo seguidas.
+  const activos = tasks.filter((t) => t.status !== 'CANCELLED')
+  const [taskId, setTaskId] = useState(activos.length === 1 ? activos[0].id : '')
   const [takenAt, setTakenAt] = useState(null)
   const [coords, setCoords] = useState(null)
   const [geoWarning, setGeoWarning] = useState(false)
@@ -217,6 +227,7 @@ export default function PhotoCapture({ workOrderId, disabled = false }) {
         longitude: coords?.longitude ?? null,
         taken_at: takenAt,
         caption: caption.trim(),
+        task_id: taskId || null,
       })
       if (!offlineUuid) {
         setApiError('No hay base de datos local disponible para guardar la foto.')
@@ -253,6 +264,7 @@ export default function PhotoCapture({ workOrderId, disabled = false }) {
     upload.mutate(
       {
         work_order: workOrderId,
+        task: taskId || null,
         file: uploadFile,
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
@@ -287,7 +299,7 @@ export default function PhotoCapture({ workOrderId, disabled = false }) {
             {capturing ? 'Abriendo camara...' : 'Tomar foto'}
           </button>
         ) : (
-          <label className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+          <label className="relative inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
             Seleccionar foto
             <input
               ref={inputRef}
@@ -319,6 +331,19 @@ export default function PhotoCapture({ workOrderId, disabled = false }) {
             <p className="text-xs text-gray-500">
               GPS: {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
             </p>
+          )}
+
+          {activos.length > 1 && (
+            <label className="block max-w-xs">
+              <span className="block text-xs font-medium text-gray-600 mb-1">¿De qué activo es?</span>
+              <select value={taskId} onChange={(e) => setTaskId(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand/30">
+                <option value="">De la visita en general</option>
+                {activos.map((t) => (
+                  <option key={t.id} value={t.id}>{t.asset.code} — {t.asset.name}</option>
+                ))}
+              </select>
+            </label>
           )}
 
           <div>

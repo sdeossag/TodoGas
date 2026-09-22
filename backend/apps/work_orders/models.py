@@ -131,17 +131,6 @@ class WorkOrder(models.Model):
             return f"OT-{self.wo_number:05d}"
         return f"OT-{año}-{self.wo_number:05d}"
 
-    @property
-    def primary_task(self):
-        """
-        La primera tarea de la OT.
-
-        Solo para la compatibilidad de la fase 1: la API y el acta siguen
-        mostrando "el activo" de la OT mientras las pantallas se reescriben para
-        varias tareas (fases 3 y 4). Usa la cache de prefetch_related si existe.
-        """
-        return next(iter(self.tasks.all()), None)
-
     def save(self, *args, **kwargs):
         if not self.wo_number:
             from django.db import transaction

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "android:local": "vite build --mode movil && cap sync android",
+    "test": "node --test \"src/**/*.test.mjs\""
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.1.1",

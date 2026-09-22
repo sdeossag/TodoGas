@@ -6,7 +6,7 @@
  */
 
 import { CapacitorSQLite, SQLiteConnection } from '@capacitor-community/sqlite'
-import { DB_VERSION } from './schema'
+import { LATEST_VERSION } from './migrations'
 
 export async function createDriver(dbName) {
   const sqlite = new SQLiteConnection(CapacitorSQLite)
@@ -15,7 +15,9 @@ export async function createDriver(dbName) {
   const existing = await sqlite.isConnection(dbName, false)
   const db = existing?.result
     ? await sqlite.retrieveConnection(dbName, false)
-    : await sqlite.createConnection(dbName, false, 'no-encryption', DB_VERSION, false)
+    // Sin sentencias de upgrade registradas el plugin no toca user_version:
+    // el esquema lo migra migrations.js.
+    : await sqlite.createConnection(dbName, false, 'no-encryption', LATEST_VERSION, false)
 
   await db.open()
 

@@ -1,4 +1,5 @@
 import { useWorkOrderPhotos } from '../../api/evidence'
+import { mediaUrl } from '../../api/client'
 
 function formatDateCO(iso) {
   if (!iso) return '—'
@@ -38,9 +39,9 @@ export default function PhotoGallery({ workOrderId }) {
     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
       {photos.map((photo) => (
         <div key={photo.id} className="space-y-1.5">
-          <a href={photo.file_url} target="_blank" rel="noopener noreferrer">
+          <a href={mediaUrl(photo.file_url)} target="_blank" rel="noopener noreferrer">
             <img
-              src={photo.file_url}
+              src={mediaUrl(photo.file_url)}
               alt={photo.caption || 'Foto de evidencia'}
               className="w-full aspect-video object-cover rounded-lg border border-gray-200 hover:opacity-90 transition-opacity cursor-pointer"
             />

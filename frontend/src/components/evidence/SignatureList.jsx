@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useWorkOrderSignatures } from '../../api/evidence'
+import { mediaUrl } from '../../api/client'
 
 function formatDateCO(iso) {
   if (!iso) return '—'
@@ -67,7 +68,7 @@ export default function SignatureList({ workOrderId }) {
           className="flex flex-col sm:flex-row items-start gap-4 p-4 border border-gray-100 rounded-lg"
         >
           <img
-            src={sig.file_url}
+            src={mediaUrl(sig.file_url)}
             alt="Firma digital"
             className="h-16 w-auto border border-gray-200 rounded bg-white object-contain"
           />

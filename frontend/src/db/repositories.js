@@ -35,10 +35,12 @@ export async function saveWorkOrdersOffline(workOrders = []) {
           scheduled_date, asset_id, asset_name, asset_code, hospital_name,
           hospital_id, assigned_to_id, checklist_version_id,
           checklist_response_id, notes, synced_at, offline_uuid, raw_json,
-          local_status_changed, local_status_comment
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+          location_name, assets_count,
+          local_status_changed, local_status_comment, detail_json
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
           COALESCE((SELECT local_status_changed FROM offline_work_orders WHERE id = ?), 0),
-          (SELECT local_status_comment FROM offline_work_orders WHERE id = ?)
+          (SELECT local_status_comment FROM offline_work_orders WHERE id = ?),
+          (SELECT detail_json FROM offline_work_orders WHERE id = ?)
         )`,
         [
           wo.id,
@@ -49,18 +51,28 @@ export async function saveWorkOrdersOffline(workOrders = []) {
           wo.status ?? null,
           wo.priority ?? null,
           wo.scheduled_date ?? null,
-          wo.asset?.id ?? null,
-          wo.asset?.name ?? null,
-          wo.asset?.code ?? null,
-          wo.hospital?.name ?? wo.asset?.hospital?.name ?? null,
-          wo.hospital?.id ?? wo.asset?.hospital?.id ?? null,
+          // Columnas de la v1 del esquema: se llenan con el primer activo de
+          // la visita, que es lo que muestra la tarjeta cuando solo hay uno.
+          wo.assets?.[0]?.id ?? null,
+          wo.assets?.[0]?.name ?? null,
+          wo.assets?.[0]?.code ?? null,
+          wo.hospital?.name ?? null,
+          wo.hospital?.id ?? null,
           wo.assigned_to?.id ?? wo.assigned_to ?? null,
-          wo.checklist_version?.id ?? wo.checklist_version_id ?? null,
-          wo.checklist_response?.id ?? wo.checklist_response_id ?? null,
+          // El checklist es de cada tarea desde la fase 3: estas dos columnas
+          // de la v1 quedan vacias y nadie las lee (ver getOfflineWorkOrderDetail).
+          null,
+          null,
           wo.notes ?? null,
           nowISO(),
           wo.id, // offline_uuid: para las que vienen del servidor basta el id
           JSON.stringify(wo),
+          wo.location?.path ?? wo.location?.name ?? null,
+          wo.assets_count ?? null,
+          // INSERT OR REPLACE borra y reinserta la fila: lo que solo existe en
+          // el telefono (estado cambiado sin red, detalle descargado) se copia
+          // de la fila anterior o se perderia al refrescar la lista.
+          wo.id,
           wo.id,
           wo.id,
         ]
@@ -113,6 +125,121 @@ export async function getOfflineWorkOrder(workOrderId) {
   if (!(await ready()) || !workOrderId) return null
   const rows = await query('SELECT * FROM offline_work_orders WHERE id = ?', [workOrderId])
   return rows.length ? hydrateWorkOrder(rows[0]) : null
+}
+
+const parse = (text, fallback) => {
+  try {
+    return text ? JSON.parse(text) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/**
+ * Guarda el detalle de una OT (con sus tareas) para poder abrirla sin red. Si
+ * la OT no estaba en la base, entra primero como fila de la lista.
+ */
+export async function saveWorkOrderDetailOffline(detail) {
+  if (!(await ready()) || !detail?.id) return
+  const existe = await query('SELECT id FROM offline_work_orders WHERE id = ?', [detail.id])
+  if (!existe.length) await saveWorkOrdersOffline([detail])
+  await run('UPDATE offline_work_orders SET detail_json = ? WHERE id = ?', [
+    JSON.stringify(detail),
+    detail.id,
+  ])
+}
+
+/**
+ * Guarda el paquete offline de una OT: su detalle y el checklist de cada
+ * tarea, con sus campos y respuestas. Es lo que deja la OT lista para
+ * ejecutarse sin red desde el primer campo.
+ */
+export async function saveWorkOrderBundle(bundle) {
+  if (!(await ready()) || !bundle?.work_order) return
+  await saveWorkOrderDetailOffline(bundle.work_order)
+  for (const checklist of bundle.checklists ?? []) {
+    await saveChecklistResponse({ ...checklist, work_order: bundle.work_order.id })
+  }
+}
+
+/**
+ * Respuesta del checklist tal como la devolveria la API, armada con lo que se
+ * descargo y lo que el tecnico respondio despues en el telefono.
+ */
+export async function getOfflineChecklistResponse(responseId) {
+  if (!(await ready()) || !responseId) return null
+  const [row] = await query('SELECT * FROM offline_checklist_responses WHERE id = ?', [responseId])
+  if (!row) return null
+  const locales = await query('SELECT * FROM offline_field_responses WHERE response_id = ?', [
+    responseId,
+  ])
+  const base = parse(row.response_json, null) ?? {
+    id: row.id,
+    work_order: row.work_order_id,
+    version: row.version_id,
+    started_at: row.started_at,
+    completed_at: row.completed_at,
+    version_fields: parse(row.version_fields_json, []),
+    field_responses: [],
+  }
+  const porCampo = new Map((base.field_responses ?? []).map((fr) => [fr.field, fr]))
+  for (const local of locales) {
+    porCampo.set(local.field_id, {
+      ...(porCampo.get(local.field_id) ?? {}),
+      field: local.field_id,
+      value: local.value,
+      notes: local.notes,
+      answered_at: local.answered_at,
+      _local: local.synced === 0,
+    })
+  }
+  return {
+    ...base,
+    field_responses: [...porCampo.values()],
+    completed_at: base.completed_at ?? row.local_completed_at ?? null,
+    _fromOffline: true,
+    _completionPending: row.completion_pending === 1,
+  }
+}
+
+/**
+ * Detalle de la OT sin red. El avance de cada tarea se recalcula con lo que el
+ * tecnico respondio en el telefono despues de descargarla.
+ */
+export async function getOfflineWorkOrderDetail(workOrderId) {
+  if (!(await ready()) || !workOrderId) return null
+  const [row] = await query('SELECT * FROM offline_work_orders WHERE id = ?', [workOrderId])
+  if (!row) return null
+  const detalle = { ...hydrateWorkOrder(row), ...parse(row.detail_json, {}) }
+  // El estado local gana: puede haberse cambiado sin conexion.
+  detalle.status = row.status
+  detalle._fromOffline = true
+  detalle._localStatusChanged = row.local_status_changed === 1
+
+  const tareas = []
+  for (const tarea of detalle.tasks ?? []) {
+    const responseId = tarea.checklist?.response_id ?? tarea.checklist_response_id
+    const respuesta = responseId ? await getOfflineChecklistResponse(responseId) : null
+    if (!respuesta) {
+      tareas.push(tarea)
+      continue
+    }
+    const campos = respuesta.version_fields ?? []
+    const respondidos = new Set(respuesta.field_responses.map((fr) => fr.field))
+    tareas.push({
+      ...tarea,
+      checklist: {
+        response_id: responseId,
+        answered: campos.filter((f) => respondidos.has(f.id)).length,
+        total: campos.length,
+        required_missing: campos.filter((f) => f.is_required && !respondidos.has(f.id)).length,
+        // El detalle descargado tambien sabe si el servidor ya lo cerro.
+        completed_at: respuesta.completed_at ?? tarea.checklist?.completed_at ?? null,
+      },
+    })
+  }
+  detalle.tasks = tareas
+  return detalle
 }
 
 /**
@@ -175,10 +302,24 @@ export async function markWorkOrderStatusSynced(workOrderId) {
 
 export async function saveChecklistResponse(response) {
   if (!(await ready()) || !response?.id) return
+  // Las marcas de la lectura offline no se guardan como si vinieran del servidor.
+  const { _fromOffline, _completionPending, ...limpia } = response
+  // El WHERE final: un checklist cerrado no se reabre. Varias lecturas del
+  // servidor se guardan en paralelo (la consulta, el formulario, el paquete
+  // offline) y una anterior al cierre puede terminar de escribirse despues:
+  // pasaba al cerrar con red, y ya sin red la OT volvia a exigir ese
+  // checklist para enviarla a revision. Va en la misma sentencia para que otra
+  // escritura no se cuele entre la comprobacion y el guardado.
   await run(
     `INSERT OR REPLACE INTO offline_checklist_responses (
-      id, work_order_id, version_id, started_at, completed_at, version_fields_json
-    ) VALUES (?,?,?,?,?,?)`,
+      id, work_order_id, version_id, started_at, completed_at, version_fields_json,
+      task_id, response_json, local_completed_at, completion_pending
+    ) SELECT ?,?,?,?,?,?,?,?,
+      (SELECT local_completed_at FROM offline_checklist_responses WHERE id = ?),
+      COALESCE((SELECT completion_pending FROM offline_checklist_responses WHERE id = ?), 0)
+    WHERE ? IS NOT NULL OR NOT EXISTS (
+      SELECT 1 FROM offline_checklist_responses WHERE id = ? AND completed_at IS NOT NULL
+    )`,
     [
       response.id,
       response.work_order ?? response.work_order_id,
@@ -186,8 +327,42 @@ export async function saveChecklistResponse(response) {
       response.started_at ?? null,
       response.completed_at ?? null,
       JSON.stringify(response.version_fields ?? []),
+      response.task ?? response.task_id ?? null,
+      JSON.stringify(limpia),
+      response.id,
+      response.id,
+      response.completed_at ?? null,
+      response.id,
     ]
   )
+}
+
+/**
+ * Finalizar el checklist sin red: queda cerrado en el telefono y en cola para
+ * el servidor. El motor de sincronizacion lo cierra despues de subir las
+ * respuestas y antes de mover el estado de la OT.
+ */
+export async function markChecklistCompletedOffline(responseId) {
+  if (!(await ready())) return
+  await run(
+    `UPDATE offline_checklist_responses
+     SET local_completed_at = ?, completion_pending = 1
+     WHERE id = ?`,
+    [nowISO(), responseId]
+  )
+  await logSync({ entityType: 'checklist', entityId: responseId, action: 'complete', status: 'pending' })
+}
+
+export async function getPendingChecklistCompletions() {
+  if (!(await ready())) return []
+  return query('SELECT id FROM offline_checklist_responses WHERE completion_pending = 1')
+}
+
+export async function markChecklistCompletionSynced(responseId) {
+  if (!(await ready())) return
+  await run('UPDATE offline_checklist_responses SET completion_pending = 0 WHERE id = ?', [
+    responseId,
+  ])
 }
 
 export async function getChecklistResponse(workOrderId) {
@@ -253,8 +428,8 @@ export async function savePhotoOffline(photo) {
   await run(
     `INSERT OR REPLACE INTO offline_photos (
       id, work_order_id, file_path, latitude, longitude,
-      taken_at, caption, file_hash, synced, offline_uuid
-    ) VALUES (?,?,?,?,?,?,?,?,0,?)`,
+      taken_at, caption, file_hash, synced, offline_uuid, task_id
+    ) VALUES (?,?,?,?,?,?,?,?,0,?,?)`,
     [
       photo.id ?? offlineUuid,
       photo.work_order_id,
@@ -265,6 +440,7 @@ export async function savePhotoOffline(photo) {
       photo.caption ?? null,
       photo.file_hash ?? null,
       offlineUuid,
+      photo.task_id ?? null,
     ]
   )
   return offlineUuid
@@ -341,6 +517,7 @@ export async function countPendingSync() {
        (SELECT COUNT(*) FROM offline_field_responses WHERE synced = 0) +
        (SELECT COUNT(*) FROM offline_photos WHERE synced = 0) +
        (SELECT COUNT(*) FROM offline_signatures WHERE synced = 0) +
+       (SELECT COUNT(*) FROM offline_checklist_responses WHERE completion_pending = 1) +
        (SELECT COUNT(*) FROM offline_work_orders WHERE local_status_changed = 1)
      AS total`
   )
@@ -359,6 +536,9 @@ export async function getWorkOrderIdsWithPendingSync() {
        FROM offline_field_responses f
        JOIN offline_checklist_responses r ON r.id = f.response_id
       WHERE f.synced = 0
+     UNION
+     SELECT DISTINCT work_order_id AS id FROM offline_checklist_responses
+      WHERE completion_pending = 1
      UNION
      SELECT id FROM offline_work_orders WHERE local_status_changed = 1`
   )

@@ -201,10 +201,6 @@ class ChecklistResponseCreateSerializer(serializers.ModelSerializer):
                 )
             tarea = tareas[0]
             data["task"] = tarea
-        if ChecklistResponse.objects.filter(task=tarea).exists():
-            raise serializers.ValidationError(
-                {"task": "Esta tarea ya tiene un checklist iniciado."}
-            )
         version = data["version"]
         if tarea.checklist_version_id and tarea.checklist_version_id != version.id:
             raise serializers.ValidationError(
@@ -222,10 +218,18 @@ class ChecklistResponseCreateSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        user = self.context["request"].user
+        # Desde la fase 3 el checklist se crea al meter la tarea en la OT. Si ya
+        # existe se devuelve ese: una app sin actualizar, o un reintento de la
+        # sincronizacion, no debe toparse con un error por pedirlo otra vez.
+        existente = ChecklistResponse.objects.filter(task=validated_data["task"]).first()
+        if existente is not None:
+            if existente.version_id != validated_data["version"].id:
+                raise serializers.ValidationError(
+                    {"version": "La tarea ya tiene un checklist con otra versión."}
+                )
+            return existente
         return ChecklistResponse.objects.create(
             **validated_data,
-            completed_by=user,
             started_at=timezone.now(),
         )
 

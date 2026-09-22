@@ -12,11 +12,13 @@
 import client from '../api/client'
 import {
   countPendingSync,
+  getPendingChecklistCompletions,
   getUnsyncedFieldResponses,
   getUnsyncedPhotos,
   getUnsyncedSignatures,
   getWorkOrdersWithLocalStatusChange,
   logSync,
+  markChecklistCompletionSynced,
   markFieldResponseSynced,
   markPhotoSynced,
   markSignatureSynced,
@@ -76,6 +78,45 @@ export async function syncFieldResponses(onItemDone) {
   return { ok, failed, total: pending.length }
 }
 
+/**
+ * Checklists finalizados sin red. Van despues de las respuestas (el servidor
+ * rechaza cerrar uno con obligatorios sin responder) y antes del estado de la
+ * OT (pasar a revision exige todos los checklists cerrados).
+ */
+export async function syncChecklistCompletions(onItemDone) {
+  const pending = await getPendingChecklistCompletions()
+  let ok = 0
+  let failed = 0
+
+  for (const row of pending) {
+    try {
+      await client.post(`/api/checklists/responses/${row.id}/complete/`)
+      await markChecklistCompletionSynced(row.id)
+      await logSync({ entityType: 'checklist', entityId: row.id, action: 'complete', status: 'ok' })
+      ok += 1
+    } catch (error) {
+      // Si ya estaba cerrado en el servidor (se cerro desde otra sesion), el
+      // cierre en cola ya no tiene nada que hacer.
+      if (error?.response?.status === 400 && /ya est. completado/i.test(error.response.data?.detail ?? '')) {
+        await markChecklistCompletionSynced(row.id)
+        ok += 1
+      } else {
+        await logSync({
+          entityType: 'checklist',
+          entityId: row.id,
+          action: 'complete',
+          status: 'error',
+          errorMessage: errorText(error),
+        })
+        failed += 1
+      }
+    }
+    onItemDone?.()
+  }
+
+  return { ok, failed, total: pending.length }
+}
+
 export async function syncPhotos(onItemDone) {
   const pending = await getUnsyncedPhotos()
   let ok = 0
@@ -92,6 +133,7 @@ export async function syncPhotos(onItemDone) {
       const file = await dataUrlToFile(row.file_path, `ot-${row.work_order_id}`)
       const form = new FormData()
       form.append('work_order', row.work_order_id)
+      if (row.task_id) form.append('task', row.task_id)
       form.append('file', file)
       if (row.latitude != null) form.append('latitude', row.latitude)
       if (row.longitude != null) form.append('longitude', row.longitude)
@@ -217,15 +259,18 @@ export async function syncOfflineData({ onProgress } = {}) {
     onProgress?.(remaining)
   }
 
-  // El orden es deliberado: evidencia primero, estado despues.
+  // El orden es deliberado: respuestas, cierre de cada checklist, evidencia
+  // y al final el estado de la OT, que valida todo lo anterior.
   const fields = await syncFieldResponses(tick)
+  const checklists = await syncChecklistCompletions(tick)
   const photos = await syncPhotos(tick)
   const signatures = await syncSignatures(tick)
   const workOrders = await syncWorkOrderStatuses(tick)
 
-  const result = { fields, photos, signatures, workOrders }
-  const failed = fields.failed + photos.failed + signatures.failed + workOrders.failed
-  const synced = fields.ok + photos.ok + signatures.ok + workOrders.ok
+  const result = { fields, checklists, photos, signatures, workOrders }
+  const fases = Object.values(result)
+  const failed = fases.reduce((acc, f) => acc + f.failed, 0)
+  const synced = fases.reduce((acc, f) => acc + f.ok, 0)
 
   onProgress?.(await countPendingSync())
 

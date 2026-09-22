@@ -305,16 +305,56 @@ def _current_version(plan_task):
     ).first()
 
 
-def schedule_tasks(tasks, work_order):
+def _ensure_response(task):
     """
-    Mete tareas pendientes en una OT y fija la version vigente de su checklist.
+    Crea el checklist vacio de la tarea al meterla en la OT. Asi el tecnico
+    descarga la OT con todos sus checklists ya creados y puede responder sin
+    red desde el primer campo: antes "Iniciar checklist" exigia conexion.
+    """
+    if not task.checklist_version_id:
+        return None
+    from apps.checklists.models import ChecklistResponse
+
+    respuesta, _ = ChecklistResponse.objects.get_or_create(
+        task=task, defaults={"version_id": task.checklist_version_id}
+    )
+    return respuesta
+
+
+def _answered(task):
+    """True si el checklist de la tarea ya tiene respuestas o esta cerrado."""
+    from django.core.exceptions import ObjectDoesNotExist
+
+    try:
+        respuesta = task.checklist_response
+    except ObjectDoesNotExist:
+        return False
+    return bool(respuesta.completed_at) or respuesta.field_responses.exists()
+
+
+def _refresh_duration(work_order):
+    # De la base y no de work_order.tasks: la OT puede venir con sus tareas
+    # precargadas de antes del cambio.
+    duraciones = [
+        d for d in Task.objects.filter(work_order=work_order).values_list(
+            "estimated_duration", flat=True
+        ) if d
+    ]
+    work_order.estimated_duration = sum(duraciones, timedelta()) if duraciones else None
+    work_order.save(update_fields=["estimated_duration", "updated_at"])
+
+
+def schedule_tasks(tasks, work_order, first_sort_order=0):
+    """
+    Mete tareas pendientes en una OT, fija la version vigente de su checklist
+    y crea ese checklist vacio.
 
     Devuelve avisos: una tarea cuyo checklist no tiene version publicada entra
     igual, sin checklist, porque no generarla cancelaria el preventivo en
     silencio; lo que no puede pasar es que nadie se entere.
     """
     avisos = []
-    for orden, tarea in enumerate(tasks):
+    for orden, tarea in enumerate(tasks, start=first_sort_order):
         if tarea.status != Task.Status.PENDING:
             raise TaskStateError(
                 f"La tarea «{tarea.title}» no esta pendiente ({tarea.get_status_display()})."
@@ -337,7 +377,70 @@ def schedule_tasks(tasks, work_order):
         tarea.save(update_fields=[
             "work_order", "status", "checklist_version", "sort_order", "updated_at",
         ])
+        _ensure_response(tarea)
     return avisos
+
+
+@transaction.atomic
+def add_tasks_to_work_order(work_order, tasks):
+    """Suma pendientes a una OT que aun no empezo. Devuelve avisos."""
+    from apps.work_orders.models import WorkOrder
+
+    if work_order.status != WorkOrder.Status.PENDING:
+        raise TaskStateError("Solo se agregan tareas a una OT que no ha empezado.")
+    siguiente = Task.objects.filter(work_order=work_order).count()
+    avisos = schedule_tasks(list(tasks), work_order, first_sort_order=siguiente)
+    _refresh_duration(work_order)
+    return avisos
+
+
+@transaction.atomic
+def remove_task_from_work_order(work_order, task):
+    """
+    Saca una tarea de una OT que aun no empezo: vuelve a pendiente, lista para
+    otra OT. Si su checklist ya tiene respuestas no se puede quitar.
+    """
+    from apps.work_orders.models import WorkOrder
+
+    if work_order.status != WorkOrder.Status.PENDING:
+        raise TaskStateError("Solo se quitan tareas de una OT que no ha empezado.")
+    if task.work_order_id != work_order.id or task.status != Task.Status.SCHEDULED:
+        raise TaskStateError("La tarea no esta programada en esta OT.")
+    if Task.objects.filter(work_order=work_order).count() <= 1:
+        raise TaskStateError("Una OT necesita al menos una tarea. Si ya no va, cancela la OT.")
+    if _answered(task):
+        raise TaskStateError(
+            f"El checklist de {task.asset.name} ya tiene respuestas; no se puede quitar."
+        )
+    from apps.checklists.models import ChecklistResponse
+
+    ChecklistResponse.objects.filter(task=task).delete()
+    task.status = Task.Status.PENDING
+    task.work_order = None
+    task.checklist_version = None
+    task.sort_order = 0
+    task.save(update_fields=[
+        "status", "work_order", "checklist_version", "sort_order", "updated_at",
+    ])
+    _refresh_duration(work_order)
+    return task
+
+
+@transaction.atomic
+def change_task_checklist(task, version):
+    """Cambia el checklist de una tarea programada mientras nadie lo haya respondido."""
+    if _answered(task):
+        raise TaskStateError(
+            "El checklist de esta tarea ya se empezo a diligenciar; no se puede cambiar."
+        )
+    from apps.checklists.models import ChecklistResponse
+
+    ChecklistResponse.objects.filter(task=task).delete()
+    task.checklist_version = version
+    task.save(update_fields=["checklist_version", "updated_at"])
+    if task.work_order_id:
+        _ensure_response(task)
+    return task
 
 
 def _default_title(tasks):
@@ -393,32 +496,49 @@ def create_work_order_for_tasks(
 
 
 @transaction.atomic
-def create_manual_work_order(asset, created_by, checklist_version=None, **campos):
+def create_manual_work_order(entradas, created_by, *, location=None, **campos):
     """
-    OT a mano sobre un activo, como el alta de OT de hoy (correctivos).
+    OT a mano sobre uno o varios activos del mismo hospital (correctivos).
 
-    Crea la OT y una tarea sin plan de origen, ya programada. En la fase 4 el
-    alta acepta varios activos.
+    `entradas` es una lista de pares (activo, version de checklist o None):
+    cada activo de la visita puede llevar su propio checklist. Crea la OT y una
+    tarea por activo, sin plan de origen y ya programada.
     """
     from apps.work_orders.models import WorkOrder
 
-    ot = WorkOrder(hospital=asset.hospital, created_by=created_by, **campos)
-    ot.save()
-    Task.objects.create(
-        asset=asset,
-        plan_task=None,
-        work_order=ot,
-        status=Task.Status.SCHEDULED,
-        title=ot.title,
-        description=ot.description,
-        task_type=ot.task_type,
-        priority=ot.priority,
-        checklist_version=checklist_version,
-        calculated_date=ot.scheduled_date,
-        scheduled_date=ot.scheduled_date,
-        estimated_duration=ot.estimated_duration,
-        created_by=created_by,
+    entradas = list(entradas)
+    if not entradas:
+        raise TaskStateError("Una OT necesita al menos un activo.")
+    hospitales = {a.hospital_id for a, _ in entradas}
+    if len(hospitales) > 1:
+        raise TaskStateError("Todos los activos de una OT deben ser del mismo hospital.")
+
+    ot = WorkOrder(
+        hospital_id=hospitales.pop(), location=location, created_by=created_by, **campos
     )
+    ot.save()
+    # La duracion estimada la escribe el planificador para la visita entera: se
+    # reparte a la tarea solo cuando hay una, porque `add_tasks_to_work_order`
+    # recalcula la de la OT sumando las de sus tareas.
+    duracion = ot.estimated_duration if len(entradas) == 1 else None
+    for orden, (activo, version) in enumerate(entradas):
+        tarea = Task.objects.create(
+            asset=activo,
+            plan_task=None,
+            work_order=ot,
+            status=Task.Status.SCHEDULED,
+            sort_order=orden,
+            title=ot.title,
+            description=ot.description,
+            task_type=ot.task_type,
+            priority=ot.priority,
+            checklist_version=version,
+            calculated_date=ot.scheduled_date,
+            scheduled_date=ot.scheduled_date,
+            estimated_duration=duracion,
+            created_by=created_by,
+        )
+        _ensure_response(tarea)
     return ot
 
 

@@ -88,6 +88,16 @@ client.interceptors.response.use(
  */
 export const SESSION_EXPIRED_KEY = 'todogas.session_expired'
 
+/**
+ * URL de un archivo de media (foto, firma, acta). Con almacenamiento local el
+ * backend la devuelve relativa (/media/...): en la web la resuelve el proxy de
+ * Vite, pero en la app Android apuntaria a la propia app (https://localhost).
+ * Las de S3 ya vienen absolutas y pasan tal cual.
+ */
+export function mediaUrl(url) {
+  return url?.startsWith('/') ? `${BASE_URL}${url}` : url
+}
+
 function clearAuthAndRedirect() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')

@@ -15,6 +15,16 @@ const OFFLINE_NOTICE_MS = 5000
 
 let noticeTimer = null
 
+// Reintento de lo pendiente mientras hay red. El flanco offline→online no
+// basta: con Wi-Fi que no llega al servidor la red nunca "vuelve", y lo que
+// quedo en cola de una sesion anterior esperaria al proximo cambio de red.
+const RETRY_MS = 60 * 1000
+let retryTimer = null
+
+function onVisible() {
+  if (document.visibilityState === 'visible') useNetworkStore.getState().syncIfPending()
+}
+
 const useNetworkStore = create((set, get) => ({
   isOnline: true,
   isSyncing: false,
@@ -51,6 +61,19 @@ const useNetworkStore = create((set, get) => ({
     }
 
     await get().refreshPendingCount()
+
+    // Lo que quedo en cola al cerrar la app sin red se sube al abrirla con red.
+    get().syncIfPending()
+    if (!retryTimer) {
+      retryTimer = setInterval(() => get().syncIfPending(), RETRY_MS)
+      document.addEventListener('visibilitychange', onVisible)
+    }
+  },
+
+  /** Sincroniza solo si hay red, algo en cola y ninguna sincronizacion en curso. */
+  syncIfPending: () => {
+    const { isOnline, isSyncing, pendingSyncCount } = get()
+    if (isOnline && !isSyncing && pendingSyncCount > 0) get().triggerSync()
   },
 
   /**
@@ -65,6 +88,9 @@ const useNetworkStore = create((set, get) => ({
   },
 
   removeNetworkListener: async () => {
+    if (retryTimer) clearInterval(retryTimer)
+    retryTimer = null
+    document.removeEventListener('visibilitychange', onVisible)
     if (!listenerHandle) return
     try {
       await listenerHandle.remove()

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import client from './client'
+import client, { mediaUrl } from './client'
 import { fetchAllPages } from './pagination'
 
 export function useWorkOrderReports(workOrderId) {
@@ -36,7 +36,7 @@ export function useReportDownload() {
       client.get(`/api/reports/${reportId}/download/`).then((r) => r.data),
     onSuccess: (data) => {
       if (data.download_url) {
-        window.open(data.download_url, '_blank')
+        window.open(mediaUrl(data.download_url), '_blank')
       }
     },
   })

@@ -158,7 +158,7 @@ class TestWorkOrderRoleFiltering:
 class TestWorkOrderCreate:
     def _payload(self, asset, tec):
         return {
-            "asset": str(asset.id),
+            "tasks": [{"asset": str(asset.id)}],
             "task_type": "CORRECTIVE",
             "title": "Nueva OT",
             "scheduled_date": str(date.today()),

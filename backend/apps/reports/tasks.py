@@ -79,14 +79,13 @@ def send_report_email(self, work_order_id):
 
         recipient_email = hospital.contact_email
 
-        subject = (
-            f"Reporte de servicio - {work_order.wo_code}"
-            f" | {work_order.primary_task.asset.name if work_order.primary_task else work_order.title}"
-        )
+        activos = _assets_label(work_order)
+        subject = f"Reporte de servicio - {work_order.wo_code} | {activos or work_order.title}"
         body = render_to_string(
             "reports/email_report.html",
             {
                 "work_order": work_order,
+                "assets_label": activos,
                 "hospital": hospital,
                 "report": report,
                 "frontend_url": settings.FRONTEND_URL,
@@ -209,3 +208,15 @@ def generate_consolidated_report(
         download_url = s3_key
 
     return {"status": "done", "report_id": str(report.id), "download_url": download_url}
+
+
+def _assets_label(work_order):
+    """"Alarma 3 gases" o "Alarma 3 gases y 2 activos mas" para el asunto y el correo."""
+    tareas = list(work_order.tasks.exclude(status="CANCELLED").select_related("asset"))
+    if not tareas:
+        return ""
+    primero = tareas[0].asset.name
+    resto = len({t.asset_id for t in tareas}) - 1
+    if resto <= 0:
+        return primero
+    return f"{primero} y {resto} activo{'s' if resto > 1 else ''} más"

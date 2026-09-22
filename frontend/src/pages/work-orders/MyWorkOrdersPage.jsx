@@ -112,10 +112,17 @@ function WorkOrderCard({ wo, onTransition, navigate, hasPendingSync = false }) {
       {/* Título */}
       <p className="font-medium text-gray-800 text-sm leading-snug line-clamp-2">{wo.title}</p>
 
-      {/* Activo y hospital */}
+      {/* Activos, hospital y ubicacion de la visita */}
       <div className="text-xs text-gray-500 space-y-0.5">
-        <p><span className="font-mono">{wo.asset?.code}</span> — {wo.asset?.name}</p>
-        <p className="text-gray-500">{wo.hospital?.name}</p>
+        {wo.assets_count > 1 ? (
+          <p className="font-medium text-gray-700">{wo.assets_count} activos</p>
+        ) : (
+          <p><span className="font-mono">{wo.assets?.[0]?.code}</span> — {wo.assets?.[0]?.name}</p>
+        )}
+        <p className="text-gray-500">
+          {wo.hospital?.name}
+          {wo.location?.path && ` · ${wo.location.path}`}
+        </p>
       </div>
 
       {/* Status */}

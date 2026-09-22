@@ -86,11 +86,13 @@ def ot_de_piso(hospital, admin, tec, version):
 
 
 def responder(tarea, tec, completo=True):
-    respuesta = ChecklistResponse.objects.create(
-        task=tarea, version=tarea.checklist_version, completed_by=tec,
-        started_at=timezone.now(),
-        completed_at=timezone.now() if completo else None,
-    )
+    # El checklist ya existe: se crea vacio al meter la tarea en la OT.
+    respuesta = ChecklistResponse.objects.get(task=tarea)
+    respuesta.started_at = timezone.now()
+    if completo:
+        respuesta.completed_at = timezone.now()
+        respuesta.completed_by = tec
+    respuesta.save()
     ChecklistFieldResponse.objects.create(
         response=respuesta, field=tarea.checklist_version.fields.get(), value="55",
     )
@@ -272,13 +274,18 @@ def test_version_desconocida_no_se_da_por_verificada(hospital, admin):
 
 # ── Compatibilidad de la API ─────────────────────────────────────────────────
 
-def test_el_detalle_expone_las_tareas_y_el_primer_activo(ot_de_piso, admin):
+def test_el_detalle_expone_las_tareas_y_sus_activos(ot_de_piso, admin):
     resp = client_for(admin).get(reverse("work-orders-detail", kwargs={"pk": ot_de_piso.id}))
 
     assert resp.status_code == status.HTTP_200_OK
     assert len(resp.data["tasks"]) == 3
-    assert resp.data["asset"]["name"] == "Alarma 3 gases"
+    assert [a["name"] for a in resp.data["assets"]][0] == "Alarma 3 gases"
+    assert resp.data["assets_count"] == 3
     assert resp.data["hospital"]["name"] == "Clinica Piso 3"
+    # Los campos de la primera tarea se retiraron en la fase 4.
+    assert "asset" not in resp.data
+    assert "checklist_version" not in resp.data
+    assert "checklist_response_id" not in resp.data
 
 
 def test_filtrar_por_activo_no_repite_la_ot(ot_de_piso, admin):

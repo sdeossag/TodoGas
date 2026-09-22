@@ -342,6 +342,6 @@ def test_ida_vuelta_e_ida_no_duplica_tareas(base_antigua):
     assert cerrada.tasks.count() == 1
     assert WorkOrder.objects.get(pk=viejo["abierta"].pk).tasks.count() == 1
     assert MaintenancePlan.objects.get(pk=viejo["plan"].pk).tasks.count() == 1
-    assert ChecklistResponse.objects.get(pk=viejo["respuesta"].pk).task == cerrada.primary_task
+    assert ChecklistResponse.objects.get(pk=viejo["respuesta"].pk).task == cerrada.tasks.first()
     assert Task.objects.filter(status=Task.Status.PENDING).count() == 1
     assert compute_wo_content_hash(cerrada, "1") == viejo["hash_v1"]
