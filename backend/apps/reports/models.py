@@ -32,6 +32,10 @@ class GeneratedReport(models.Model):
     # reportes que no son de una OT concreta, como el consolidado por periodo.
     content_hash = models.CharField(max_length=64, blank=True, default="")
     integrity_version = models.CharField(max_length=8, blank=True, default="")
+    # Con que interruptores del acta se imprimio (apps.reports.options): si
+    # despues se cambia la configuracion, se sabe por que esta acta no trae
+    # un campo. Vacio en las actas anteriores al acta configurable.
+    options_used = models.JSONField(default=dict, blank=True)
     generated_by = models.ForeignKey(
         "users.User", on_delete=models.PROTECT,
         null=True, blank=True,
@@ -46,6 +50,35 @@ class GeneratedReport(models.Model):
 
     def __str__(self):
         return f"{self.report_type}: {self.title}"
+
+
+class ReportSettings(models.Model):
+    """
+    Configuracion del acta de servicio: una sola fila (un solo formato).
+    `options` guarda solo los interruptores que el administrador cambio; lo
+    que falta esta encendido (ver apps.reports.options).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    options = models.JSONField(default=dict, blank=True)
+    updated_by = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="+"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "reports_reportsettings"
+        verbose_name = "Configuración del acta"
+
+    @classmethod
+    def current(cls):
+        obj = cls.objects.order_by("updated_at").first()
+        return obj or cls.objects.create()
+
+    def __str__(self):
+        return "Configuración del acta"
 
 
 class ReportSendLog(models.Model):

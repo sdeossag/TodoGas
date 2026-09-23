@@ -59,6 +59,8 @@ export const ENTITY_TYPE_LABELS = {
   RescheduleCause: 'Causa de reprogramación',
   InventoryItem: 'Item de inventario',
   StockMovement: 'Movimiento de stock',
+  GeneratedReport: 'Acta',
+  ReportSettings: 'Configuración del acta',
   // Inicios y cierres de sesion, refresco de token y cambio de contrasena.
   Authentication: 'Autenticacion',
 }

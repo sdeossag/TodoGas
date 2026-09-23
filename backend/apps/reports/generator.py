@@ -15,7 +15,8 @@ from apps.work_orders.integrity import (
     compute_wo_content_hash,
 )
 
-from .models import GeneratedReport
+from .models import GeneratedReport, ReportSettings
+from .options import efectivas, numeracion
 
 
 def _duration_label(value):
@@ -175,10 +176,10 @@ def _validacion(work_order):
     }
 
 
-def generate_service_report_pdf(work_order):
+def _render(work_order, opciones):
     """
-    Genera el PDF del acta de servicio para una OT y lo sube al storage.
-    Devuelve (pdf_bytes, s3_key, report_hash).
+    El acta en PDF con los interruptores `opciones` (apps.reports.options).
+    Devuelve (pdf_bytes, report_hash, generated_at); no guarda nada.
     """
     from weasyprint import HTML
 
@@ -259,10 +260,27 @@ def generate_service_report_pdf(work_order):
         "report_hash": report_hash,
         "generated_at": generated_at,
         "logo_base64": get_logo_base64("on_dark"),
+        "op": opciones,
+        "n": numeracion(opciones),
     }
 
     html_str = render_to_string("reports/service_report.html", context)
     pdf_bytes = HTML(string=html_str, base_url=settings.BACKEND_URL).write_pdf()
+    return pdf_bytes, report_hash, generated_at
+
+
+def preview_service_report_pdf(work_order, opciones):
+    """El acta como quedaria con estas opciones, sin guardarla ni registrarla."""
+    return _render(work_order, efectivas(opciones))[0]
+
+
+def generate_service_report_pdf(work_order):
+    """
+    Genera el PDF del acta de servicio para una OT con la configuracion
+    vigente y lo sube al storage. Devuelve (pdf_bytes, s3_key, report_hash).
+    """
+    opciones = efectivas(ReportSettings.current().options)
+    pdf_bytes, report_hash, generated_at = _render(work_order, opciones)
 
     filename = f"reports/{work_order.id}/OT-{work_order.wo_number}.pdf"
     s3_key = default_storage.save(filename, ContentFile(pdf_bytes))
@@ -277,6 +295,7 @@ def generate_service_report_pdf(work_order):
         file_hash=pdf_hash,
         content_hash=report_hash,
         integrity_version=INTEGRITY_ALGORITHM_VERSION,
+        options_used=opciones,
         generated_by=None,
         generated_at=generated_at,
     )

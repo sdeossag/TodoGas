@@ -1,4 +1,5 @@
 from django.core.files.storage import default_storage
+from django.http import HttpResponse
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -8,7 +9,7 @@ from rest_framework.views import APIView
 from apps.users.models import User
 from apps.users.permissions import IsAdmin
 
-from .models import GeneratedReport
+from .models import GeneratedReport, ReportSettings
 from .serializers import GeneratedReportSerializer
 
 
@@ -107,3 +108,90 @@ class ConsolidatedReportView(APIView):
             requested_by_id=str(request.user.id),
         )
         return Response({"task_id": result.id, "status": "queued"}, status=status.HTTP_202_ACCEPTED)
+
+
+def _configuracion_del_acta(ajustes):
+    from .options import CATALOGO, SIEMPRE_INCLUIDO, efectivas
+
+    return {
+        "options": efectivas(ajustes.options),
+        "catalog": [{"key": k, "section": s, "label": l} for k, s, l in CATALOGO],
+        "always_included": SIEMPRE_INCLUIDO,
+        "updated_at": ajustes.updated_at,
+        "updated_by_name": (
+            f"{ajustes.updated_by.first_name} {ajustes.updated_by.last_name}".strip()
+            if ajustes.updated_by else None
+        ),
+    }
+
+
+def _opciones_validas(data):
+    """Solo claves del catalogo y valores si/no; si no, un mensaje de error."""
+    from .options import CLAVES
+
+    opciones = data.get("options")
+    if not isinstance(opciones, dict):
+        return None, "Falta 'options' con los interruptores del acta."
+    desconocidas = sorted(set(opciones) - CLAVES)
+    if desconocidas:
+        return None, f"Opciones desconocidas: {', '.join(desconocidas)}."
+    if any(not isinstance(v, bool) for v in opciones.values()):
+        return None, "Cada opción es verdadero o falso."
+    return opciones, None
+
+
+class ReportSettingsView(APIView):
+    """
+    GET/PATCH /api/report-settings/ — que imprime el acta (#107). Un solo
+    formato para todas las actas nuevas; las ya generadas no cambian.
+    """
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        return Response(_configuracion_del_acta(ReportSettings.current()))
+
+    def patch(self, request):
+        opciones, error = _opciones_validas(request.data)
+        if error:
+            return Response({"options": error}, status=status.HTTP_400_BAD_REQUEST)
+        ajustes = ReportSettings.current()
+        ajustes.options = {**ajustes.options, **opciones}
+        ajustes.updated_by = request.user
+        ajustes.save()
+        return Response(_configuracion_del_acta(ajustes))
+
+
+class ReportSettingsPreviewView(APIView):
+    """
+    POST /api/report-settings/preview/ — el acta de la ultima OT finalizada
+    como quedaria con estas opciones, antes de guardarlas. No se guarda ni
+    se registra.
+    """
+
+    permission_classes = [IsAdmin]
+
+    def post(self, request):
+        from apps.work_orders.models import WorkOrder
+
+        from .generator import preview_service_report_pdf
+
+        opciones, error = _opciones_validas(request.data)
+        if error:
+            return Response({"options": error}, status=status.HTTP_400_BAD_REQUEST)
+        ot = (
+            WorkOrder.objects.filter(status=WorkOrder.Status.COMPLETED)
+            .select_related("hospital", "assigned_to", "location")
+            .order_by("-completed_at")
+            .first()
+        )
+        if ot is None:
+            return Response(
+                {"detail": "Todavía no hay OTs finalizadas para mostrar un acta de ejemplo."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        pdf = preview_service_report_pdf(ot, {**ReportSettings.current().options, **opciones})
+        respuesta = HttpResponse(pdf, content_type="application/pdf")
+        respuesta["Content-Disposition"] = f'inline; filename="vista-previa-{ot.wo_code}.pdf"'
+        respuesta["X-Work-Order"] = ot.wo_code
+        return respuesta

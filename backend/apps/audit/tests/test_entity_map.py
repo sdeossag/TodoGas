@@ -33,6 +33,7 @@ RUTAS_REALES = [
     "/api/evidence/photos/",
     "/api/evidence/signatures/",
     "/api/reports/",
+    "/api/report-settings/",
     "/api/users/",
     "/api/auth/logout/",
 ]

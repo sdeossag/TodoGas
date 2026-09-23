@@ -41,12 +41,14 @@
   .photo-grid td { border: none; padding: 8px; vertical-align: top; text-align: center; }
   .photo-grid img { max-width: 100%; max-height: 200px; border: 1px solid #ddd; }
   .photo-caption { font-size: 8pt; color: #555; margin-top: 4px; }
-  .sig-table td { border: 1px solid #ccc; padding: 10px; text-align: center; vertical-align: top; width: 33%; }
+  .sig-table td { border: 1px solid #ccc; padding: 10px; text-align: center; vertical-align: top; }
   .sig-table img { max-width: 160px; max-height: 90px; border: 1px solid #ddd; background: white; }
   .validated { display: inline-block; border: 1px solid #1e3a5f; color: #1e3a5f; padding: 6px 8px; font-size: 8pt; font-weight: bold; }
   .label { font-size: 8pt; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
   .no-data { color: #888; font-style: italic; font-size: 9pt; padding: 8px 0; }
   .meta-row { font-size: 8pt; color: #666; margin-top: 8px; }
+  .kv { margin-bottom: 10px; }
+  .kv:last-child { margin-bottom: 0; }
 </style>
 </head>
 <body>
@@ -74,36 +76,41 @@
   </table>
 </div>
 
-<!-- SECCION 1: Datos de la visita -->
+<!-- Cada seccion y campo obedece a los interruptores de Configuracion > Acta
+     (op.*, apps/reports/options.py). Los numeros de seccion (n.*) se calculan
+     con las que estan encendidas, para que no queden huecos. -->
+
+<!-- Datos de la visita -->
 <div class="section">
-  <h2>1. Datos de la visita</h2>
+  <h2>{{ n.visita }}. Datos de la visita</h2>
   <table>
     <tr>
       <td style="width:50%">
-        <span class="label">Hospital / Cliente</span><br><strong>{{ work_order.hospital.name }}</strong>
-        {% if work_order.location %}<br><br><span class="label">Ubicación de la visita</span><br>{{ work_order.location.path }}{% endif %}
-        <br><br><span class="label">Activos intervenidos</span><br>{{ blocks|length }}
+        <div class="kv"><span class="label">Hospital / Cliente</span><br><strong>{{ work_order.hospital.name }}</strong></div>
+        {% if op.visita_ubicacion and work_order.location %}<div class="kv"><span class="label">Ubicación de la visita</span><br>{{ work_order.location.path }}</div>{% endif %}
+        {% if op.visita_activos %}<div class="kv"><span class="label">Activos intervenidos</span><br>{{ blocks|length }}</div>{% endif %}
       </td>
       <td style="width:50%">
         {# Quien hizo el trabajo y cuando, segun lo registrado en campo; no el asignado ni la hora de aprobar. #}
-        <span class="label">Ejecutado por</span><br><strong>{% if executors %}{{ executors|join:", " }}{% else %}No registrado{% endif %}</strong>
-        {% if work_order.scheduled_date %}<br><br><span class="label">Fecha programada</span><br>{{ work_order.scheduled_date|date:"d/m/Y" }}{% endif %}
-        {% if field_work %}<br><br><span class="label">Trabajo en campo</span><br>{{ field_work.start|date:"d/m/Y H:i" }} &ndash; {% if field_work.start|date:"d/m/Y" == field_work.end|date:"d/m/Y" %}{{ field_work.end|date:"H:i" }}{% else %}{{ field_work.end|date:"d/m/Y H:i" }}{% endif %}
-        <br><br><span class="label">Duración del trabajo</span><br>{{ field_work.duration }}{% endif %}
+        {% if op.visita_ejecutor %}<div class="kv"><span class="label">Ejecutado por</span><br><strong>{% if executors %}{{ executors|join:", " }}{% else %}No registrado{% endif %}</strong></div>{% endif %}
+        {% if op.visita_fecha_programada and work_order.scheduled_date %}<div class="kv"><span class="label">Fecha programada</span><br>{{ work_order.scheduled_date|date:"d/m/Y" }}</div>{% endif %}
+        {% if op.visita_trabajo_en_campo and field_work %}<div class="kv"><span class="label">Trabajo en campo</span><br>{{ field_work.start|date:"d/m/Y H:i" }} &ndash; {% if field_work.start|date:"d/m/Y" == field_work.end|date:"d/m/Y" %}{{ field_work.end|date:"H:i" }}{% else %}{{ field_work.end|date:"d/m/Y H:i" }}{% endif %}</div>{% endif %}
+        {% if op.visita_duracion and field_work %}<div class="kv"><span class="label">Duración del trabajo</span><br>{{ field_work.duration }}</div>{% endif %}
       </td>
     </tr>
   </table>
-  {% if work_order.description %}
+  {% if op.visita_descripcion and work_order.description %}
   <table><tr><th>Descripción de la intervención</th></tr><tr><td>{{ work_order.description }}</td></tr></table>
   {% endif %}
-  {% if work_order.notes %}
+  {% if op.visita_notas and work_order.notes %}
   <table><tr><th>Notas</th></tr><tr><td>{{ work_order.notes }}</td></tr></table>
   {% endif %}
 </div>
 
-<!-- SECCION 2: Resumen de activos -->
+{% if op.resumen_activos %}
+<!-- Resumen de activos -->
 <div class="section">
-  <h2>2. Activos intervenidos</h2>
+  <h2>{{ n.resumen }}. Activos intervenidos</h2>
   {% if blocks %}
   <table>
     <tr><th style="width:5%">#</th><th style="width:18%">Código</th><th>Activo</th><th>Tarea</th><th style="width:16%">Checklist</th></tr>
@@ -111,7 +118,7 @@
     <tr>
       <td>{{ forloop.counter }}</td>
       <td>{{ b.asset.code }}</td>
-      <td>{{ b.asset.name }}{% if b.asset.node %}<br><span class="label">{{ b.asset.node.path }}</span>{% endif %}</td>
+      <td>{{ b.asset.name }}{% if op.activo_ubicacion and b.asset.node %}<br><span class="label">{{ b.asset.node.path }}</span>{% endif %}</td>
       <td>{{ b.task.title }}{% if b.task.plan_task %}<br><span class="label">{{ b.task.plan_task.plan.name }}</span>{% endif %}</td>
       <td>{% if b.checklist_response %}{% if b.checklist_response.completed_at %}Completo{% else %}Incompleto{% endif %}{% else %}Sin checklist{% endif %}</td>
     </tr>
@@ -121,24 +128,25 @@
   <p class="no-data">La OT no tiene activos registrados.</p>
   {% endif %}
 </div>
+{% endif %}
 
-<!-- SECCION 3: Un bloque por activo -->
+<!-- Un bloque por activo -->
 {% for b in blocks %}
 <div class="section">
-  <h2>3.{{ forloop.counter }} {{ b.asset.name }} &mdash; {{ b.asset.code }}</h2>
+  <h2>{{ n.activos }}.{{ forloop.counter }} {{ b.asset.name }} &mdash; {{ b.asset.code }}</h2>
   <table>
     <tr>
       <td style="width:50%">
-        {% if b.asset.node %}<span class="label">Ubicación</span><br>{{ b.asset.node.path }}<br><br>{% endif %}
-        {% if b.asset.equipment_location %}<span class="label">Ubicación del equipo</span><br>{{ b.asset.equipment_location }}<br><br>{% endif %}
-        {% if b.asset.asset_type %}<span class="label">Tipo de activo</span><br>{{ b.asset.asset_type }}<br><br>{% endif %}
-        <span class="label">Tarea</span><br>{{ b.task.title }}
+        {% if op.activo_ubicacion and b.asset.node %}<div class="kv"><span class="label">Ubicación</span><br>{{ b.asset.node.path }}</div>{% endif %}
+        {% if op.activo_ubicacion_equipo and b.asset.equipment_location %}<div class="kv"><span class="label">Ubicación del equipo</span><br>{{ b.asset.equipment_location }}</div>{% endif %}
+        {% if op.activo_tipo and b.asset.asset_type %}<div class="kv"><span class="label">Tipo de activo</span><br>{{ b.asset.asset_type }}</div>{% endif %}
+        <div class="kv"><span class="label">Tarea</span><br>{{ b.task.title }}</div>
       </td>
       <td style="width:50%">
-        {% if b.asset.manufacturer %}<span class="label">Fabricante</span><br>{{ b.asset.manufacturer }}<br><br>{% endif %}
-        {% if b.asset.model %}<span class="label">Modelo</span><br>{{ b.asset.model }}<br><br>{% endif %}
-        {% if b.asset.serial_number %}<span class="label">Número de serie</span><br>{{ b.asset.serial_number }}<br><br>{% endif %}
-        {% if b.checklist_response %}<span class="label">Checklist</span><br>{{ b.task.checklist_version.template.name }} v{{ b.task.checklist_version.version_number }}{% endif %}
+        {% if op.activo_fabricante and b.asset.manufacturer %}<div class="kv"><span class="label">Fabricante</span><br>{{ b.asset.manufacturer }}</div>{% endif %}
+        {% if op.activo_modelo and b.asset.model %}<div class="kv"><span class="label">Modelo</span><br>{{ b.asset.model }}</div>{% endif %}
+        {% if op.activo_serie and b.asset.serial_number %}<div class="kv"><span class="label">Número de serie</span><br>{{ b.asset.serial_number }}</div>{% endif %}
+        {% if op.activo_checklist and b.checklist_response %}<div class="kv"><span class="label">Checklist</span><br>{{ b.task.checklist_version.template.name }} v{{ b.task.checklist_version.version_number }}</div>{% endif %}
       </td>
     </tr>
   </table>
@@ -149,20 +157,24 @@
       {# Bloque repetible: una fila por toma, una columna por pregunta. #}
       <table class="repeated">
         <tr class="group-header"><td colspan="{{ sec.columns|length|add:2 }}">{{ sec.name }} &times; {{ sec.rows|length }}</td></tr>
-        <tr><th>N°</th>{% for col in sec.columns %}<th>{{ col }}</th>{% endfor %}{% if sec.with_notes %}<th>Obs.</th>{% endif %}</tr>
+        <tr><th>N°</th>{% for col in sec.columns %}<th>{{ col }}</th>{% endfor %}{% if op.checklist_observaciones and sec.with_notes %}<th>Obs.</th>{% endif %}</tr>
         {% for fila in sec.rows %}
-        <tr><td>{{ fila.n }}</td>{% for c in fila.cells %}<td>{{ c }}</td>{% endfor %}{% if sec.with_notes %}<td>{{ fila.notes }}</td>{% endif %}</tr>
+        <tr><td>{{ fila.n }}</td>{% for c in fila.cells %}<td>{{ c }}</td>{% endfor %}{% if op.checklist_observaciones and sec.with_notes %}<td>{{ fila.notes }}</td>{% endif %}</tr>
         {% endfor %}
       </table>
       {% else %}
       <table>
-        <tr class="group-header"><td colspan="3">{% if sec.name %}{{ sec.name }}{% else %}General{% endif %}</td></tr>
+        <tr class="group-header"><td colspan="{% if op.checklist_observaciones %}3{% else %}2{% endif %}">{% if sec.name %}{{ sec.name }}{% else %}General{% endif %}</td></tr>
+        {% if op.checklist_observaciones %}
         <tr><th style="width:35%">Campo</th><th style="width:35%">Respuesta</th><th style="width:30%">Observaciones</th></tr>
+        {% else %}
+        <tr><th style="width:50%">Campo</th><th style="width:50%">Respuesta</th></tr>
+        {% endif %}
         {% for fila in sec.rows %}
         <tr>
           <td>{{ fila.label }}</td>
           <td>{{ fila.value }}</td>
-          <td>{{ fila.notes|default:"" }}</td>
+          {% if op.checklist_observaciones %}<td>{{ fila.notes|default:"" }}</td>{% endif %}
         </tr>
         {% endfor %}
       </table>
@@ -171,7 +183,7 @@
       <p class="no-data">El checklist no tiene respuestas.</p>
     {% endfor %}
     {# started_at del checklist es cuando se creo con la OT: la hora real es la de sus respuestas. #}
-    {% if b.field_work %}
+    {% if op.checklist_respondido and b.field_work %}
     <div class="meta-row">
       Respondido: {{ b.field_work.start|date:"d/m/Y H:i" }} &ndash; {{ b.field_work.end|date:"H:i" }}
       {% if b.checklist_response.completed_by %} &nbsp;|&nbsp; Por: {{ b.checklist_response.completed_by.first_name }} {{ b.checklist_response.completed_by.last_name }}{% endif %}
@@ -181,14 +193,14 @@
     <p class="no-data">Esta tarea no tenía checklist asociado.</p>
   {% endif %}
 
-  {% if b.photos %}
+  {% if op.fotos_activo and b.photos %}
   <table class="photo-grid">
     {% for photo in b.photos|slice:":6" %}
       {% if forloop.counter0|divisibleby:2 %}<tr>{% endif %}
       <td style="width:50%">
         <img src="{{ photo.file_url }}" alt="Foto de {{ b.asset.code }}">
         {% if photo.caption %}<div class="photo-caption">{{ photo.caption }}</div>{% endif %}
-        <div class="photo-caption">{{ photo.taken_at|date:"d/m/Y H:i" }}{% if photo.latitude and photo.longitude %} · GPS: {{ photo.latitude }}, {{ photo.longitude }}{% endif %}</div>
+        <div class="photo-caption">{{ photo.taken_at|date:"d/m/Y H:i" }}{% if op.fotos_gps and photo.latitude and photo.longitude %} · GPS: {{ photo.latitude }}, {{ photo.longitude }}{% endif %}</div>
       </td>
       {% if forloop.counter|divisibleby:2 or forloop.last %}</tr>{% endif %}
     {% endfor %}
@@ -198,9 +210,10 @@
 </div>
 {% endfor %}
 
-<!-- SECCION 4: Evidencia fotográfica de la visita -->
+{% if op.fotos_visita %}
+<!-- Evidencia fotografica de la visita -->
 <div class="section">
-  <h2>4. Evidencia fotográfica de la visita</h2>
+  <h2>{{ n.fotos_visita }}. Evidencia fotográfica de la visita</h2>
   {% if visit_photos %}
     <table class="photo-grid">
       {% for photo in visit_photos|slice:":10" %}
@@ -209,7 +222,7 @@
           <img src="{{ photo.file_url }}" alt="Foto {{ forloop.counter }}">
           {% if photo.caption %}<div class="photo-caption">{{ photo.caption }}</div>{% endif %}
           <div class="photo-caption">{{ photo.taken_at|date:"d/m/Y H:i" }}</div>
-          {% if photo.latitude and photo.longitude %}
+          {% if op.fotos_gps and photo.latitude and photo.longitude %}
           <div class="photo-caption">GPS: {{ photo.latitude }}, {{ photo.longitude }}</div>
           {% endif %}
         </td>
@@ -219,16 +232,20 @@
     {% if visit_photos|length > 10 %}
     <p class="no-data">Nota: Se muestran las primeras 10 fotos. Ver fotos adicionales en el sistema CMMS.</p>
     {% endif %}
+  {% elif photos and op.fotos_activo %}
+    <p class="no-data">Todas las fotos están con su activo, en la sección {{ n.activos }}.</p>
   {% elif photos %}
-    <p class="no-data">Todas las fotos están con su activo, en la sección 3.</p>
+    <p class="no-data">No hay fotos generales de la visita.</p>
   {% else %}
     <p class="no-data">No se registraron fotos de evidencia.</p>
   {% endif %}
 </div>
+{% endif %}
 
-<!-- SECCION 5: Materiales -->
+{% if op.materiales %}
+<!-- Materiales -->
 <div class="section">
-  <h2>5. Materiales utilizados</h2>
+  <h2>{{ n.materiales }}. Materiales utilizados</h2>
   {% if stock_movements %}
     <table>
       <tr><th>Repuesto / Insumo</th><th>Cantidad</th><th>Unidad</th></tr>
@@ -244,13 +261,16 @@
     <p class="no-data">No se registraron materiales utilizados.</p>
   {% endif %}
 </div>
+{% endif %}
 
-<!-- SECCION 6: Firmas -->
+{% if n.firmas %}
+<!-- Firmas -->
 <div class="section">
-  <h2>6. Firmas</h2>
+  <h2>{{ n.firmas }}. Firmas</h2>
   {# Tres firmas, como en Fracttal: quien hizo, quien valido y quien recibio. #}
   <table class="sig-table">
     <tr>
+      {% if op.firma_realizado %}
       <td>
         <div class="label">Realizado por</div>
         {% with sig=technician_signature %}{% if sig %}
@@ -261,6 +281,8 @@
           <br><span class="label" style="font-size:7pt">SHA-256: {{ sig.file_hash|slice:":16" }}...</span>
         {% else %}<br><span class="no-data">No registrada</span>{% endif %}{% endwith %}
       </td>
+      {% endif %}
+      {% if op.firma_validado %}
       <td>
         <div class="label">Validado por</div>
         {# La aprobacion de la OT en el sistema, autenticada y en el historial: no se dibuja. #}
@@ -271,6 +293,8 @@
           <br><span class="label">{{ validation.at|date:"d/m/Y H:i" }}</span>
         {% else %}<br><span class="no-data">Pendiente de aprobación</span>{% endif %}
       </td>
+      {% endif %}
+      {% if op.firma_aceptado %}
       <td>
         <div class="label">Aceptado por</div>
         {% with sig=client_signature %}{% if sig %}
@@ -280,9 +304,11 @@
           <br><span class="label">{{ sig.signed_at|date:"d/m/Y H:i" }}</span>
         {% else %}<br><span class="no-data">No registrada</span>{% endif %}{% endwith %}
       </td>
+      {% endif %}
     </tr>
   </table>
 </div>
+{% endif %}
 
 </body>
 </html>

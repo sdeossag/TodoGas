@@ -47,6 +47,10 @@ MIDDLEWARE = [
     "apps.audit.middleware.AuditMiddleware",
 ]
 
+# La vista previa del acta dice de que OT es el ejemplo en este encabezado;
+# sin exponerlo, el navegador no se lo deja leer a la web (otro origen).
+CORS_EXPOSE_HEADERS = ["X-Work-Order"]
+
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{
     "BACKEND": "django.template.backends.django.DjangoTemplates",

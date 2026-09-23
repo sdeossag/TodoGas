@@ -69,3 +69,30 @@ export function useResendReportEmail() {
     },
   })
 }
+
+/** Qué imprime el acta: interruptores por sección y campo (solo ADMIN). */
+export function useReportSettings() {
+  return useQuery({
+    queryKey: ['report-settings'],
+    queryFn: () => client.get('/api/report-settings/').then((r) => r.data),
+  })
+}
+
+export function useSaveReportSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (options) =>
+      client.patch('/api/report-settings/', { options }).then((r) => r.data),
+    onSuccess: (data) => qc.setQueryData(['report-settings'], data),
+  })
+}
+
+/** El acta de la última OT finalizada con estas opciones, sin guardarlas. */
+export function usePreviewReportSettings() {
+  return useMutation({
+    mutationFn: (options) =>
+      client
+        .post('/api/report-settings/preview/', { options }, { responseType: 'blob' })
+        .then((r) => ({ blob: r.data, workOrder: r.headers['x-work-order'] ?? '' })),
+  })
+}

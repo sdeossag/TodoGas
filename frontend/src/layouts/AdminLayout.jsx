@@ -55,6 +55,7 @@ const NAV_GROUPS = [
       { to: '/inventario', label: 'Inventario', icon: 'inventory', alertKey: 'inventory' },
       { to: '/usuarios', label: 'Usuarios', icon: 'users', adminOnly: true },
       { to: '/reportes', label: 'Reportes', icon: 'report' },
+      { to: '/formato-acta', label: 'Formato del acta', icon: 'settings', adminOnly: true },
       { to: '/auditoria', label: 'Auditoria', icon: 'audit', adminOnly: true },
     ],
   },
