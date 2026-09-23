@@ -140,3 +140,30 @@ test('una migracion cortada a la mitad se termina al volver a abrir', async () =
   assert.ok((await columnas(d, 'offline_checklist_responses')).includes('response_json'))
   assert.deepEqual(await pendientes(d), { campos: 1, fotos: 1, firmas: 1, estados: 1 })
 })
+
+test('la v3 guarda una respuesta por toma sin perder las pendientes', async () => {
+  const { d } = await baseV1ConPendientes()
+  await migrate(d)
+
+  // La respuesta que ya estaba queda como campo que no se repite.
+  const [vieja] = await d.query("SELECT repetition, synced FROM offline_field_responses WHERE id = 'fr-1'")
+  assert.deepEqual(vieja, { repetition: 0, synced: 0 })
+
+  // El mismo campo, en dos tomas, son dos filas; repetir la misma toma choca.
+  await d.run(
+    `INSERT INTO offline_field_responses (id, response_id, field_id, value, synced, repetition)
+     VALUES ('fr-2', 'cr-1', 'f-1', 'Cub 1', 0, 1), ('fr-3', 'cr-1', 'f-1', 'Cub 2', 0, 2)`
+  )
+  await assert.rejects(
+    d.run(
+      `INSERT INTO offline_field_responses (id, response_id, field_id, value, synced, repetition)
+       VALUES ('fr-4', 'cr-1', 'f-1', 'otra', 0, 2)`
+    ),
+    /UNIQUE/
+  )
+  const filas = await d.query("SELECT COUNT(*) AS n FROM offline_field_responses WHERE response_id = 'cr-1'")
+  assert.equal(filas[0].n, 3)
+
+  const cols = (await d.query('PRAGMA table_info(offline_checklist_responses)')).map((c) => c.name)
+  assert.ok(cols.includes('local_block_counts') && cols.includes('counts_pending'))
+})

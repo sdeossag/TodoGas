@@ -275,6 +275,7 @@ function emptyTask(plan) {
     dur_hours: '',
     dur_minutes: '',
     start_date: todayIso(),
+    block_counts: {},
   }
 }
 
@@ -301,6 +302,7 @@ function PlanTaskModal({ plan, task, onClose }) {
       dur_hours: hours,
       dur_minutes: minutes,
       start_date: task.start_date ?? '',
+      block_counts: task.block_counts ?? {},
     }
   })
 
@@ -313,6 +315,13 @@ function PlanTaskModal({ plan, task, onClose }) {
   // marcada; si desapareciera, el guardado fallaría sin explicación visible.
   const huerfana = templates.find((c) => c.id === form.checklist_template && !c.current_version_id)
   const porFecha = form.trigger === 'DATE'
+  // Grupos repetibles del checklist elegido: la tarea dice cuántas veces va
+  // cada uno, como el plan "20 TOMAS" de Fracttal.
+  const repetibles = templates.find((c) => c.id === form.checklist_template)?.current_repeatable_groups ?? []
+
+  function setBlockCount(grupo, valor) {
+    setForm((f) => ({ ...f, block_counts: { ...f.block_counts, [grupo]: valor } }))
+  }
 
   const proximas = useMemo(() => {
     if (!porFecha || !form.start_date) return []
@@ -344,6 +353,9 @@ function PlanTaskModal({ plan, task, onClose }) {
       fixed_schedule: porFecha && form.fixed_schedule,
       estimated_duration: buildDuration(form.dur_hours, form.dur_minutes),
       start_date: porFecha && form.start_date ? form.start_date : null,
+      block_counts: Object.fromEntries(
+        repetibles.map((g) => [g, Math.max(1, parseInt(form.block_counts[g], 10) || 1)])
+      ),
     }
     try {
       await saveMut.mutateAsync(payload)
@@ -401,6 +413,29 @@ function PlanTaskModal({ plan, task, onClose }) {
               : 'Al meter la tarea en una OT se usa la versión publicada en ese momento.'}
           </span>
         </label>
+
+        {repetibles.length > 0 && (
+          <div className="border border-brand/20 bg-brand/5 rounded-lg p-3 space-y-2">
+            <p className="text-sm text-gray-700">
+              Este checklist tiene bloques que se repiten. ¿Cuántas veces van en esta tarea?
+            </p>
+            <div className="flex flex-wrap gap-4">
+              {repetibles.map((g) => (
+                <label key={g} className="flex items-center gap-2 text-sm text-gray-700">
+                  {g}
+                  <input type="number" min="1" value={form.block_counts[g] ?? ''}
+                    onChange={(e) => setBlockCount(g, e.target.value)} placeholder="1"
+                    aria-label={`Cantidad de ${g}`}
+                    className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" />
+                  veces
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500">
+              Si el técnico encuentra otra cantidad, la ajusta en campo y se te avisa en la OT.
+            </p>
+          </div>
+        )}
 
         <fieldset className="border border-gray-100 rounded-lg p-4 space-y-3">
           <legend className="text-sm font-medium text-gray-700 px-1">Cuándo se hace</legend>

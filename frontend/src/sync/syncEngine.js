@@ -12,12 +12,14 @@
 import client from '../api/client'
 import {
   countPendingSync,
+  getPendingBlockCounts,
   getPendingChecklistCompletions,
   getUnsyncedFieldResponses,
   getUnsyncedPhotos,
   getUnsyncedSignatures,
   getWorkOrdersWithLocalStatusChange,
   logSync,
+  markBlockCountsSynced,
   markChecklistCompletionSynced,
   markFieldResponseSynced,
   markPhotoSynced,
@@ -53,10 +55,11 @@ export async function syncFieldResponses(onItemDone) {
     try {
       await client.post(`/api/checklists/responses/${row.response_id}/submit-field/`, {
         field: row.field_id,
+        repetition: row.repetition ?? 0,
         value: row.value ?? '',
         notes: row.notes ?? '',
       })
-      await markFieldResponseSynced(row.response_id, row.field_id)
+      await markFieldResponseSynced(row.response_id, row.field_id, row.repetition ?? 0)
       await logSync({
         entityType: 'field_response',
         entityId: row.id,
@@ -250,6 +253,50 @@ export async function syncWorkOrderStatuses(onItemDone) {
   return { ok, failed, total: pending.length }
 }
 
+/**
+ * Cantidades de tomas ajustadas sin red. Van antes que las respuestas: el
+ * servidor rechaza la toma 21 mientras siga creyendo que hay 20.
+ */
+export async function syncBlockCounts(onItemDone) {
+  const pending = await getPendingBlockCounts()
+  let ok = 0
+  let failed = 0
+
+  for (const row of pending) {
+    let cuantas = {}
+    try {
+      cuantas = JSON.parse(row.local_block_counts ?? '{}')
+    } catch {
+      cuantas = {}
+    }
+    try {
+      for (const [group, count] of Object.entries(cuantas)) {
+        await client.post(`/api/checklists/responses/${row.id}/block-count/`, { group, count })
+      }
+      await markBlockCountsSynced(row.id)
+      ok += 1
+    } catch (error) {
+      // Un checklist que ya se cerro en el servidor no admite cambios: no hay
+      // nada que reintentar.
+      if (error?.response?.status === 400 && /completado/i.test(errorText(error))) {
+        await markBlockCountsSynced(row.id)
+        ok += 1
+      } else {
+        failed += 1
+        await logSync({
+          entityType: 'checklist',
+          entityId: row.id,
+          action: 'block-count',
+          status: 'error',
+          errorMessage: errorText(error),
+        })
+      }
+    }
+    onItemDone?.()
+  }
+  return { ok, failed, total: pending.length }
+}
+
 // ── Orquestador ──────────────────────────────────────────────────────────────
 
 /**
@@ -266,15 +313,17 @@ export async function syncOfflineData({ onProgress } = {}) {
     onProgress?.(remaining)
   }
 
-  // El orden es deliberado: respuestas, cierre de cada checklist, evidencia
-  // y al final el estado de la OT, que valida todo lo anterior.
+  // El orden es deliberado: cantidad de tomas, respuestas, cierre de cada
+  // checklist, evidencia y al final el estado de la OT, que valida todo lo
+  // anterior.
+  const counts = await syncBlockCounts(tick)
   const fields = await syncFieldResponses(tick)
   const checklists = await syncChecklistCompletions(tick)
   const photos = await syncPhotos(tick)
   const signatures = await syncSignatures(tick)
   const workOrders = await syncWorkOrderStatuses(tick)
 
-  const result = { fields, checklists, photos, signatures, workOrders }
+  const result = { counts, fields, checklists, photos, signatures, workOrders }
   const fases = Object.values(result)
   const failed = fases.reduce((acc, f) => acc + f.failed, 0)
   const synced = fases.reduce((acc, f) => acc + f.ok, 0)

@@ -15,7 +15,7 @@ function groupFields(fields) {
   return groups
 }
 
-export default function ChecklistPreview({ fields = [] }) {
+export default function ChecklistPreview({ fields = [], repeatableGroups = [] }) {
   if (fields.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-14 text-gray-500">
@@ -33,7 +33,9 @@ export default function ChecklistPreview({ fields = [] }) {
         <div key={gi} className="space-y-5">
           {group.name && (
             <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2">
-              {group.name}
+              {repeatableGroups.includes(group.name)
+                ? `${group.name} 1 (se repite las veces que diga el plan)`
+                : group.name}
             </h3>
           )}
           {group.fields.map((field, fi) => (

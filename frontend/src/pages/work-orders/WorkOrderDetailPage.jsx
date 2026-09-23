@@ -21,6 +21,7 @@ import {
   useCreateChecklistResponse,
   useSubmitField,
   useCompleteChecklist,
+  useSetBlockCount,
 } from '../../api/checklists'
 import { getFieldType } from '../../constants/checklistFields'
 import StatusBadge from '../../components/workOrders/StatusBadge'
@@ -54,7 +55,9 @@ import {
   saveChecklistResponse,
   saveFieldResponse,
   savePhotoOffline,
+  setBlockCountOffline,
 } from '../../db/repositories'
+import { countFor, isRepeatable, slotKey, slots } from '../../utils/checklistSlots'
 
 // Margen sobre la ventana de sondeo de useWorkOrderReports (24 intentos x 5s).
 const REPORT_POLL_TIMEOUT_MS = REPORT_POLL_ATTEMPTS * 5000
@@ -728,6 +731,14 @@ function TasksTab({ wo, user, refetch }) {
       {!varias && visibles[0] ? (
         <>
           {puedeAjustar && <TaskRow task={visibles[0]} abierta={false} onToggle={() => {}} />}
+          {!puedeAjustar && visibles[0].checklist?.block_changes?.length > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {visibles[0].checklist.block_changes.map((b) =>
+                `${b.group}: el plan dice ${b.planned}, en campo se encontraron ${b.count}`
+              ).join(' · ')}
+              . Revisa el plan del activo.
+            </p>
+          )}
           <TaskChecklist wo={wo} task={visibles[0]} canEdit={canEdit} onChange={refetch} onComplete={alCerrarChecklist} />
         </>
       ) : (
@@ -799,6 +810,13 @@ function TaskRow({ task, abierta, onToggle, onRemove = null }) {
           </div>
           <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full ${estado.cls}`}>{estado.label}</span>
         </div>
+        {c?.block_changes?.length > 0 && (
+          <p className="mt-1.5 text-xs text-amber-700">
+            {c.block_changes.map((b) =>
+              `${b.group}: el plan dice ${b.planned}, en campo ${b.count}`
+            ).join(' · ')}
+          </p>
+        )}
         {c && !c.completed_at && (
           <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -1049,20 +1067,26 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
   const allFields = response.version_fields ?? []
   const fieldResponses = response.field_responses ?? []
 
-  const answeredMap = Object.fromEntries(fieldResponses.map((fr) => [fr.field, fr]))
+  // Clave de cada respuesta: campo y toma. En un bloque repetible el mismo
+  // campo se responde una vez por toma.
+  const answeredMap = Object.fromEntries(
+    fieldResponses.map((fr) => [slotKey(fr.field, fr.repetition), fr])
+  )
 
   const groups = groupFields(allFields)
   const [groupIdx, setGroupIdx] = useState(0)
   const currentGroup = groups[groupIdx] ?? { name: '', fields: [] }
+  const grupoRepetible = isRepeatable(response, currentGroup.name)
 
   const [localValues, setLocalValues] = useState(() => {
     const init = {}
-    fieldResponses.forEach((fr) => { init[fr.field] = fr.value })
+    fieldResponses.forEach((fr) => { init[slotKey(fr.field, fr.repetition)] = fr.value })
     return init
   })
 
   const submitFieldMut = useSubmitField(response.id)
   const completeMut = useCompleteChecklist(response.id)
+  const blockCountMut = useSetBlockCount(response.id)
   // Rechazos permanentes (4xx) por campo, para poder avisar al tecnico en vez
   // de tragarlos como si fueran falta de red.
   const [fieldErrors, setFieldErrors] = useState({})
@@ -1081,23 +1105,23 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
     )
   }, [response, workOrderId])
 
-  const answeredCount = fieldResponses.length
-  const totalCount = allFields.length
-  const requiredUnanswered = allFields.filter(
-    (f) => f.is_required && !answeredMap[f.id]
-  )
+  const esperadas = slots(response)
+  const respondida = (x) => !!answeredMap[slotKey(x.field.id, x.repetition)]
+  const answeredCount = esperadas.filter(respondida).length
+  const totalCount = esperadas.length
+  const requiredUnanswered = esperadas.filter((x) => x.field.is_required && !respondida(x))
   const canComplete = requiredUnanswered.length === 0
   const isLastGroup = groupIdx === groups.length - 1
 
-  /** Campos escritos que aun no llegaron al servidor (nadie disparo el blur). */
-  function pendingFieldIds() {
+  /** Respuestas escritas que aun no llegaron al servidor (nadie disparo el blur). */
+  function pendingKeys() {
     return Object.keys(localValues).filter(
-      (id) => (localValues[id] ?? '') !== (answeredMap[id]?.value ?? '')
+      (k) => (localValues[k] ?? '') !== (answeredMap[k]?.value ?? '')
     )
   }
 
   /**
-   * Guarda la respuesta de un campo.
+   * Guarda la respuesta de un campo en una toma (0 si el campo no se repite).
    *
    * `valorExplicito` existe para los campos que se contestan de un toque
    * (si/no, seleccion, foto). Antes hacian `onChange(v); setTimeout(onBlur, 0)`
@@ -1107,18 +1131,20 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
    * nueva y al recargar reaparecia la vieja. En un checklist de cumplimiento
    * eso es un acta que afirma lo contrario de lo que verifico el tecnico.
    */
-  async function handleBlur(fieldId, valorExplicito) {
+  async function handleBlur(fieldId, repetition, valorExplicito) {
     if (!canEdit) return
+    const key = slotKey(fieldId, repetition)
     const value = valorExplicito !== undefined
       ? valorExplicito
-      : (localValues[fieldId] ?? '')
-    if (answeredMap[fieldId]?.value === value) return
+      : (localValues[key] ?? '')
+    if (answeredMap[key]?.value === value) return
 
     // Siempre a SQLite primero: es la unica escritura que no puede fallar.
     await saveFieldResponse({
       id: newId(),
       response_id: response.id,
       field_id: fieldId,
+      repetition,
       value,
       notes: '',
       answered_at: new Date().toISOString(),
@@ -1133,11 +1159,11 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
     }
 
     try {
-      await submitFieldMut.mutateAsync({ field: fieldId, value, notes: '' })
-      await markFieldResponseSynced(response.id, fieldId)
+      await submitFieldMut.mutateAsync({ field: fieldId, repetition, value, notes: '' })
+      await markFieldResponseSynced(response.id, fieldId, repetition)
       setFieldErrors((prev) => {
-        if (!prev[fieldId]) return prev
-        const { [fieldId]: _, ...resto } = prev
+        if (!prev[key]) return prev
+        const { [key]: _, ...resto } = prev
         return resto
       })
       onFieldSaved()
@@ -1147,14 +1173,17 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
       // funcionar. Antes se encolaba igual que un corte de red y el tecnico no
       // veia nada, asi que la respuesta se perdia en silencio.
       if (status >= 400 && status < 500) {
-        const detalle = err.response?.data?.value ?? err.response?.data?.detail
+        const data = err.response?.data
+        const detalle = data?.value ?? data?.repetition ?? data?.detail
         setFieldErrors((prev) => ({
           ...prev,
-          [fieldId]: typeof detalle === 'string'
-            ? detalle
-            : 'No se pudo guardar esta respuesta. Revisa el valor.',
+          [key]: Array.isArray(detalle)
+            ? String(detalle[0])
+            : typeof detalle === 'string'
+              ? detalle
+              : 'No se pudo guardar esta respuesta. Revisa el valor.',
         }))
-        console.warn('[Checklist] submit-field rechazado:', err.response?.data)
+        console.warn('[Checklist] submit-field rechazado:', data)
       } else {
         // Sin respuesta o 5xx: transitorio. Queda en cola y se reintenta.
         console.warn(
@@ -1164,6 +1193,36 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
       }
     }
     await refreshPendingCount()
+  }
+
+  // ── Cantidad de tomas ──────────────────────────────────────────────────────
+
+  const [countError, setCountError] = useState('')
+
+  /**
+   * El tecnico encontro otra cantidad que la del plan. Con red va al servidor;
+   * sin red queda en el telefono y en cola, antes que las respuestas.
+   */
+  async function cambiarCantidad(grupo, nueva) {
+    setCountError('')
+    if (isOnline) {
+      try {
+        await blockCountMut.mutateAsync({ group: grupo, count: nueva })
+        onFieldSaved()
+        return
+      } catch (err) {
+        if (err?.response) {
+          const data = err.response.data
+          const detalle = data?.count ?? data?.group ?? data?.detail
+          setCountError(Array.isArray(detalle) ? String(detalle[0]) : String(detalle ?? 'No se pudo cambiar la cantidad.'))
+          return
+        }
+        // Sin respuesta del servidor: se guarda en el telefono como sin red.
+      }
+    }
+    await setBlockCountOffline(response.id, { ...(response.block_counts ?? {}), [grupo]: nueva })
+    await refreshPendingCount()
+    onFieldSaved()
   }
 
   const [completeError, setCompleteError] = useState('')
@@ -1180,8 +1239,9 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
     setCompleteError('')
     try {
       // Volcar primero lo que sigue solo en el formulario.
-      for (const fieldId of pendingFieldIds()) {
-        await handleBlur(fieldId)
+      for (const key of pendingKeys()) {
+        const corte = key.lastIndexOf(':')
+        await handleBlur(key.slice(0, corte), Number(key.slice(corte + 1)))
       }
       if (!isOnline) {
         await completarSinRed()
@@ -1200,6 +1260,33 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
         data?.detail ?? 'No se pudo finalizar el checklist. Revisa los campos e intenta de nuevo.'
       )
     }
+  }
+
+  function renderField(field, repetition) {
+    const key = slotKey(field.id, repetition)
+    return (
+      <div key={key}>
+        <ChecklistFieldInput
+          field={field}
+          workOrderId={workOrderId}
+          taskId={response.task}
+          value={localValues[key] ?? ''}
+          fieldResponse={answeredMap[key]}
+          disabled={!canEdit}
+          onChange={(val) => setLocalValues((prev) => ({ ...prev, [key]: val }))}
+          onBlur={() => handleBlur(field.id, repetition)}
+          // Los campos de un solo toque commitean el valor directamente:
+          // no pueden depender de leerlo del estado en el mismo ciclo.
+          onCommit={(val) => {
+            setLocalValues((prev) => ({ ...prev, [key]: val }))
+            handleBlur(field.id, repetition, val)
+          }}
+        />
+        {fieldErrors[key] && (
+          <p className="mt-1 text-xs text-red-600">{fieldErrors[key]}</p>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -1232,39 +1319,30 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
               }`}
             >
               {g.name || 'General'}
+              {isRepeatable(response, g.name) && ` × ${countFor(response, g.name)}`}
             </button>
           ))}
         </div>
       )}
 
       {/* Fields */}
-      <div className="space-y-5">
-        {currentGroup.fields.map((field) => (
-          <div key={field.id}>
-            <ChecklistFieldInput
-              field={field}
-              workOrderId={workOrderId}
-              taskId={response.task}
-              value={localValues[field.id] ?? ''}
-              fieldResponse={answeredMap[field.id]}
-              disabled={!canEdit}
-              onChange={(val) =>
-                setLocalValues((prev) => ({ ...prev, [field.id]: val }))
-              }
-              onBlur={() => handleBlur(field.id)}
-              // Los campos de un solo toque commitean el valor directamente:
-              // no pueden depender de leerlo del estado en el mismo ciclo.
-              onCommit={(val) => {
-                setLocalValues((prev) => ({ ...prev, [field.id]: val }))
-                handleBlur(field.id, val)
-              }}
-            />
-            {fieldErrors[field.id] && (
-              <p className="mt-1 text-xs text-red-600">{fieldErrors[field.id]}</p>
-            )}
-          </div>
-        ))}
-      </div>
+      {grupoRepetible ? (
+        <RepeatedGroup
+          key={currentGroup.name}
+          response={response}
+          group={currentGroup}
+          answeredMap={answeredMap}
+          canEdit={canEdit}
+          renderField={renderField}
+          onChangeCount={cambiarCantidad}
+          busy={blockCountMut.isPending}
+          error={countError}
+        />
+      ) : (
+        <div className="space-y-5">
+          {currentGroup.fields.map((field) => renderField(field, 0))}
+        </div>
+      )}
 
       {/* Navigation / Complete */}
       <div className="flex items-center justify-between pt-3 border-t border-gray-100">
@@ -1311,6 +1389,83 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
       {completeError && (
         <p className="text-sm text-red-600 text-right">{completeError}</p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Un bloque repetible: una tarjeta por toma, abierta de a una para que 30
+ * tomas no sean 270 campos en pantalla. Abajo, agregar o quitar tomas si en
+ * campo hay otra cantidad que la del plan.
+ */
+function RepeatedGroup({ response, group, answeredMap, canEdit, renderField, onChangeCount, busy, error }) {
+  const cuantas = countFor(response, group.name)
+  const planeadas = response.planned_block_counts?.[group.name]
+  const respondidasDe = (n) => group.fields.filter((f) => answeredMap[slotKey(f.id, n)]).length
+  const faltanDe = (n) =>
+    group.fields.filter((f) => f.is_required && !answeredMap[slotKey(f.id, n)]).length
+  const numeros = Array.from({ length: cuantas }, (_, i) => i + 1)
+  const [abierta, setAbierta] = useState(
+    () => numeros.find((n) => respondidasDe(n) < group.fields.length) ?? 1
+  )
+  const ultimaVacia = cuantas > 1 && respondidasDe(cuantas) === 0
+  const nombre = group.name.toLowerCase()
+
+  return (
+    <div className="space-y-2">
+      {planeadas && planeadas !== cuantas && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          El plan dice {planeadas} y aquí hay {cuantas}. Se le avisará al administrador.
+        </p>
+      )}
+      {numeros.map((n) => {
+        const respondidas = respondidasDe(n)
+        const completa = respondidas === group.fields.length
+        return (
+          <div key={n} className="border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setAbierta(abierta === n ? null : n)}
+              aria-expanded={abierta === n}
+              className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-gray-50"
+            >
+              <span className="text-sm font-medium text-gray-800">{group.name} {n}</span>
+              <span className={`text-xs ${completa ? 'text-green-600' : faltanDe(n) ? 'text-orange-500' : 'text-gray-500'}`}>
+                {completa ? 'Completa' : `${respondidas} de ${group.fields.length}`}
+              </span>
+            </button>
+            {abierta === n && (
+              <div className="border-t border-gray-100 p-4 space-y-5 bg-gray-50/40">
+                {group.fields.map((field) => renderField(field, n))}
+                {n < cuantas && (
+                  <button type="button" onClick={() => setAbierta(n + 1)}
+                    className="text-sm text-brand hover:underline">
+                    Siguiente: {group.name} {n + 1}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {canEdit && (
+        <div className="flex items-center gap-3 flex-wrap pt-1">
+          <button type="button" disabled={busy}
+            onClick={() => { onChangeCount(group.name, cuantas + 1); setAbierta(cuantas + 1) }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+            <Icon name="plus" className="w-4 h-4" /> Agregar {nombre}
+          </button>
+          {ultimaVacia && (
+            <button type="button" disabled={busy}
+              onClick={() => onChangeCount(group.name, cuantas - 1)}
+              className="text-sm text-gray-500 hover:text-red-600 disabled:opacity-50">
+              Quitar {nombre} {cuantas} (vacía)
+            </button>
+          )}
+        </div>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   )
 }
@@ -2205,8 +2360,18 @@ function IntegritySection({ workOrderId }) {
 function CompletedChecklistView({ response }) {
   const allFields = response.version_fields ?? []
   const fieldResponses = response.field_responses ?? []
-  const answeredMap = Object.fromEntries(fieldResponses.map((fr) => [fr.field, fr]))
+  const answeredMap = Object.fromEntries(
+    fieldResponses.map((fr) => [slotKey(fr.field, fr.repetition), fr])
+  )
   const groups = groupFields(allFields)
+  // Un grupo repetible se muestra una vez por toma: [{ titulo, fields, n }].
+  const bloques = groups.flatMap((g) =>
+    isRepeatable(response, g.name)
+      ? Array.from({ length: countFor(response, g.name) }, (_, i) => ({
+          titulo: `${g.name} ${i + 1}`, fields: g.fields, n: i + 1,
+        }))
+      : [{ titulo: g.name, fields: g.fields, n: 0 }]
+  )
 
   return (
     <div className="space-y-6">
@@ -2228,15 +2393,15 @@ function CompletedChecklistView({ response }) {
       </div>
 
       {/* Read-only answers */}
-      {groups.map((group, gi) => (
+      {bloques.map((group, gi) => (
         <div key={gi} className="space-y-4">
-          {group.name && (
+          {group.titulo && (
             <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2">
-              {group.name}
+              {group.titulo}
             </h3>
           )}
           {group.fields.map((field) => {
-            const fr = answeredMap[field.id]
+            const fr = answeredMap[slotKey(field.id, group.n)]
             return (
               <div key={field.id} className="space-y-1">
                 <label className="block text-xs font-medium text-gray-500">
@@ -2258,6 +2423,8 @@ function CompletedChecklistView({ response }) {
                     <span className="text-gray-500 italic">Sin respuesta</span>
                   ) : field.field_type === 'PHOTO' ? (
                     <FotoDelChecklist workOrderId={response.work_order} value={fr.value} />
+                  ) : field.field_type === 'BOOLEAN' ? (
+                    ({ true: 'Sí', false: 'No' })[fr.value] ?? fr.value
                   ) : (
                     fr.value
                   )}

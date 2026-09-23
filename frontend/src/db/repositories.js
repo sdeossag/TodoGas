@@ -8,6 +8,7 @@
 
 import { query, ready, run } from './database'
 import { PRIORITY_RANK_SQL } from './schema'
+import { progress, slotKey } from '../utils/checklistSlots'
 
 const nowISO = () => new Date().toISOString()
 
@@ -182,11 +183,16 @@ export async function getOfflineChecklistResponse(responseId) {
     version_fields: parse(row.version_fields_json, []),
     field_responses: [],
   }
-  const porCampo = new Map((base.field_responses ?? []).map((fr) => [fr.field, fr]))
+  // Una respuesta por campo y toma (bloques repetibles).
+  const porCampo = new Map(
+    (base.field_responses ?? []).map((fr) => [slotKey(fr.field, fr.repetition), fr])
+  )
   for (const local of locales) {
-    porCampo.set(local.field_id, {
-      ...(porCampo.get(local.field_id) ?? {}),
+    const clave = slotKey(local.field_id, local.repetition)
+    porCampo.set(clave, {
+      ...(porCampo.get(clave) ?? {}),
       field: local.field_id,
+      repetition: local.repetition ?? 0,
       value: local.value,
       notes: local.notes,
       answered_at: local.answered_at,
@@ -195,6 +201,8 @@ export async function getOfflineChecklistResponse(responseId) {
   }
   return {
     ...base,
+    // La cantidad de tomas ajustada en el telefono gana sobre la descargada.
+    block_counts: parse(row.local_block_counts, null) ?? base.block_counts ?? {},
     field_responses: [...porCampo.values()],
     completed_at: base.completed_at ?? row.local_completed_at ?? null,
     _fromOffline: true,
@@ -224,15 +232,12 @@ export async function getOfflineWorkOrderDetail(workOrderId) {
       tareas.push(tarea)
       continue
     }
-    const campos = respuesta.version_fields ?? []
-    const respondidos = new Set(respuesta.field_responses.map((fr) => fr.field))
     tareas.push({
       ...tarea,
       checklist: {
         response_id: responseId,
-        answered: campos.filter((f) => respondidos.has(f.id)).length,
-        total: campos.length,
-        required_missing: campos.filter((f) => f.is_required && !respondidos.has(f.id)).length,
+        // Cada toma de un bloque repetible cuenta aparte, como en el servidor.
+        ...progress(respuesta),
         // El detalle descargado tambien sabe si el servidor ya lo cerro.
         completed_at: respuesta.completed_at ?? tarea.checklist?.completed_at ?? null,
       },
@@ -313,10 +318,13 @@ export async function saveChecklistResponse(response) {
   await run(
     `INSERT OR REPLACE INTO offline_checklist_responses (
       id, work_order_id, version_id, started_at, completed_at, version_fields_json,
-      task_id, response_json, local_completed_at, completion_pending
+      task_id, response_json, local_completed_at, completion_pending,
+      local_block_counts, counts_pending
     ) SELECT ?,?,?,?,?,?,?,?,
       (SELECT local_completed_at FROM offline_checklist_responses WHERE id = ?),
-      COALESCE((SELECT completion_pending FROM offline_checklist_responses WHERE id = ?), 0)
+      COALESCE((SELECT completion_pending FROM offline_checklist_responses WHERE id = ?), 0),
+      (SELECT local_block_counts FROM offline_checklist_responses WHERE id = ? AND counts_pending = 1),
+      COALESCE((SELECT counts_pending FROM offline_checklist_responses WHERE id = ?), 0)
     WHERE ? IS NOT NULL OR NOT EXISTS (
       SELECT 1 FROM offline_checklist_responses WHERE id = ? AND completed_at IS NOT NULL
     )`,
@@ -329,6 +337,8 @@ export async function saveChecklistResponse(response) {
       JSON.stringify(response.version_fields ?? []),
       response.task ?? response.task_id ?? null,
       JSON.stringify(limpia),
+      response.id,
+      response.id,
       response.id,
       response.id,
       response.completed_at ?? null,
@@ -353,6 +363,38 @@ export async function markChecklistCompletedOffline(responseId) {
   await logSync({ entityType: 'checklist', entityId: responseId, action: 'complete', status: 'pending' })
 }
 
+/**
+ * El tecnico encontro otra cantidad de tomas sin red. Queda en el telefono y en
+ * cola: el motor la sube antes que las respuestas, para que el servidor acepte
+ * las de la toma nueva.
+ */
+export async function setBlockCountOffline(responseId, blockCounts) {
+  if (!(await ready())) return
+  await run(
+    `UPDATE offline_checklist_responses
+     SET local_block_counts = ?, counts_pending = 1
+     WHERE id = ?`,
+    [JSON.stringify(blockCounts), responseId]
+  )
+}
+
+export async function getPendingBlockCounts() {
+  if (!(await ready())) return []
+  return query(
+    'SELECT id, local_block_counts FROM offline_checklist_responses WHERE counts_pending = 1'
+  )
+}
+
+export async function markBlockCountsSynced(responseId) {
+  if (!(await ready())) return
+  await run(
+    `UPDATE offline_checklist_responses
+     SET counts_pending = 0, local_block_counts = NULL
+     WHERE id = ?`,
+    [responseId]
+  )
+}
+
 export async function getPendingChecklistCompletions() {
   if (!(await ready())) return []
   return query('SELECT id FROM offline_checklist_responses WHERE completion_pending = 1')
@@ -375,16 +417,17 @@ export async function getChecklistResponse(workOrderId) {
 }
 
 /**
- * Guarda la respuesta a un campo. El indice unico (response_id, field_id)
- * hace que reescribir un campo reemplace la fila en vez de duplicarla.
+ * Guarda la respuesta a un campo. El indice unico (response_id, field_id,
+ * repetition) hace que reescribir un campo reemplace la fila en vez de
+ * duplicarla; en un bloque repetible, cada toma es su propia fila.
  */
 export async function saveFieldResponse(fieldResponse) {
   if (!(await ready())) return
   await run(
     `INSERT INTO offline_field_responses (
-      id, response_id, field_id, value, notes, answered_at, synced
-    ) VALUES (?,?,?,?,?,?,?)
-    ON CONFLICT(response_id, field_id) DO UPDATE SET
+      id, response_id, field_id, value, notes, answered_at, synced, repetition
+    ) VALUES (?,?,?,?,?,?,?,?)
+    ON CONFLICT(response_id, field_id, repetition) DO UPDATE SET
       value = excluded.value,
       notes = excluded.notes,
       answered_at = excluded.answered_at,
@@ -397,6 +440,7 @@ export async function saveFieldResponse(fieldResponse) {
       fieldResponse.notes ?? '',
       fieldResponse.answered_at ?? nowISO(),
       fieldResponse.synced ?? 0,
+      fieldResponse.repetition ?? 0,
     ]
   )
 }
@@ -412,11 +456,12 @@ export async function getUnsyncedFieldResponses(responseId = null) {
   return query('SELECT * FROM offline_field_responses WHERE synced = 0')
 }
 
-export async function markFieldResponseSynced(responseId, fieldId) {
+export async function markFieldResponseSynced(responseId, fieldId, repetition = 0) {
   if (!(await ready())) return
   await run(
-    'UPDATE offline_field_responses SET synced = 1 WHERE response_id = ? AND field_id = ?',
-    [responseId, fieldId]
+    `UPDATE offline_field_responses SET synced = 1
+     WHERE response_id = ? AND field_id = ? AND repetition = ?`,
+    [responseId, fieldId, repetition ?? 0]
   )
 }
 
@@ -518,6 +563,7 @@ export async function countPendingSync() {
        (SELECT COUNT(*) FROM offline_photos WHERE synced = 0) +
        (SELECT COUNT(*) FROM offline_signatures WHERE synced = 0) +
        (SELECT COUNT(*) FROM offline_checklist_responses WHERE completion_pending = 1) +
+       (SELECT COUNT(*) FROM offline_checklist_responses WHERE counts_pending = 1) +
        (SELECT COUNT(*) FROM offline_work_orders WHERE local_status_changed = 1)
      AS total`
   )

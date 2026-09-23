@@ -86,6 +86,21 @@ export function useSubmitField(responseId) {
   })
 }
 
+/** El técnico encontró otra cantidad de tomas que la del plan. */
+export function useSetBlockCount(responseId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ group, count }) =>
+      client
+        .post(`/api/checklists/responses/${responseId}/block-count/`, { group, count })
+        .then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['checklist-responses', responseId] })
+      qc.invalidateQueries({ queryKey: ['work-orders'] })
+    },
+  })
+}
+
 export function useCompleteChecklist(responseId) {
   const qc = useQueryClient()
   return useMutation({

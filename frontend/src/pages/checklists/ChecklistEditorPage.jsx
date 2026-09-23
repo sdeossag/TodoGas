@@ -29,6 +29,8 @@ export default function ChecklistEditorPage() {
 
   const [tab, setTab] = useState(0)
   const [editorFields, setEditorFields] = useState(null)
+  // Grupos que se repiten (null = los de la version actual, sin tocar).
+  const [repeatable, setRepeatable] = useState(null)
   const [showConfirm, setShowConfirm] = useState(false)
   // { message, tone }. Antes solo servia para el exito y los fallos se
   // quedaban en la consola o salian por window.alert.
@@ -45,6 +47,7 @@ export default function ChecklistEditorPage() {
   const currentVersion = template?.versions?.find((v) => v.is_current)
   const currentFields = currentVersion?.checklist_fields ?? []
   const nextVersionNumber = (currentVersion?.version_number ?? 0) + 1
+  const repeatableGroups = repeatable ?? currentVersion?.repeatable_groups ?? []
 
   const handleFieldsChange = useCallback((fields) => {
     setEditorFields(fields)
@@ -64,12 +67,15 @@ export default function ChecklistEditorPage() {
         options_json: f.options_json ?? [],
         help_text: f.help_text || '',
       })),
+      // Solo grupos que siguen teniendo campos: el servidor rechaza el resto.
+      repeatable_groups: repeatableGroups.filter((g) => fields.some((f) => (f.group || '') === g)),
     }
 
     try {
       await publishMut.mutateAsync(payload)
       setShowConfirm(false)
       setEditorFields(null)
+      setRepeatable(null)
       notify(`Versión v${nextVersionNumber} publicada`)
       refetch()
     } catch (err) {
@@ -161,14 +167,21 @@ export default function ChecklistEditorPage() {
 
       {/* Content */}
       {tab === 0 && (
-        <FormBuilder
-          key={currentVersion?.id ?? 'empty'}
-          initialFields={currentFields}
-          onFieldsChange={handleFieldsChange}
-          readOnly={false}
-        />
+        <>
+          <RepeatableGroups
+            fields={displayFields}
+            value={repeatableGroups}
+            onChange={setRepeatable}
+          />
+          <FormBuilder
+            key={currentVersion?.id ?? 'empty'}
+            initialFields={currentFields}
+            onFieldsChange={handleFieldsChange}
+            readOnly={false}
+          />
+        </>
       )}
-      {tab === 1 && <ChecklistPreview fields={displayFields} />}
+      {tab === 1 && <ChecklistPreview fields={displayFields} repeatableGroups={repeatableGroups} />}
       {tab === 2 && <VersionHistory template={template} />}
 
       {/* Confirm modal */}
@@ -211,6 +224,54 @@ export default function ChecklistEditorPage() {
         >
           <Icon name={TOAST_ICONS[toast.tone] ?? TOAST_ICONS.success} className="w-4 h-4 flex-shrink-0" />
           {toast.message}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Grupos repetibles ────────────────────────────────────────────────────────
+
+/**
+ * Qué grupos se repiten. El bloque "Toma" se define una vez y la tarea del plan
+ * dice cuántas veces va ("MANT. SALIDAS 20 TOMAS" → Toma × 20). En Fracttal ese
+ * bloque se escribe a mano tantas veces como tomas haya.
+ */
+function RepeatableGroups({ fields, value, onChange }) {
+  const grupos = [...new Set(fields.map((f) => f.group || '').filter(Boolean))]
+
+  function toggle(grupo) {
+    onChange(value.includes(grupo) ? value.filter((g) => g !== grupo) : [...value, grupo])
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+      <div>
+        <p className="text-sm font-medium text-gray-800">Grupos que se repiten</p>
+        <p className="text-xs text-gray-500">
+          Un grupo repetible se responde una vez por toma, gas o salida. Cuántas veces lo dice la
+          tarea del plan, y el técnico puede ajustarlo en campo.
+        </p>
+      </div>
+      {grupos.length === 0 ? (
+        <p className="text-xs text-gray-500">
+          Ningún campo tiene grupo. Escribe el mismo «Grupo / Sección» en los campos del bloque
+          (por ejemplo «Toma») para poder repetirlo.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {grupos.map((g) => (
+            <label key={g}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm cursor-pointer ${
+                value.includes(g) ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-600'
+              }`}>
+              <input type="checkbox" checked={value.includes(g)} onChange={() => toggle(g)} />
+              {g}
+              <span className="text-xs text-gray-500">
+                ({fields.filter((f) => (f.group || '') === g).length} campos)
+              </span>
+            </label>
+          ))}
         </div>
       )}
     </div>

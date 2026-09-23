@@ -67,6 +67,25 @@ export const MIGRATIONS = [
       )
     },
   },
+  {
+    // Bloques repetibles: el mismo campo se responde una vez por toma. Las
+    // respuestas existentes quedan con repetition 0 (campo que no se repite).
+    version: 3,
+    async up(driver) {
+      await addColumn(driver, 'offline_field_responses', 'repetition', 'INTEGER DEFAULT 0')
+      // La unicidad pasa de (respuesta, campo) a (respuesta, campo, toma). Se
+      // reemplaza el indice, no la tabla: las filas sin sincronizar se quedan.
+      await driver.execute('DROP INDEX IF EXISTS idx_field_responses_unique')
+      await driver.execute(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_field_responses_rep
+           ON offline_field_responses (response_id, field_id, repetition)`
+      )
+      // Cantidad de tomas ajustada sin red: la local gana sobre la descargada
+      // y queda en cola para el servidor.
+      await addColumn(driver, 'offline_checklist_responses', 'local_block_counts', 'TEXT')
+      await addColumn(driver, 'offline_checklist_responses', 'counts_pending', 'INTEGER DEFAULT 0')
+    },
+  },
 ]
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version
