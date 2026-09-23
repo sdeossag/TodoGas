@@ -22,6 +22,11 @@ class Photo(models.Model):
         null=True, blank=True,
         related_name="photos",
     )
+    # Foto de un hallazgo: sale con el hallazgo en el acta y en el portal.
+    finding = models.ForeignKey(
+        "work_orders.Finding", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="photos",
+    )
     file_url = models.CharField(max_length=500)
     thumbnail_url = models.CharField(max_length=500, blank=True, default="")
     latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)

@@ -510,6 +510,7 @@ def _programacion_del_cliente(user):
             for t in proximas[:15]
         ],
         'upcoming_total': proximas.count(),
+        **_hallazgos_del_cliente(user),
         'overdue_count': vencidas,
         'compliance': {
             'period_days': 365,
@@ -518,4 +519,47 @@ def _programacion_del_cliente(user):
             'on_time': a_tiempo,
             'percentage': round(n_hechas * 100 / total) if total else None,
         },
+    }
+
+
+def _hallazgos_del_cliente(user):
+    """
+    Los hallazgos que ve la biomedica en su panel (decision del 2026-09-23):
+    los de sus visitas finalizadas. "Abiertos" son los que aun esperan
+    arreglo: pendientes de decidir, o convertidos en un correctivo que no se
+    ha hecho.
+    """
+    from django.db.models import Q
+
+    from apps.work_orders.models import Finding
+
+    qs = scope.work_orders(
+        Finding.objects.filter(work_order__status="COMPLETED"), user, prefix="work_order__"
+    ).select_related("asset__node", "work_order", "corrective_task")
+    abiertos = qs.filter(
+        Q(status=Finding.Status.PENDING)
+        | Q(status=Finding.Status.CONVERTED, corrective_task__status__in=["PENDING", "SCHEDULED"])
+    )
+
+    def fila(f):
+        corregido = f.status == Finding.Status.CONVERTED and f.corrective_task.status == "DONE"
+        return {
+            'id': str(f.id),
+            'description': f.description,
+            'severity': f.severity,
+            'severity_display': f.get_severity_display(),
+            'out_of_service': f.out_of_service,
+            'reported_at': f.reported_at.isoformat(),
+            'state': (
+                'RESOLVED' if f.resolved_on_site or corregido
+                else 'DISMISSED' if f.status == Finding.Status.DISMISSED
+                else 'OPEN'
+            ),
+            'work_order': {'id': str(f.work_order_id), 'wo_code': f.work_order.wo_code},
+            'asset': {'id': str(f.asset_id), 'code': f.asset.code, 'name': f.asset.name},
+        }
+
+    return {
+        'open_findings_count': abiertos.count(),
+        'recent_findings': [fila(f) for f in qs.order_by('-reported_at')[:10]],
     }

@@ -176,3 +176,85 @@ class WorkOrderStatusHistory(models.Model):
 
     def __str__(self):
         return f"OT-{self.work_order.wo_number}: {self.from_status} → {self.to_status}"
+
+
+class Finding(models.Model):
+    """
+    Hallazgo que el tecnico reporta en campo sobre un activo (bloque E,
+    decisiones del 2026-09-23). Es lo que Fracttal imprime como "Hallazgos
+    encontrados y reportados": el mecanismo por el que una visita preventiva
+    engendra un correctivo, que antes terminaba en texto libre.
+
+    Dos partes que no se mezclan:
+      - lo capturado en campo (descripcion, severidad, fuera de servicio, si
+        se resolvio en sitio y como). Es evidencia: entra en el hash de la OT
+        y no se toca despues de enviarla a revision.
+      - la decision del planificador sobre uno pendiente (convertirlo en tarea
+        correctiva o descartarlo), que llega despues y no altera el acta.
+
+    El id lo puede poner el telefono: creado sin red, sus fotos lo referencian
+    antes de sincronizar, y un reintento no lo duplica.
+    """
+
+    class Severity(models.TextChoices):
+        LOW = "LOW", "Baja"
+        MEDIUM = "MEDIUM", "Media"
+        HIGH = "HIGH", "Alta"
+        CRITICAL = "CRITICAL", "Crítica"
+
+    class Status(models.TextChoices):
+        RESOLVED = "RESOLVED", "Resuelto en sitio"
+        PENDING = "PENDING", "Pendiente"
+        CONVERTED = "CONVERTED", "Convertido en correctivo"
+        DISMISSED = "DISMISSED", "Descartado"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    work_order = models.ForeignKey(
+        WorkOrder, on_delete=models.PROTECT, related_name="findings"
+    )
+    asset = models.ForeignKey(
+        "assets.Asset", on_delete=models.PROTECT, related_name="findings"
+    )
+    description = models.TextField()
+    severity = models.CharField(max_length=10, choices=Severity.choices, default=Severity.MEDIUM)
+    out_of_service = models.BooleanField(
+        default=False, help_text="El equipo queda fuera de servicio por este hallazgo."
+    )
+    resolved_on_site = models.BooleanField(default=False)
+    resolution_notes = models.TextField(
+        blank=True, default="", help_text="Qué se hizo en sitio, si se resolvió ahí."
+    )
+    reported_by = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT, related_name="reported_findings"
+    )
+    # Hora del telefono (apps.work_orders.device_time), tambien sin red.
+    reported_at = models.DateTimeField(default=timezone.now)
+
+    # Ciclo de uno pendiente: RESOLVED no pasa por la bandeja.
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    decided_by = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="decided_findings",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True, default="")
+    corrective_task = models.OneToOneField(
+        "maintenance.Task", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="source_finding",
+        help_text="La tarea correctiva pendiente que se creo a partir de este hallazgo.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "work_orders_finding"
+        ordering = ["work_order", "reported_at"]
+        indexes = [models.Index(fields=["status", "severity"], name="idx_finding_status_sev")]
+
+    @property
+    def is_serious(self):
+        """Crítico o deja el equipo fuera de servicio: se avisa al hospital."""
+        return self.severity == self.Severity.CRITICAL or self.out_of_service
+
+    def __str__(self):
+        return f"Hallazgo {self.get_severity_display()} OT-{self.work_order.wo_number}: {self.description[:40]}"

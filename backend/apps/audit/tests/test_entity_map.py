@@ -34,6 +34,7 @@ RUTAS_REALES = [
     "/api/evidence/signatures/",
     "/api/reports/",
     "/api/report-settings/",
+    "/api/findings/",
     "/api/users/",
     "/api/auth/logout/",
 ]

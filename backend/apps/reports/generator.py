@@ -1,6 +1,7 @@
 import hashlib
 
 from django.conf import settings
+from django.db.models import Count
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.template.loader import render_to_string
@@ -253,6 +254,12 @@ def _render(work_order, opciones):
             (s for s in signatures if s.signature_type == Signature.SignatureType.CLIENT), None
         ),
         "blocks": bloques,
+        # Lo capturado en campo: la decision posterior del planificador no
+        # cambia el acta (va en el portal y en la bandeja).
+        "findings": list(
+            work_order.findings.select_related("asset").annotate(n_fotos=Count("photos"))
+            .order_by("asset__code", "reported_at")
+        ),
         "visit_photos": fotos_visita,
         "photos": photos,
         "signatures": signatures,

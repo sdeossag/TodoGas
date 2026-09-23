@@ -146,7 +146,11 @@ def apply_transition(work_order, new_status, user, comment=""):
     )
 
     if new_status == WorkOrder.Status.COMPLETED:
-        from apps.reports.tasks import generate_work_order_pdf
+        from apps.reports.tasks import generate_work_order_pdf, send_serious_findings_email
         generate_work_order_pdf.delay(str(work_order.id))
+        # Hallazgo critico o equipo fuera de servicio: el hospital se entera
+        # al aprobar, sin esperar a leer el acta.
+        if any(f.is_serious for f in work_order.findings.all()):
+            send_serious_findings_email.delay(str(work_order.id))
 
     return work_order

@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
+from .views_findings import FindingViewSet
 from .views import IntegrityCheckView, WorkOrderStatusHistoryViewSet, WorkOrderViewSet
 from .views_dashboard import (
     DashboardAssetsStatusView,
@@ -10,6 +11,7 @@ from .views_dashboard import (
 
 router = DefaultRouter()
 router.register(r"work-orders", WorkOrderViewSet, basename="work-orders")
+router.register(r"findings", FindingViewSet, basename="findings")
 
 # Nested history endpoint: GET /api/work-orders/{work_order_pk}/history/
 _history_list = WorkOrderStatusHistoryViewSet.as_view({"get": "list"})

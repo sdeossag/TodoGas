@@ -222,3 +222,62 @@ def _assets_label(work_order):
     if resto <= 0:
         return primero
     return f"{primero} y {resto} activo{'s' if resto > 1 else ''} más"
+
+
+def _destinatarios_de_hallazgos(work_order, graves):
+    """
+    El contacto del hospital y las biomedicas cuyo alcance incluye alguno de
+    los equipos con hallazgo grave (una limitada a Urgencias no recibe lo de
+    Cirugia).
+    """
+    from apps.assets.models import Asset
+    from apps.users import scope
+    from apps.users.models import User
+
+    correos = {work_order.hospital.contact_email} if work_order.hospital.contact_email else set()
+    activos = Asset.objects.filter(pk__in={f.asset_id for f in graves})
+    for u in User.objects.filter(role=User.Role.CLI, is_active=True, hospital=work_order.hospital):
+        if u.email and scope.assets(activos, u).exists():
+            correos.add(u.email)
+    return sorted(correos)
+
+
+@shared_task(bind=True, max_retries=3)
+def send_serious_findings_email(self, work_order_id):
+    """
+    Aviso al hospital al aprobar una OT con hallazgos criticos o que dejan un
+    equipo fuera de servicio (decision del 2026-09-23). El detalle va en el
+    acta y en el portal; el correo es para que no espere a leerla.
+    """
+    try:
+        work_order = WorkOrder.objects.select_related("hospital").get(id=work_order_id)
+        graves = [f for f in work_order.findings.select_related("asset__node") if f.is_serious]
+        if not graves:
+            return {"status": "skipped", "reason": "sin hallazgos graves"}
+        para = _destinatarios_de_hallazgos(work_order, graves)
+        if not para:
+            return {"status": "skipped", "reason": "no email"}
+        cuantos = len(graves)
+        msg = EmailMessage(
+            subject=(
+                f"{'Hallazgo importante' if cuantos == 1 else f'{cuantos} hallazgos importantes'}"
+                f" - {work_order.wo_code} | {work_order.hospital.name}"
+            ),
+            body=render_to_string("reports/email_findings.html", {
+                "work_order": work_order,
+                "findings": graves,
+                "hospital": work_order.hospital,
+                "frontend_url": settings.FRONTEND_URL,
+                "logo_base64": get_logo_base64("on_dark"),
+            }),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=para,
+        )
+        msg.content_subtype = "html"
+        msg.send()
+        return {"status": "sent", "to": para}
+    except Exception as exc:
+        logger.exception("No se pudo avisar los hallazgos de la OT %s: %s", work_order_id, exc)
+        if self.request.is_eager or self.request.retries >= self.max_retries:
+            return {"status": "failed", "error": str(exc)}
+        raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))

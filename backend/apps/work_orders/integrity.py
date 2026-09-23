@@ -37,6 +37,11 @@ lavada.
      de repeticion (la toma 1, la toma 2...) y cada checklist la cantidad de
      cada bloque. Sin eso, intercambiar valores entre tomas no cambiaria el
      hash, y el orden de las respuestas de un mismo campo quedaria indefinido.
+  4  Hallazgos. Igual que la 3, mas los hallazgos de la visita con lo que se
+     capturo en campo (equipo, descripcion, severidad, fuera de servicio,
+     resuelto en sitio y como, quien y cuando) y el hallazgo de cada foto. La
+     decision posterior del planificador (convertir o descartar) no entra:
+     llega despues de firmada el acta y no la altera.
 """
 
 import hashlib
@@ -45,8 +50,8 @@ from dataclasses import dataclass
 
 # Version con la que se calculan las actas nuevas. Las anteriores se siguen
 # verificando con la suya (SUPPORTED_VERSIONS).
-INTEGRITY_ALGORITHM_VERSION = "3"
-SUPPORTED_VERSIONS = ("1", "2", "3")
+INTEGRITY_ALGORITHM_VERSION = "4"
+SUPPORTED_VERSIONS = ("1", "2", "3", "4")
 
 
 def _dt(value):
@@ -271,7 +276,37 @@ def _payload_v3(work_order):
     return _payload_v2(work_order, checklist=_checklist_payload_v3, algorithm_version="3")
 
 
-_BUILDERS = {"1": _payload_v1, "2": _payload_v2, "3": _payload_v3}
+def _payload_v4(work_order):
+    from apps.evidence.models import Photo
+
+    datos = _payload_v2(work_order, checklist=_checklist_payload_v3, algorithm_version="4")
+    de_cada_foto = {
+        _id(foto): _id(hallazgo)
+        for foto, hallazgo in Photo.objects.filter(work_order=work_order).values_list("id", "finding_id")
+    }
+    for foto in datos["photos"]:
+        foto["finding"] = de_cada_foto.get(foto["id"])
+    datos["findings"] = sorted(
+        (
+            {
+                "id": _id(f.id),
+                "asset": _id(f.asset_id),
+                "description": f.description,
+                "severity": f.severity,
+                "out_of_service": f.out_of_service,
+                "resolved_on_site": f.resolved_on_site,
+                "resolution_notes": f.resolution_notes,
+                "reported_by": _id(f.reported_by_id),
+                "reported_at": _dt(f.reported_at),
+            }
+            for f in work_order.findings.all()
+        ),
+        key=lambda row: row["id"],
+    )
+    return datos
+
+
+_BUILDERS = {"1": _payload_v1, "2": _payload_v2, "3": _payload_v3, "4": _payload_v4}
 
 
 def build_integrity_payload(work_order, version=INTEGRITY_ALGORITHM_VERSION):

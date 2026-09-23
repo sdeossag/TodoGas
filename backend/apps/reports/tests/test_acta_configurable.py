@@ -101,7 +101,7 @@ def test_por_defecto_todo_esta_encendido():
 
 def test_apagar_una_seccion_no_deja_hueco_en_la_numeracion():
     op = efectivas({"resumen_activos": False, "fotos_visita": False})
-    assert numeracion(op) == {"visita": 1, "activos": 2, "materiales": 3, "firmas": 4}
+    assert numeracion(op) == {"visita": 1, "activos": 2, "hallazgos": 3, "materiales": 4, "firmas": 5}
 
 
 def test_sin_ninguna_firma_no_hay_seccion_de_firmas():

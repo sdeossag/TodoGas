@@ -34,6 +34,7 @@ _PATH_ENTITY_MAP = [
     ('/api/reschedule-causes/', 'RescheduleCause'),
     ('/api/reports/', 'GeneratedReport'),
     ('/api/report-settings/', 'ReportSettings'),
+    ('/api/findings/', 'Finding'),
     ('/api/users/', 'User'),
     ('/api/inventory/items/', 'InventoryItem'),
     ('/api/inventory/movements/', 'StockMovement'),

@@ -31,7 +31,7 @@ from apps.maintenance.models import Task
 from apps.maintenance.testing import make_plan, pending_task
 from apps.reports.models import GeneratedReport
 from apps.users.models import User
-from apps.work_orders.integrity import compute_wo_content_hash
+from apps.work_orders.integrity import INTEGRITY_ALGORITHM_VERSION, compute_wo_content_hash
 from apps.work_orders.models import WorkOrder
 from apps.work_orders.transitions import apply_transition
 
@@ -162,7 +162,7 @@ def test_cerrar_la_ot_deja_un_acta_que_verifica(ot_de_piso, tec, admin):
         GeneratedReport.objects.create(
             work_order=wo, report_type=GeneratedReport.ReportType.WORK_ORDER,
             title="Acta", file_url="acta.pdf", file_hash="c" * 64,
-            content_hash=sellado["hash"], integrity_version="3",
+            content_hash=sellado["hash"], integrity_version=INTEGRITY_ALGORITHM_VERSION,
         )
 
     with patch("apps.reports.tasks.generate_work_order_pdf.delay", side_effect=generar_acta):
@@ -173,7 +173,7 @@ def test_cerrar_la_ot_deja_un_acta_que_verifica(ot_de_piso, tec, admin):
         reverse("work-order-integrity", kwargs={"pk": str(ot_de_piso.id)})
     )
     assert resp.data["verified"] is True
-    assert resp.data["algorithm_version"] == "3"
+    assert resp.data["algorithm_version"] == INTEGRITY_ALGORITHM_VERSION
 
 
 def test_cerrar_crea_la_siguiente_de_cada_activo(ot_de_piso, tec, admin):

@@ -8,7 +8,7 @@ from rest_framework import serializers
 
 from apps.maintenance.models import Task
 from apps.work_orders.device_time import device_time
-from apps.work_orders.models import WorkOrder
+from apps.work_orders.models import Finding, WorkOrder
 
 from .models import Photo, Signature
 
@@ -35,7 +35,7 @@ class PhotoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Photo
         fields = [
-            "id", "work_order", "task", "task_asset", "file_url", "thumbnail_url",
+            "id", "work_order", "task", "task_asset", "finding", "file_url", "thumbnail_url",
             "latitude", "longitude", "taken_at", "caption",
             "file_hash", "uploaded_by", "offline_uuid", "created_at",
         ]
@@ -64,6 +64,10 @@ class PhotoCreateSerializer(serializers.Serializer):
     task = serializers.PrimaryKeyRelatedField(
         queryset=Task.objects.all(), required=False, allow_null=True
     )
+    # Opcional: el hallazgo al que pertenece la foto (bloque E).
+    finding = serializers.PrimaryKeyRelatedField(
+        queryset=Finding.objects.all(), required=False, allow_null=True
+    )
     file = serializers.FileField()
     latitude = serializers.DecimalField(
         max_digits=12, decimal_places=7, required=False, allow_null=True
@@ -89,6 +93,15 @@ class PhotoCreateSerializer(serializers.Serializer):
         tarea = attrs.get("task")
         if tarea is not None and tarea.work_order_id != attrs["work_order"].id:
             raise serializers.ValidationError({"task": "La tarea no es de esta OT."})
+        hallazgo = attrs.get("finding")
+        if hallazgo is not None:
+            if hallazgo.work_order_id != attrs["work_order"].id:
+                raise serializers.ValidationError({"finding": "El hallazgo no es de esta OT."})
+            # Sin tarea, va con la del equipo del hallazgo: en el acta sale en su bloque.
+            if tarea is None:
+                attrs["task"] = attrs["work_order"].tasks.filter(
+                    asset_id=hallazgo.asset_id
+                ).exclude(status="CANCELLED").first()
         return attrs
 
     def validate_file(self, file):
@@ -132,6 +145,7 @@ class PhotoCreateSerializer(serializers.Serializer):
             offline_uuid=validated_data.get("offline_uuid"),
             uploaded_by=uploaded_by,
             task=validated_data.get("task"),
+            finding=validated_data.get("finding"),
         )
 
 
