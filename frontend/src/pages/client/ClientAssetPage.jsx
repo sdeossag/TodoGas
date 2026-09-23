@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { useAsset } from '../../api/assets'
 import { useReportDownload } from '../../api/reports'
 import { useAssetTasks } from '../../api/tasks'
+import { useFindings } from '../../api/findings'
+import { EstadoParaHospital, SeverityBadge } from '../../components/findings/FindingsPanel'
 import Icon from '../../components/ui/Icon'
 import Spinner from '../../components/ui/Spinner'
 import { ASSET_STATUS_COLORS, assetStatusLabel } from '../../constants/labels'
@@ -81,6 +83,8 @@ export default function ClientAssetPage() {
         )}
       </section>
 
+      <HallazgosDelEquipo assetId={id} />
+
       <section className="bg-white rounded-xl border border-gray-200 shadow-card">
         <h2 className="px-5 py-4 border-b border-gray-100 font-semibold text-gray-700 text-sm">Historial</h2>
         {cargandoTareas ? (
@@ -131,6 +135,33 @@ export default function ClientAssetPage() {
         )}
       </section>
     </div>
+  )
+}
+
+/** Lo que se encontró en el equipo en las visitas finalizadas, y en qué va. */
+function HallazgosDelEquipo({ assetId }) {
+  const { data: hallazgos = [] } = useFindings({ asset: assetId })
+  if (!hallazgos.length) return null
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-card">
+      <h2 className="px-5 py-4 border-b border-gray-100 font-semibold text-gray-700 text-sm">Hallazgos</h2>
+      <ul className="divide-y divide-gray-50">
+        {hallazgos.map((f) => (
+          <li key={f.id} className="px-5 py-3 space-y-1.5">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <SeverityBadge hallazgo={f} />
+              <EstadoParaHospital hallazgo={f} />
+            </div>
+            <p className="text-sm text-gray-800">{f.description}</p>
+            {f.resolved_on_site && <p className="text-xs text-green-800">Qué se hizo: {f.resolution_notes}</p>}
+            <p className="text-xs text-gray-500">
+              {formatDate(f.reported_at)} ·{' '}
+              <Link to={`/historial/${f.work_order_info.id}`} className="text-brand hover:underline">{f.work_order_info.wo_code}</Link>
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 

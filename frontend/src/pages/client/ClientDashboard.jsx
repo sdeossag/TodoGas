@@ -10,6 +10,7 @@ import {
   woStatusLabel,
 } from '../../constants/labels'
 import Spinner from '../../components/ui/Spinner'
+import { formatDate } from '../../utils/maintenance'
 import { formatWoCode } from '../../utils/workOrder'
 
 
@@ -38,6 +39,7 @@ export default function ClientDashboard() {
   const {
     hospital, total_assets, assets_by_status, recent_work_orders, recent_reports,
     upcoming = [], upcoming_total = 0, overdue_count = 0, compliance,
+    recent_findings = [], open_findings_count = 0,
   } = data
 
   const statusEntries = Object.entries(assets_by_status || {}).filter(([, v]) => v > 0)
@@ -94,6 +96,38 @@ export default function ClientDashboard() {
           )}
         </section>
       </div>
+
+      {recent_findings.length > 0 && (
+        <section className="bg-white rounded-xl border border-gray-200 shadow-card">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-700 text-sm">Hallazgos</h2>
+            {open_findings_count > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
+                {open_findings_count} sin corregir
+              </span>
+            )}
+          </div>
+          <ul className="divide-y divide-gray-50">
+            {recent_findings.map((f) => (
+              <li key={f.id} className="px-5 py-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link to={`/mis-activos/${f.asset.id}`} className="text-sm font-medium text-gray-800 hover:underline">
+                    {f.asset.name} <span className="font-mono text-xs text-gray-500">{f.asset.code}</span>
+                  </Link>
+                  <p className="text-sm text-gray-600 truncate">{f.description}</p>
+                  <p className="text-xs text-gray-500">
+                    {f.severity_display}{f.out_of_service ? ' · Fuera de servicio' : ''} ·{' '}
+                    <Link to={`/historial/${f.work_order.id}`} className="text-brand hover:underline">{f.work_order.wo_code}</Link>
+                  </p>
+                </div>
+                <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${ESTADO_HALLAZGO[f.state][1]}`}>
+                  {ESTADO_HALLAZGO[f.state][0]}{f.state === 'SCHEDULED' ? ` ${formatDate(f.correction_date)}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="bg-white rounded-xl border border-gray-200 shadow-card">
@@ -200,6 +234,14 @@ function Cumplimiento({ compliance, vencidos }) {
       )}
     </section>
   )
+}
+
+// Como lo entiende el hospital (igual que en la ficha del equipo).
+const ESTADO_HALLAZGO = {
+  RESOLVED: ['Resuelto', 'bg-green-50 text-green-700'],
+  DISMISSED: ['Descartado', 'bg-gray-100 text-gray-600'],
+  SCHEDULED: ['Corrección programada', 'bg-blue-50 text-blue-700'],
+  OPEN: ['Pendiente de corrección', 'bg-amber-50 text-amber-700'],
 }
 
 function StatCard({ label, value, color }) {

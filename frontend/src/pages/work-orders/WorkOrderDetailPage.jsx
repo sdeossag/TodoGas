@@ -12,6 +12,7 @@ import {
 } from '../../api/workOrders'
 import { useTasks } from '../../api/tasks'
 import Modal from '../../components/ui/Modal'
+import FindingsPanel from '../../components/findings/FindingsPanel'
 import { formatDate } from '../../utils/maintenance'
 import { useUsers } from '../../api/users'
 import { formatWoCode } from '../../utils/workOrder'
@@ -294,6 +295,7 @@ export default function WorkOrderDetailPage() {
               'Evidencia',
               'Repuestos',
               'Reportes',
+              'Hallazgos',
             ].map((label, i) => (
               <button
                 key={label}
@@ -314,6 +316,7 @@ export default function WorkOrderDetailPage() {
           {tab === 0 && <HistoryTab id={id} isAdminOrSup={isAdminOrSup} />}
           {tab === 1 && <TasksTab wo={wo} user={user} refetch={refetch} />}
           {tab === 3 && <RepuestosTab wo={wo} user={user} />}
+          {tab === 5 && <FindingsPanel wo={wo} />}
           {tab === 4 && (
             <ReportsTab
               workOrderId={id}

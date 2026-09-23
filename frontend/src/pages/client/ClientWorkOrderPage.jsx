@@ -6,6 +6,7 @@ import { useReportDownload, useWorkOrderReports } from '../../api/reports'
 import { useWorkOrder } from '../../api/workOrders'
 import CompletedChecklistView from '../../components/checklists/CompletedChecklist'
 import PhotoGallery from '../../components/evidence/PhotoGallery'
+import FindingsPanel from '../../components/findings/FindingsPanel'
 import SignatureList from '../../components/evidence/SignatureList'
 import Icon from '../../components/ui/Icon'
 import Spinner from '../../components/ui/Spinner'
@@ -88,6 +89,11 @@ export default function ClientWorkOrderPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="bg-white rounded-xl border border-gray-200 shadow-card p-5">
+        <h2 className="font-semibold text-gray-700 text-sm mb-4">Hallazgos</h2>
+        <FindingsPanel wo={ot} readOnly />
       </section>
 
       <section className="bg-white rounded-xl border border-gray-200 shadow-card p-5">

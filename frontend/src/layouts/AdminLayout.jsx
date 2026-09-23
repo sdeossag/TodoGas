@@ -6,6 +6,7 @@ import { useStockAlerts } from '../api/inventory'
 import Icon from '../components/ui/Icon'
 import Avatar from '../components/ui/Avatar'
 import OfflineBanner from '../components/ui/OfflineBanner'
+import { useFindingsSummary } from '../api/findings'
 
 const ROLE_LABELS = {
   ADMIN: 'Administrador',
@@ -38,6 +39,7 @@ const NAV_GROUPS = [
     title: 'Mantenimiento',
     links: [
       { to: '/tareas-pendientes', label: 'Tareas pendientes', icon: 'clock' },
+      { to: '/hallazgos', label: 'Hallazgos', icon: 'warning', alertKey: 'findings' },
       { to: '/ordenes', label: 'Ordenes de trabajo', icon: 'workOrder' },
       { to: '/planes-pm', label: 'Planes de tareas', icon: 'plan' },
       { to: '/calendario-pm', label: 'Calendario', icon: 'calendar' },
@@ -87,6 +89,9 @@ export default function AdminLayout() {
     return localStorage.getItem(SIDEBAR_KEY) !== 'closed'
   })
   const lowStockCount = alertData?.low_stock_count ?? 0
+  // Hallazgos esperando decisión del planificador (bloque E).
+  const { data: hallazgos } = useFindingsSummary()
+  const alertas = { inventory: lowStockCount, findings: hallazgos?.pending ?? 0 }
 
   // La preferencia solo se recuerda en escritorio: en movil siempre arranca cerrado.
   useEffect(() => {
@@ -225,9 +230,9 @@ export default function AdminLayout() {
                               }`}
                             />
                             <span className="flex-1 truncate">{label}</span>
-                            {alertKey === 'inventory' && lowStockCount > 0 && (
+                            {alertKey && alertas[alertKey] > 0 && (
                               <span className="flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-md bg-red-500/90 text-white text-[11px] font-semibold tabular-nums">
-                                {lowStockCount > 99 ? '99+' : lowStockCount}
+                                {alertas[alertKey] > 99 ? '99+' : alertas[alertKey]}
                               </span>
                             )}
                           </>

@@ -553,7 +553,12 @@ def _hallazgos_del_cliente(user):
             'state': (
                 'RESOLVED' if f.resolved_on_site or corregido
                 else 'DISMISSED' if f.status == Finding.Status.DISMISSED
+                else 'SCHEDULED' if f.status == Finding.Status.CONVERTED
                 else 'OPEN'
+            ),
+            'correction_date': (
+                f.corrective_task.scheduled_date.isoformat()
+                if f.status == Finding.Status.CONVERTED else None
             ),
             'work_order': {'id': str(f.work_order_id), 'wo_code': f.work_order.wo_code},
             'asset': {'id': str(f.asset_id), 'code': f.asset.code, 'name': f.asset.name},

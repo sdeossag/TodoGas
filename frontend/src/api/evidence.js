@@ -14,11 +14,13 @@ export function useWorkOrderPhotos(workOrderId) {
 export function useUploadPhoto() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ work_order, task, file, latitude, longitude, taken_at, caption }) => {
+    mutationFn: ({ work_order, task, finding, file, latitude, longitude, taken_at, caption }) => {
       const form = new FormData()
       form.append('work_order', work_order)
       // De que activo es la foto; sin tarea va como foto de la visita.
       if (task) form.append('task', task)
+      // Foto de un hallazgo: va con el equipo del hallazgo.
+      if (finding) form.append('finding', finding)
       form.append('file', file)
       if (latitude != null) form.append('latitude', latitude)
       if (longitude != null) form.append('longitude', longitude)
@@ -30,6 +32,7 @@ export function useUploadPhoto() {
     },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['photos', variables.work_order] })
+      if (variables.finding) qc.invalidateQueries({ queryKey: ['findings'] })
       qc.invalidateQueries({ queryKey: ['work-orders', variables.work_order] })
     },
   })

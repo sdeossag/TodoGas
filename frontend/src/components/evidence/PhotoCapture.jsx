@@ -53,7 +53,11 @@ async function getPosition() {
   }
 }
 
-export default function PhotoCapture({ workOrderId, tasks = [], disabled = false }) {
+/**
+ * `findingId`: la foto es de un hallazgo (bloque E). El servidor la pone con
+ * la tarea del equipo del hallazgo, asi que no se pregunta de que activo es.
+ */
+export default function PhotoCapture({ workOrderId, tasks = [], disabled = false, findingId = null, onUploaded = null }) {
   const inputRef = useRef(null)
   const previewUrlRef = useRef(null)
 
@@ -264,7 +268,8 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
     upload.mutate(
       {
         work_order: workOrderId,
-        task: taskId || null,
+        task: findingId ? null : taskId || null,
+        finding: findingId,
         file: uploadFile,
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
@@ -272,7 +277,10 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
         caption: caption.trim(),
       },
       {
-        onSuccess: flashSuccess,
+        onSuccess: () => {
+          flashSuccess()
+          onUploaded?.()
+        },
         onError: (err) => setApiError(extractError(err)),
       }
     )
@@ -333,7 +341,7 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
             </p>
           )}
 
-          {activos.length > 1 && (
+          {activos.length > 1 && !findingId && (
             <label className="block max-w-xs">
               <span className="block text-xs font-medium text-gray-600 mb-1">¿De qué activo es?</span>
               <select value={taskId} onChange={(e) => setTaskId(e.target.value)}
