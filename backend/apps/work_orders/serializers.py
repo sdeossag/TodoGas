@@ -214,14 +214,25 @@ def _checklist_progress(tarea):
         respuesta = tarea.checklist_response
     except ObjectDoesNotExist:
         return None
-    campos = list(respuesta.version.fields.all())
-    respondidos = {fr.field_id for fr in respuesta.field_responses.all()}
+    # Un grupo repetible cuenta una vez por toma: 20 tomas de 9 preguntas son
+    # 180 respuestas, no 9.
+    esperadas = respuesta.slots(list(respuesta.version.fields.all()))
+    respondidas = {(fr.field_id, fr.repetition) for fr in respuesta.field_responses.all()}
     return {
         "response_id": str(respuesta.id),
-        "answered": sum(1 for f in campos if f.id in respondidos),
-        "total": len(campos),
-        "required_missing": sum(1 for f in campos if f.is_required and f.id not in respondidos),
+        "answered": sum(1 for f, n in esperadas if (f.id, n) in respondidas),
+        "total": len(esperadas),
+        "required_missing": sum(
+            1 for f, n in esperadas if f.is_required and (f.id, n) not in respondidas
+        ),
         "completed_at": respuesta.completed_at,
+        # El tecnico encontro otra cantidad que la del plan: el administrador
+        # lo ve en la OT para corregir el plan del activo.
+        "block_changes": [
+            {"group": g, "planned": planeadas, "count": respuesta.count_for(g)}
+            for g, planeadas in respuesta.planned_block_counts.items()
+            if respuesta.count_for(g) != planeadas
+        ],
     }
 
 

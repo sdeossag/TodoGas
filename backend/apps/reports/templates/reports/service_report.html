@@ -35,6 +35,7 @@
   .header-sub { font-size: 10pt; margin-top: 4px; opacity: 0.9; }
   .header-table td { border: none; background: transparent; color: white; padding: 2px 0; }
   .section { page-break-inside: avoid; margin-bottom: 20px; }
+  table.repeated th, table.repeated td { font-size: 7.5pt; padding: 2px 3px; }
   .group-header td { background-color: #f0f0f0; font-weight: bold; font-size: 9pt; }
   .out-of-range { background-color: #fff9c4; }
   .photo-grid td { border: none; padding: 8px; vertical-align: top; text-align: center; }
@@ -141,20 +142,29 @@
   </table>
 
   {% if b.checklist_response %}
-    {% regroup b.checklist_response.field_responses.all by field.group as groups %}
-    {% for group in groups %}
+    {% for sec in b.sections %}
+      {% if sec.repeated %}
+      {# Bloque repetible: una fila por toma, una columna por pregunta. #}
+      <table class="repeated">
+        <tr class="group-header"><td colspan="{{ sec.columns|length|add:2 }}">{{ sec.name }} &times; {{ sec.rows|length }}</td></tr>
+        <tr><th>N°</th>{% for col in sec.columns %}<th>{{ col }}</th>{% endfor %}{% if sec.with_notes %}<th>Obs.</th>{% endif %}</tr>
+        {% for fila in sec.rows %}
+        <tr><td>{{ fila.n }}</td>{% for c in fila.cells %}<td>{{ c }}</td>{% endfor %}{% if sec.with_notes %}<td>{{ fila.notes }}</td>{% endif %}</tr>
+        {% endfor %}
+      </table>
+      {% else %}
       <table>
-        <tr class="group-header"><td colspan="3">{% if group.grouper %}{{ group.grouper }}{% else %}General{% endif %}</td></tr>
+        <tr class="group-header"><td colspan="3">{% if sec.name %}{{ sec.name }}{% else %}General{% endif %}</td></tr>
         <tr><th style="width:35%">Campo</th><th style="width:35%">Respuesta</th><th style="width:30%">Observaciones</th></tr>
-        {% for fr in group.list %}
+        {% for fila in sec.rows %}
         <tr>
-          <td>{{ fr.field.label }}</td>
-          {# Una foto guarda su URL (en S3 firmada y larguisima) o sin-conexion:<uuid>: la imagen va en las fotos del activo. #}
-          <td>{% if fr.field.field_type == "PHOTO" %}{% if fr.value %}Foto adjunta (ver fotos del activo){% else %}—{% endif %}{% else %}{{ fr.value|default:"—" }}{% endif %}</td>
-          <td>{{ fr.notes|default:"" }}</td>
+          <td>{{ fila.label }}</td>
+          <td>{{ fila.value }}</td>
+          <td>{{ fila.notes|default:"" }}</td>
         </tr>
         {% endfor %}
       </table>
+      {% endif %}
     {% empty %}
       <p class="no-data">El checklist no tiene respuestas.</p>
     {% endfor %}

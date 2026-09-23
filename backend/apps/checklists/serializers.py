@@ -31,7 +31,7 @@ class ChecklistTemplateVersionSerializer(serializers.ModelSerializer):
         fields = [
             "id", "template", "template_name", "version_number",
             "published_at", "published_by", "published_by_name",
-            "is_current", "checklist_fields", "created_at",
+            "is_current", "repeatable_groups", "checklist_fields", "created_at",
         ]
 
     def get_published_by_name(self, obj):
@@ -48,13 +48,15 @@ class ChecklistTemplateVersionSerializer(serializers.ModelSerializer):
 class ChecklistTemplateListSerializer(serializers.ModelSerializer):
     current_version_id = serializers.SerializerMethodField()
     current_version_number = serializers.SerializerMethodField()
+    current_repeatable_groups = serializers.SerializerMethodField()
     fields_count = serializers.SerializerMethodField()
 
     class Meta:
         model = ChecklistTemplate
         fields = [
             "id", "name", "description", "is_active",
-            "current_version_id", "current_version_number", "fields_count",
+            "current_version_id", "current_version_number",
+            "current_repeatable_groups", "fields_count",
             "created_at", "updated_at",
         ]
 
@@ -77,6 +79,11 @@ class ChecklistTemplateListSerializer(serializers.ModelSerializer):
         v = self._current_version(obj)
         return v.version_number if v else None
 
+    def get_current_repeatable_groups(self, obj):
+        """El plan pide cuantas veces va cada uno ("Toma x 20")."""
+        v = self._current_version(obj)
+        return list(v.repeatable_groups) if v else []
+
     def get_fields_count(self, obj):
         v = self._current_version(obj)
         return len(v.fields.all()) if v else 0
@@ -98,6 +105,20 @@ class ChecklistTemplateCreateUpdateSerializer(serializers.ModelSerializer):
 
 class ChecklistVersionCreateSerializer(serializers.Serializer):
     checklist_fields = ChecklistFieldSerializer(many=True)
+    repeatable_groups = serializers.ListField(
+        child=serializers.CharField(max_length=100), required=False, default=list
+    )
+
+    def validate(self, attrs):
+        grupos = {f.get("group", "") for f in attrs["checklist_fields"]} - {""}
+        sobran = [g for g in attrs["repeatable_groups"] if g not in grupos]
+        if sobran:
+            raise serializers.ValidationError(
+                {"repeatable_groups": f"No hay campos en el grupo {', '.join(sobran)}."}
+            )
+        # Sin repetidos y en el orden en que aparecen los grupos.
+        attrs["repeatable_groups"] = list(dict.fromkeys(attrs["repeatable_groups"]))
+        return attrs
 
     def create(self, validated_data):
         fields_data = validated_data.pop("checklist_fields")
@@ -114,6 +135,7 @@ class ChecklistVersionCreateSerializer(serializers.Serializer):
                 published_by=user,
                 published_at=timezone.now(),
                 is_current=True,
+                repeatable_groups=validated_data.get("repeatable_groups", []),
             )
             for field_data in fields_data:
                 ChecklistField.objects.create(version=version, **field_data)
@@ -128,7 +150,10 @@ class ChecklistFieldResponseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChecklistFieldResponse
-        fields = ["id", "field", "field_label", "field_type", "value", "notes", "answered_at", "out_of_range"]
+        fields = [
+            "id", "field", "field_label", "field_type", "repetition",
+            "value", "notes", "answered_at", "out_of_range",
+        ]
 
     def get_out_of_range(self, obj):
         return getattr(obj, "_out_of_range", False)
@@ -142,14 +167,17 @@ class ChecklistResponseSerializer(serializers.ModelSerializer):
     work_order = serializers.SerializerMethodField()
     version_number = serializers.IntegerField(source="version.version_number", read_only=True)
     version_fields = serializers.SerializerMethodField()
+    repeatable_groups = serializers.ListField(source="version.repeatable_groups", read_only=True)
 
     class Meta:
         model = ChecklistResponse
         fields = [
             "id", "task", "work_order", "version", "version_number",
             "started_at", "completed_at", "completed_by", "completed_by_name",
-            "field_responses", "version_fields", "created_at",
+            "field_responses", "version_fields", "repeatable_groups",
+            "block_counts", "planned_block_counts", "created_at",
         ]
+        read_only_fields = ["block_counts", "planned_block_counts"]
 
     def get_version_fields(self, obj):
         qs = obj.version.fields.all().order_by("sort_order")
@@ -235,9 +263,11 @@ class ChecklistResponseCreateSerializer(serializers.ModelSerializer):
 
 
 class ChecklistFieldResponseCreateSerializer(serializers.ModelSerializer):
+    repetition = serializers.IntegerField(required=False, default=0, min_value=0)
+
     class Meta:
         model = ChecklistFieldResponse
-        fields = ["field", "value", "notes"]
+        fields = ["field", "repetition", "value", "notes"]
 
     def validate_field(self, field):
         response = self.context["response"]
@@ -252,6 +282,21 @@ class ChecklistFieldResponseCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"value": f"El campo '{field.label}' es obligatorio."}
             )
+
+        # Un campo de un grupo repetible se responde por toma (1..N); uno que
+        # no se repite, con 0.
+        response = self.context["response"]
+        repeticion = data.get("repetition", 0)
+        if field.group and field.group in response.version.repeatable_groups:
+            cuantas = response.count_for(field.group)
+            if not 1 <= repeticion <= cuantas:
+                raise serializers.ValidationError({"repetition": (
+                    f"«{field.group}» va de 1 a {cuantas}; llegó {repeticion}."
+                )})
+        elif repeticion != 0:
+            raise serializers.ValidationError(
+                {"repetition": f"El campo '{field.label}' no se repite."}
+            )
         return data
 
     def create(self, validated_data):
@@ -260,6 +305,7 @@ class ChecklistFieldResponseCreateSerializer(serializers.ModelSerializer):
         obj, _ = ChecklistFieldResponse.objects.update_or_create(
             response=response,
             field=field,
+            repetition=validated_data.get("repetition", 0),
             defaults={
                 "value": validated_data.get("value", ""),
                 "notes": validated_data.get("notes", ""),

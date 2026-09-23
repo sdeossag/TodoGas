@@ -315,10 +315,28 @@ def _ensure_response(task):
         return None
     from apps.checklists.models import ChecklistResponse
 
+    cuantas = _block_counts(task)
     respuesta, _ = ChecklistResponse.objects.get_or_create(
-        task=task, defaults={"version_id": task.checklist_version_id}
+        task=task,
+        defaults={
+            "version_id": task.checklist_version_id,
+            "block_counts": cuantas,
+            "planned_block_counts": cuantas,
+        },
     )
     return respuesta
+
+
+def _block_counts(task):
+    """
+    Cuantas veces va cada grupo repetible del checklist de la tarea, segun su
+    plan. Queda fija en el checklist al crearlo: cambiar el plan despues no
+    altera una OT ya armada. Sin plan (correctivo) o sin cantidad, una vez: el
+    tecnico agrega las que encuentre.
+    """
+    grupos = task.checklist_version.repeatable_groups
+    del_plan = task.plan_task.block_counts if task.plan_task_id else {}
+    return {g: max(1, int(del_plan.get(g) or 1)) for g in grupos}
 
 
 def _answered(task):

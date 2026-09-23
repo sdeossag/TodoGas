@@ -162,7 +162,7 @@ def test_cerrar_la_ot_deja_un_acta_que_verifica(ot_de_piso, tec, admin):
         GeneratedReport.objects.create(
             work_order=wo, report_type=GeneratedReport.ReportType.WORK_ORDER,
             title="Acta", file_url="acta.pdf", file_hash="c" * 64,
-            content_hash=sellado["hash"], integrity_version="2",
+            content_hash=sellado["hash"], integrity_version="3",
         )
 
     with patch("apps.reports.tasks.generate_work_order_pdf.delay", side_effect=generar_acta):
@@ -173,7 +173,7 @@ def test_cerrar_la_ot_deja_un_acta_que_verifica(ot_de_piso, tec, admin):
         reverse("work-order-integrity", kwargs={"pk": str(ot_de_piso.id)})
     )
     assert resp.data["verified"] is True
-    assert resp.data["algorithm_version"] == "2"
+    assert resp.data["algorithm_version"] == "3"
 
 
 def test_cerrar_crea_la_siguiente_de_cada_activo(ot_de_piso, tec, admin):
@@ -222,7 +222,7 @@ def test_v2_detecta_la_alteracion_de_cualquier_tarea(ot_de_piso, tec):
 def test_v2_incluye_hospital_y_tareas(ot_de_piso):
     from apps.work_orders.integrity import build_integrity_payload
 
-    payload = build_integrity_payload(ot_de_piso)
+    payload = build_integrity_payload(ot_de_piso, "2")
 
     assert payload["algorithm_version"] == "2"
     assert payload["work_order"]["hospital"] == str(ot_de_piso.hospital_id)

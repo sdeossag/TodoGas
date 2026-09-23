@@ -44,6 +44,10 @@ class ChecklistTemplateVersion(models.Model):
         related_name="published_checklist_versions"
     )
     is_current = models.BooleanField(default=True)
+    # Grupos que se repiten, por nombre: el bloque "Toma" de 9 preguntas se
+    # define una vez y el plan dice cuantas veces va (PlanTask.block_counts).
+    # En Fracttal el bloque se escribe a mano N veces.
+    repeatable_groups = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -188,6 +192,11 @@ class ChecklistResponse(models.Model):
         null=True, blank=True,
         related_name="checklist_responses"
     )
+    # Cuantas veces se responde cada grupo repetible: {"Toma": 20}. Nace con lo
+    # que dice el plan (planned_block_counts) y el tecnico lo ajusta en campo
+    # si encuentra otra cantidad; la diferencia se le avisa al administrador.
+    block_counts = models.JSONField(default=dict, blank=True)
+    planned_block_counts = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -198,6 +207,29 @@ class ChecklistResponse(models.Model):
 
     def __str__(self):
         return f"Respuesta de {self.task}"
+
+    def count_for(self, group):
+        """Cuantas veces se responde un grupo. Uno que no se repite, una vez."""
+        if not group or group not in self.version.repeatable_groups:
+            return 1
+        return max(1, int(self.block_counts.get(group, 1) or 1))
+
+    def slots(self, fields=None):
+        """
+        Las respuestas que espera el checklist, como pares (campo, repeticion).
+
+        Un campo que no se repite tiene repeticion 0; uno de un grupo repetible,
+        de 1 a N. Es la regla que usan el avance, el cierre y el acta.
+        """
+        if fields is None:
+            fields = self.version.fields.all()
+        pares = []
+        for campo in fields:
+            if campo.group and campo.group in self.version.repeatable_groups:
+                pares.extend((campo, n) for n in range(1, self.count_for(campo.group) + 1))
+            else:
+                pares.append((campo, 0))
+        return pares
 
 
 class ChecklistFieldResponse(models.Model):
@@ -216,6 +248,9 @@ class ChecklistFieldResponse(models.Model):
     )
     value = models.TextField(blank=True, default="")
     notes = models.TextField(blank=True, default="")
+    # 0 en un campo que no se repite; 1..N en uno de un grupo repetible (la
+    # toma 1, la toma 2...). El mismo campo se responde una vez por toma.
+    repetition = models.PositiveSmallIntegerField(default=0)
     answered_at = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -225,11 +260,11 @@ class ChecklistFieldResponse(models.Model):
         # elementos ADYACENTES: sin este orden un mismo grupo sale partido y
         # repetido en el PDF que recibe el cliente. Ademas respeta el orden en
         # que el tecnico vio los campos en la app.
-        ordering = ["field__group", "field__sort_order"]
+        ordering = ["field__group", "repetition", "field__sort_order"]
         constraints = [
             models.UniqueConstraint(
-                fields=["response", "field"],
-                name="uq_fieldresponse_response_field"
+                fields=["response", "field", "repetition"],
+                name="uq_fieldresponse_response_field_rep"
             )
         ]
 

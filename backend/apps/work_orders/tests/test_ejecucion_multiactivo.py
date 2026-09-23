@@ -104,6 +104,7 @@ def test_cada_tarea_trae_su_checklist_vacio(ot, admin):
     assert progreso == {
         "response_id": progreso["response_id"],
         "answered": 0, "total": 2, "required_missing": 1, "completed_at": None,
+        "block_changes": [],
     }
 
 

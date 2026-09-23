@@ -134,7 +134,7 @@ class PlanTaskSerializer(serializers.ModelSerializer):
         model = PlanTask
         fields = [
             "id", "plan", "name", "description", "task_type", "priority",
-            "checklist_template", "checklist_template_name",
+            "checklist_template", "checklist_template_name", "block_counts",
             "trigger", "frequency_value", "frequency_unit", "repeat_count",
             "fixed_schedule", "estimated_duration", "downtime_duration",
             "start_date", "sort_order", "is_active", "open_count", "done_count",
@@ -172,6 +172,21 @@ class PlanTaskSerializer(serializers.ModelSerializer):
                 "Publicala desde el editor de checklists o elige otra plantilla."
             )
         return value
+
+    def validate_block_counts(self, value):
+        """{"Toma": 20}: cuantas veces va cada grupo repetible del checklist."""
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Indica la cantidad por grupo, p. ej. {\"Toma\": 20}.")
+        limpio = {}
+        for grupo, cuantas in value.items():
+            try:
+                cuantas = int(cuantas)
+            except (TypeError, ValueError):
+                cuantas = 0
+            if cuantas < 1:
+                raise serializers.ValidationError(f"«{grupo}» necesita al menos 1.")
+            limpio[str(grupo)] = cuantas
+        return limpio
 
     def validate_repeat_count(self, value):
         if value is not None and value < 1:

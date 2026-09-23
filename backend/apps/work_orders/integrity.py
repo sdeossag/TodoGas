@@ -33,6 +33,10 @@ lavada.
      ubicacion, y cada tarea con su activo, su origen, sus fechas y sus
      respuestas. Fotos, firmas e inventario igual que la 1, mas la tarea de
      cada foto.
+  3  Bloques repetibles. Igual que la 2, pero cada respuesta lleva su numero
+     de repeticion (la toma 1, la toma 2...) y cada checklist la cantidad de
+     cada bloque. Sin eso, intercambiar valores entre tomas no cambiaria el
+     hash, y el orden de las respuestas de un mismo campo quedaria indefinido.
 """
 
 import hashlib
@@ -41,8 +45,8 @@ from dataclasses import dataclass
 
 # Version con la que se calculan las actas nuevas. Las anteriores se siguen
 # verificando con la suya (SUPPORTED_VERSIONS).
-INTEGRITY_ALGORITHM_VERSION = "2"
-SUPPORTED_VERSIONS = ("1", "2")
+INTEGRITY_ALGORITHM_VERSION = "3"
+SUPPORTED_VERSIONS = ("1", "2", "3")
 
 
 def _dt(value):
@@ -78,6 +82,31 @@ def _checklist_payload(checklist):
                 for fr in checklist.field_responses.all()
             ),
             key=lambda row: row["field"],
+        ),
+    }
+
+
+def _checklist_payload_v3(checklist):
+    if checklist is None:
+        return None
+    return {
+        "id": _id(checklist.id),
+        "version": _id(checklist.version_id),
+        "completed_at": _dt(checklist.completed_at),
+        "completed_by": _id(checklist.completed_by_id),
+        "block_counts": checklist.block_counts,
+        "fields": sorted(
+            (
+                {
+                    "field": _id(fr.field_id),
+                    "repetition": fr.repetition,
+                    "value": fr.value,
+                    "notes": fr.notes,
+                    "answered_at": _dt(fr.answered_at),
+                }
+                for fr in checklist.field_responses.all()
+            ),
+            key=lambda row: (row["field"], row["repetition"]),
         ),
     }
 
@@ -175,7 +204,7 @@ def _payload_v1(work_order):
     }
 
 
-def _payload_v2(work_order):
+def _payload_v2(work_order, checklist=_checklist_payload, algorithm_version="2"):
     from apps.evidence.models import Photo
 
     tareas = sorted(
@@ -191,7 +220,7 @@ def _payload_v2(work_order):
                 "calculated_date": _dt(t.calculated_date),
                 "scheduled_date": _dt(t.scheduled_date),
                 "completed_at": _dt(t.completed_at),
-                "checklist_response": _checklist_payload(_response_of(t)),
+                "checklist_response": checklist(_response_of(t)),
             }
             for t in work_order.tasks.all()
         ),
@@ -215,7 +244,7 @@ def _payload_v2(work_order):
     )
 
     return {
-        "algorithm_version": "2",
+        "algorithm_version": algorithm_version,
         "work_order": {
             "id": _id(work_order.id),
             "wo_number": work_order.wo_number,
@@ -238,7 +267,11 @@ def _payload_v2(work_order):
     }
 
 
-_BUILDERS = {"1": _payload_v1, "2": _payload_v2}
+def _payload_v3(work_order):
+    return _payload_v2(work_order, checklist=_checklist_payload_v3, algorithm_version="3")
+
+
+_BUILDERS = {"1": _payload_v1, "2": _payload_v2, "3": _payload_v3}
 
 
 def build_integrity_payload(work_order, version=INTEGRITY_ALGORITHM_VERSION):

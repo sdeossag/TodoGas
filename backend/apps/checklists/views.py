@@ -136,6 +136,46 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
 
         return Response(ChecklistFieldResponseSerializer(field_response).data)
 
+    @action(detail=True, methods=["post"], url_path="block-count")
+    def block_count(self, request, pk=None):
+        """
+        El tecnico encontro otra cantidad de tomas que la del plan. El checklist
+        queda con la real; la diferencia la ve el administrador en la OT.
+        """
+        response = self.get_object()
+        if response.completed_at:
+            return Response(
+                {"detail": "El checklist ya está completado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        grupo = request.data.get("group", "")
+        if grupo not in response.version.repeatable_groups:
+            return Response(
+                {"group": f"«{grupo}» no es un grupo que se repita en este checklist."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            cuantas = int(request.data.get("count"))
+        except (TypeError, ValueError):
+            cuantas = 0
+        if cuantas < 1:
+            return Response(
+                {"count": "Tiene que haber al menos una."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        # Solo se quitan tomas vacias: bajar la cantidad no borra respuestas.
+        mayor = max(
+            (fr.repetition for fr in response.field_responses.all() if fr.field.group == grupo),
+            default=0,
+        )
+        if cuantas < mayor:
+            return Response(
+                {"count": f"La {grupo.lower()} {mayor} tiene respuestas; no se puede quitar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        response.block_counts = {**response.block_counts, grupo: cuantas}
+        response.save(update_fields=["block_counts"])
+        return Response(ChecklistResponseSerializer(response).data)
+
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
         response = self.get_object()
@@ -145,9 +185,14 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        required_fields = response.version.fields.filter(is_required=True)
-        answered_ids = set(response.field_responses.values_list("field_id", flat=True))
-        unanswered = [f.label for f in required_fields if f.id not in answered_ids]
+        # Un obligatorio de un grupo repetible lo es en cada toma, no solo en
+        # la primera (en Fracttal solo la primera toma tenia obligatorios).
+        answered = set(response.field_responses.values_list("field_id", "repetition"))
+        unanswered = [
+            f"{field.group} {n}: {field.label}" if n else field.label
+            for field, n in response.slots()
+            if field.is_required and (field.id, n) not in answered
+        ]
 
         if unanswered:
             return Response(

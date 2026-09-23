@@ -127,6 +127,10 @@ class PlanTask(models.Model):
         null=True, blank=True,
         related_name="plan_tasks",
     )
+    # Cuantas veces va cada grupo repetible del checklist: {"Toma": 20}. Como
+    # en Fracttal, la cantidad es del plan ("MANT. SALIDAS 20 TOMAS"); lo
+    # nuevo es que el bloque se define una vez. No confundir con repeat_count.
+    block_counts = models.JSONField(default=dict, blank=True)
     trigger = models.CharField(
         max_length=5, choices=Trigger.choices, default=Trigger.DATE
     )

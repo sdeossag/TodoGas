@@ -38,6 +38,63 @@ def _resolve_url(file_key):
     return default_storage.url(file_key)
 
 
+def _valor(fr, corto=False):
+    """Lo que el acta imprime de una respuesta. Una foto guarda foto:<id> o
+    sin-conexion:<uuid>: la imagen va en las fotos del activo. En una tabla de
+    tomas la celda es angosta: basta con "Foto"."""
+    if fr is None or not fr.value:
+        return "—"
+    if fr.field.field_type == "PHOTO":
+        return "Foto" if corto else "Foto adjunta (ver fotos del activo)"
+    return fr.value
+
+
+def _sections(respuesta):
+    """
+    El checklist de una tarea, por grupos, en el orden de sus respuestas.
+
+    Un grupo normal lista campo, respuesta y observaciones. Uno repetible sale
+    como tabla, una fila por toma y una columna por pregunta: 20 tomas de 9
+    preguntas caben en una pagina, no en 20 como en el acta de Fracttal.
+    """
+    if respuesta is None:
+        return []
+    repetibles = respuesta.version.repeatable_groups
+    por_grupo = {}
+    for fr in respuesta.field_responses.all():
+        por_grupo.setdefault(fr.field.group, []).append(fr)
+
+    secciones = []
+    for grupo, respuestas in por_grupo.items():
+        if grupo not in repetibles:
+            secciones.append({"name": grupo, "repeated": False, "rows": [
+                {"label": fr.field.label, "value": _valor(fr), "notes": fr.notes}
+                for fr in respuestas
+            ]})
+            continue
+        campos = sorted(
+            (f for f in respuesta.version.fields.all() if f.group == grupo),
+            key=lambda f: f.sort_order,
+        )
+        indice = {(fr.field_id, fr.repetition): fr for fr in respuestas}
+        filas = []
+        for n in range(1, respuesta.count_for(grupo) + 1):
+            celdas = [_valor(indice.get((f.id, n)), corto=True) for f in campos]
+            notas = "; ".join(
+                indice[(f.id, n)].notes for f in campos
+                if (f.id, n) in indice and indice[(f.id, n)].notes
+            )
+            filas.append({"n": n, "cells": celdas, "notes": notas})
+        secciones.append({
+            "name": grupo,
+            "repeated": True,
+            "columns": [f.label for f in campos],
+            "rows": filas,
+            "with_notes": any(f["notes"] for f in filas),
+        })
+    return secciones
+
+
 def generate_service_report_pdf(work_order):
     """
     Genera el PDF del acta de servicio para una OT y lo sube al storage.
@@ -57,8 +114,8 @@ def generate_service_report_pdf(work_order):
     respuestas = {
         r.task_id: r
         for r in ChecklistResponse.objects.filter(task__in=tareas).prefetch_related(
-            "field_responses__field"
-        )
+            "field_responses__field", "version__fields"
+        ).select_related("version")
     }
 
     photos_qs = Photo.objects.filter(work_order=work_order).order_by("taken_at")
@@ -83,6 +140,7 @@ def generate_service_report_pdf(work_order):
             "task": t,
             "asset": t.asset,
             "checklist_response": respuestas.get(t.id),
+            "sections": _sections(respuestas.get(t.id)),
             "photos": fotos_por_tarea.get(t.id, []),
         }
         for t in tareas
