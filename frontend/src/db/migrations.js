@@ -86,6 +86,29 @@ export const MIGRATIONS = [
       await addColumn(driver, 'offline_checklist_responses', 'counts_pending', 'INTEGER DEFAULT 0')
     },
   },
+  {
+    // Hallazgos (bloque E): el tecnico los reporta sin red. El id lo pone el
+    // telefono, asi sus fotos lo referencian antes de sincronizar. `data_json`
+    // guarda el hallazgo con la forma de la API; `pending_action` es la cola
+    // ('save' o 'delete'); `server_known` dice si el servidor ya lo tiene.
+    version: 4,
+    async up(driver) {
+      await driver.execute(
+        `CREATE TABLE IF NOT EXISTS offline_findings (
+           id TEXT PRIMARY KEY,
+           work_order_id TEXT NOT NULL,
+           data_json TEXT NOT NULL,
+           pending_action TEXT,
+           server_known INTEGER DEFAULT 0,
+           updated_at TEXT
+         )`
+      )
+      await driver.execute(
+        `CREATE INDEX IF NOT EXISTS idx_findings_wo ON offline_findings (work_order_id)`
+      )
+      await addColumn(driver, 'offline_photos', 'finding_id', 'TEXT')
+    },
+  },
 ]
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

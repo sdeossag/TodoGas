@@ -166,6 +166,7 @@ export async function saveWorkOrderBundle(bundle) {
   for (const checklist of bundle.checklists ?? []) {
     await saveChecklistResponse({ ...checklist, work_order: bundle.work_order.id })
   }
+  await saveFindingsFromServer(bundle.work_order.id, bundle.findings ?? [])
 }
 
 /**
@@ -480,8 +481,8 @@ export async function savePhotoOffline(photo) {
   await run(
     `INSERT OR REPLACE INTO offline_photos (
       id, work_order_id, file_path, latitude, longitude,
-      taken_at, caption, file_hash, synced, offline_uuid, task_id
-    ) VALUES (?,?,?,?,?,?,?,?,0,?,?)`,
+      taken_at, caption, file_hash, synced, offline_uuid, task_id, finding_id
+    ) VALUES (?,?,?,?,?,?,?,?,0,?,?,?)`,
     [
       photo.id ?? offlineUuid,
       photo.work_order_id,
@@ -493,6 +494,7 @@ export async function savePhotoOffline(photo) {
       photo.file_hash ?? null,
       offlineUuid,
       photo.task_id ?? null,
+      photo.finding_id ?? null,
     ]
   )
   return offlineUuid
@@ -571,6 +573,7 @@ export async function countPendingSync() {
        (SELECT COUNT(*) FROM offline_signatures WHERE synced = 0) +
        (SELECT COUNT(*) FROM offline_checklist_responses WHERE completion_pending = 1) +
        (SELECT COUNT(*) FROM offline_checklist_responses WHERE counts_pending = 1) +
+       (SELECT COUNT(*) FROM offline_findings WHERE pending_action IS NOT NULL) +
        (SELECT COUNT(*) FROM offline_work_orders WHERE local_status_changed = 1)
      AS total`
   )
@@ -593,7 +596,9 @@ export async function getWorkOrderIdsWithPendingSync() {
      SELECT DISTINCT work_order_id AS id FROM offline_checklist_responses
       WHERE completion_pending = 1
      UNION
-     SELECT id FROM offline_work_orders WHERE local_status_changed = 1`
+     SELECT id FROM offline_work_orders WHERE local_status_changed = 1
+     UNION
+     SELECT DISTINCT work_order_id AS id FROM offline_findings WHERE pending_action IS NOT NULL`
   )
   return rows.map((r) => r.id).filter(Boolean)
 }
@@ -610,4 +615,118 @@ export async function logSync({ entityType, entityId, action, status, errorMessa
 export async function getSyncLog(limit = 50) {
   if (!(await ready())) return []
   return query('SELECT * FROM sync_log ORDER BY id DESC LIMIT ?', [limit])
+}
+
+// ── Hallazgos (bloque E) ─────────────────────────────────────────────────────
+//
+// Cada fila guarda el hallazgo con la forma de la API (data_json) y su cola:
+// pending_action 'save' (crear o corregir) o 'delete'. El id lo pone el
+// telefono: sus fotos lo referencian antes de sincronizar, y reenviar el alta
+// no lo duplica en el servidor.
+
+const SEVERIDAD = { LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', CRITICAL: 'Crítica' }
+
+/**
+ * Lo que trae el servidor. No pisa lo que el tecnico cambio sin red y aun no
+ * sube; lo que el servidor ya no tiene (y aqui no esta en cola) se quita.
+ */
+export async function saveFindingsFromServer(workOrderId, findings = []) {
+  if (!(await ready())) return
+  const ids = findings.map((f) => f.id)
+  for (const f of findings) {
+    await run(
+      `INSERT INTO offline_findings (id, work_order_id, data_json, pending_action, server_known, updated_at)
+       VALUES (?, ?, ?, NULL, 1, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         data_json = CASE WHEN offline_findings.pending_action IS NULL THEN excluded.data_json
+                          ELSE offline_findings.data_json END,
+         server_known = 1`,
+      [f.id, workOrderId, JSON.stringify(f), nowISO()]
+    )
+  }
+  const marcas = ids.map(() => '?').join(',')
+  await run(
+    `DELETE FROM offline_findings
+      WHERE work_order_id = ? AND pending_action IS NULL
+        ${ids.length ? `AND id NOT IN (${marcas})` : ''}`,
+    [workOrderId, ...ids]
+  )
+}
+
+/** Los hallazgos de la OT como los devolveria la API, con lo hecho sin red. */
+export async function getOfflineFindings(workOrderId) {
+  if (!(await ready())) return []
+  const rows = await query(
+    `SELECT f.*, (SELECT COUNT(*) FROM offline_photos p WHERE p.finding_id = f.id AND p.synced = 0)
+              AS fotos_en_cola
+       FROM offline_findings f
+      WHERE f.work_order_id = ? AND COALESCE(f.pending_action, '') != 'delete'
+      ORDER BY f.updated_at`,
+    [workOrderId]
+  )
+  return rows.map((r) => {
+    const f = JSON.parse(r.data_json)
+    return {
+      ...f,
+      photos_count: (f.photos_count ?? 0) + (r.fotos_en_cola ?? 0),
+      _pending: r.pending_action != null,
+    }
+  })
+}
+
+/** Alta o correccion sin red: queda en cola. */
+export async function saveFindingOffline(finding) {
+  if (!(await ready())) return null
+  const [previa] = await query('SELECT data_json FROM offline_findings WHERE id = ?', [finding.id])
+  const antes = previa ? JSON.parse(previa.data_json) : {}
+  const datos = {
+    ...antes,
+    ...finding,
+    severity_display: SEVERIDAD[finding.severity ?? antes.severity],
+    status: (finding.resolved_on_site ?? antes.resolved_on_site) ? 'RESOLVED' : 'PENDING',
+    status_display: (finding.resolved_on_site ?? antes.resolved_on_site) ? 'Resuelto en sitio' : 'Pendiente',
+  }
+  await run(
+    `INSERT INTO offline_findings (id, work_order_id, data_json, pending_action, server_known, updated_at)
+     VALUES (?, ?, ?, 'save', 0, ?)
+     ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, pending_action = 'save'`,
+    [datos.id, datos.work_order, JSON.stringify(datos), nowISO()]
+  )
+  return datos
+}
+
+/**
+ * Quitar sin red. Si el servidor nunca lo tuvo, basta con olvidarlo aqui (y
+ * sus fotos en cola quedan como evidencia de la OT, sin hallazgo, igual que
+ * en el servidor); si ya lo tiene, se le pide borrarlo al reconectar.
+ */
+export async function deleteFindingOffline(id) {
+  if (!(await ready())) return
+  const [fila] = await query('SELECT server_known FROM offline_findings WHERE id = ?', [id])
+  if (!fila) return
+  await run('UPDATE offline_photos SET finding_id = NULL WHERE finding_id = ?', [id])
+  if (fila.server_known) {
+    await run("UPDATE offline_findings SET pending_action = 'delete' WHERE id = ?", [id])
+  } else {
+    await run('DELETE FROM offline_findings WHERE id = ?', [id])
+  }
+}
+
+export async function getPendingFindings() {
+  if (!(await ready())) return []
+  return query(
+    'SELECT * FROM offline_findings WHERE pending_action IS NOT NULL ORDER BY updated_at'
+  )
+}
+
+export async function markFindingSynced(id, serverFinding = null) {
+  if (!(await ready())) return
+  if (serverFinding === null) {
+    await run('DELETE FROM offline_findings WHERE id = ?', [id])
+    return
+  }
+  await run(
+    'UPDATE offline_findings SET pending_action = NULL, server_known = 1, data_json = ? WHERE id = ?',
+    [JSON.stringify(serverFinding), id]
+  )
 }

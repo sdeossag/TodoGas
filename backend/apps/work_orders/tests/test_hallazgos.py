@@ -283,3 +283,24 @@ def test_el_acta_lista_los_hallazgos(mundo):
     assert "Hallazgos encontrados y reportados" in t
     assert "Fuga en la valvula" in t and "Pendiente de corrección" in t
     assert "Tornillo flojo" in t and "Resuelto en sitio" in t and "Se ajusto" in t
+
+
+def test_el_paquete_sin_red_trae_los_hallazgos(mundo):
+    """Sin red el tecnico ve y corrige lo que ya reporto."""
+    f = reportar(mundo).data
+    r = cliente(mundo["tec"]).get(f"/api/work-orders/{mundo['ot'].id}/offline-bundle/")
+    assert [x["id"] for x in r.data["findings"]] == [f["id"]]
+    assert r.data["findings"][0]["asset_info"]["code"] == "ALR"
+
+
+def test_la_foto_con_el_gps_del_telefono_sube(mundo, tmp_path, settings):
+    """El GPS llega con 15 decimales: antes se rechazaba por "mas de 12 digitos"."""
+    settings.MEDIA_ROOT = tmp_path
+    png = SimpleUploadedFile("f.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64, content_type="image/png")
+    r = cliente(mundo["tec"]).post("/api/evidence/photos/", {
+        "work_order": str(mundo["ot"].id), "file": png, "taken_at": timezone.now().isoformat(),
+        "latitude": "37.421998333333335", "longitude": "-122.08400000000002",
+    }, format="multipart")
+    assert r.status_code == 201, r.data
+    foto = Photo.objects.get()
+    assert str(foto.latitude) == "37.4219983" and str(foto.longitude) == "-122.0840000"

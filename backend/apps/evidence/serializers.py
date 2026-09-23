@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import uuid
+from decimal import Decimal
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -23,6 +24,13 @@ def _storage_url(path):
     if path.startswith("http"):
         return path
     return default_storage.url(path)
+
+
+def _coordenada(value):
+    """Grados con 7 decimales (~1 cm), lo que guarda el modelo."""
+    if value is None:
+        return None
+    return Decimal(str(value)).quantize(Decimal("0.0000001"))
 
 
 # ── Photo ──────────────────────────────────────────────────────────────────────
@@ -69,25 +77,21 @@ class PhotoCreateSerializer(serializers.Serializer):
         queryset=Finding.objects.all(), required=False, allow_null=True
     )
     file = serializers.FileField()
-    latitude = serializers.DecimalField(
-        max_digits=12, decimal_places=7, required=False, allow_null=True
-    )
-    longitude = serializers.DecimalField(
-        max_digits=12, decimal_places=7, required=False, allow_null=True
-    )
+    # Coordenadas como llegan del GPS del telefono (37.421998333333335) y
+    # redondeadas a 7 decimales en _coordenada: un DecimalField rechazaba el
+    # valor por "mas de 12 digitos" antes de poder redondearlo, y la foto o la
+    # firma con GPS no subia nunca.
+    latitude = serializers.FloatField(required=False, allow_null=True, min_value=-90, max_value=90)
+    longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
     taken_at = serializers.DateTimeField()
     caption = serializers.CharField(max_length=500, required=False, default="", allow_blank=True)
     offline_uuid = serializers.UUIDField(required=False, allow_null=True)
 
     def validate_latitude(self, value):
-        if value is None:
-            return value
-        return round(value, 7)
+        return _coordenada(value)
 
     def validate_longitude(self, value):
-        if value is None:
-            return value
-        return round(value, 7)
+        return _coordenada(value)
 
     def validate(self, attrs):
         tarea = attrs.get("task")
@@ -177,24 +181,20 @@ class SignatureCreateSerializer(serializers.Serializer):
         default=Signature.SignatureType.TECHNICIAN,
         required=False,
     )
-    latitude = serializers.DecimalField(
-        max_digits=12, decimal_places=7, required=False, allow_null=True
-    )
-    longitude = serializers.DecimalField(
-        max_digits=12, decimal_places=7, required=False, allow_null=True
-    )
+    # Coordenadas como llegan del GPS del telefono (37.421998333333335) y
+    # redondeadas a 7 decimales en _coordenada: un DecimalField rechazaba el
+    # valor por "mas de 12 digitos" antes de poder redondearlo, y la foto o la
+    # firma con GPS no subia nunca.
+    latitude = serializers.FloatField(required=False, allow_null=True, min_value=-90, max_value=90)
+    longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
     # Hora en que se firmo en el telefono; la manda la cola offline.
     signed_at = serializers.DateTimeField(required=False, allow_null=True)
 
     def validate_latitude(self, value):
-        if value is None:
-            return value
-        return round(value, 7)
+        return _coordenada(value)
 
     def validate_longitude(self, value):
-        if value is None:
-            return value
-        return round(value, 7)
+        return _coordenada(value)
 
     def validate_image_data(self, value):
         # Strip data URI prefix if present (frontend may or may not strip it)

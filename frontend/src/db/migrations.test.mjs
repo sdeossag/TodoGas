@@ -167,3 +167,26 @@ test('la v3 guarda una respuesta por toma sin perder las pendientes', async () =
   const cols = (await d.query('PRAGMA table_info(offline_checklist_responses)')).map((c) => c.name)
   assert.ok(cols.includes('local_block_counts') && cols.includes('counts_pending'))
 })
+
+test('la v4 agrega los hallazgos sin tocar las fotos en cola', async () => {
+  const { d } = await baseV1ConPendientes()
+  await migrate(d)
+
+  // La foto que ya estaba en cola sigue ahi, sin hallazgo.
+  const [foto] = await d.query("SELECT synced, finding_id FROM offline_photos WHERE id = 'ph-1'")
+  assert.deepEqual(foto, { synced: 0, finding_id: null })
+
+  // Un hallazgo creado sin red, y una foto que lo referencia antes de subirlo.
+  await d.run(
+    `INSERT INTO offline_findings (id, work_order_id, data_json, pending_action)
+     VALUES ('fd-1', 'wo-1', '{"description":"Fuga"}', 'save')`
+  )
+  await d.run(
+    `INSERT INTO offline_photos (id, work_order_id, file_path, synced, offline_uuid, finding_id)
+     VALUES ('ph-2', 'wo-1', 'data:image/jpeg;base64,CCCC', 0, 'ph-2', 'fd-1')`
+  )
+  const [n] = await d.query(
+    "SELECT COUNT(*) AS n FROM offline_photos p JOIN offline_findings f ON f.id = p.finding_id"
+  )
+  assert.equal(n.n, 1)
+})

@@ -231,7 +231,8 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
         longitude: coords?.longitude ?? null,
         taken_at: takenAt,
         caption: caption.trim(),
-        task_id: taskId || null,
+        task_id: findingId ? null : taskId || null,
+        finding_id: findingId,
       })
       if (!offlineUuid) {
         setApiError('No hay base de datos local disponible para guardar la foto.')
@@ -240,6 +241,7 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
       handleCancel()
       showOfflineNotice('Foto guardada. Se sincronizara al reconectar.')
       await refreshPendingCount()
+      onUploaded?.()
     } catch (err) {
       setApiError(err?.message ?? 'No se pudo guardar la foto en el dispositivo.')
     } finally {

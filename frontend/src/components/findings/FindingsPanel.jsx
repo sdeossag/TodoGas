@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { mediaUrl } from '../../api/client'
 import { useWorkOrderPhotos } from '../../api/evidence'
@@ -105,6 +106,7 @@ export function SeverityBadge({ hallazgo }) {
 
 function FindingCard({ hallazgo: f, fotos, editable, puedeDecidir, paraHospital, wo, onEdit }) {
   const borrar = useDeleteFinding()
+  const qc = useQueryClient()
   const [conFoto, setConFoto] = useState(false)
   const [decidiendo, setDecidiendo] = useState(null) // 'convert' | 'dismiss'
 
@@ -120,8 +122,15 @@ function FindingCard({ hallazgo: f, fotos, editable, puedeDecidir, paraHospital,
         {paraHospital ? (
           <EstadoParaHospital hallazgo={f} />
         ) : (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${FINDING_STATUS_COLORS[f.status]}`}>
-            {f.status_display}
+          <span className="inline-flex items-center gap-1.5">
+            {f._pending && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800">
+                En cola
+              </span>
+            )}
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${FINDING_STATUS_COLORS[f.status]}`}>
+              {f.status_display}
+            </span>
           </span>
         )}
       </div>
@@ -147,6 +156,7 @@ function FindingCard({ hallazgo: f, fotos, editable, puedeDecidir, paraHospital,
 
       <p className="text-xs text-gray-500">
         {f.reported_by_name} · {new Date(f.reported_at).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}
+        {fotos.length === 0 && f.photos_count > 0 && ` · ${f.photos_count} foto${f.photos_count > 1 ? 's' : ''}`}
       </p>
 
       {(editable || (puedeDecidir && f.status === 'PENDING')) && (
@@ -181,7 +191,15 @@ function FindingCard({ hallazgo: f, fotos, editable, puedeDecidir, paraHospital,
       )}
 
       {conFoto && (
-        <PhotoCapture workOrderId={wo.id} findingId={f.id} onUploaded={() => setConFoto(false)} />
+        <PhotoCapture
+          workOrderId={wo.id}
+          findingId={f.id}
+          onUploaded={() => {
+            setConFoto(false)
+            // Sin red la foto queda en cola: el contador del hallazgo sale de ahí.
+            qc.invalidateQueries({ queryKey: ['findings'] })
+          }}
+        />
       )}
       {decidiendo && (
         <DecisionModal hallazgo={f} accion={decidiendo} onClose={() => setDecidiendo(null)} />
@@ -309,8 +327,15 @@ function FindingForm({ wo, activos, hallazgo, onClose }) {
     if (hallazgo) {
       editar.mutate({ id: hallazgo.id, ...datos }, { onSuccess: onClose })
     } else {
+      const a = activos.find((x) => x.id === form.asset)
       crear.mutate(
-        { ...datos, work_order: wo.id, reported_at: new Date().toISOString() },
+        {
+          ...datos,
+          work_order: wo.id,
+          reported_at: new Date().toISOString(),
+          // Sin red es lo que se muestra del equipo hasta sincronizar.
+          asset_info: a && { id: a.id, code: a.code, name: a.name, node_path: a.location ?? '' },
+        },
         { onSuccess: onClose }
       )
     }

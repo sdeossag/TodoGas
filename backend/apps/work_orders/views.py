@@ -405,8 +405,12 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         con sus tareas y el checklist de cada una con sus campos y respuestas.
         La app lo guarda en SQLite al tener conexion.
         """
+        from django.db.models import Count
+
         from apps.checklists.models import ChecklistResponse
         from apps.checklists.serializers import ChecklistResponseSerializer
+
+        from .views_findings import FindingSerializer
 
         wo = self.get_object()
         respuestas = (
@@ -418,6 +422,13 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         return Response({
             "work_order": WorkOrderDetailSerializer(wo, context={"request": request}).data,
             "checklists": ChecklistResponseSerializer(respuestas, many=True).data,
+            # Los hallazgos ya reportados: sin red el tecnico los ve y los corrige.
+            "findings": FindingSerializer(
+                wo.findings.select_related("asset__node", "work_order__hospital", "reported_by",
+                                           "decided_by", "corrective_task__work_order")
+                .annotate(n_fotos=Count("photos")),
+                many=True,
+            ).data,
         })
 
 

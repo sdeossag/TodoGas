@@ -15,7 +15,9 @@ import {
   getPendingBlockCounts,
   getPendingChecklistCompletions,
   getUnsyncedFieldResponses,
+  getPendingFindings,
   getUnsyncedPhotos,
+  markFindingSynced,
   getUnsyncedSignatures,
   getWorkOrdersWithLocalStatusChange,
   logSync,
@@ -126,6 +128,67 @@ export async function syncChecklistCompletions(onItemDone) {
   return { ok, failed, total: pending.length }
 }
 
+/**
+ * Hallazgos creados, corregidos o quitados sin red. Van antes que las fotos
+ * (una foto referencia su hallazgo) y antes del estado de la OT (enviada a
+ * revision ya no se aceptan cambios). El alta manda el id del telefono: si la
+ * respuesta se perdio, reenviarla devuelve el mismo hallazgo.
+ */
+export async function syncFindings(onItemDone) {
+  const pending = await getPendingFindings()
+  let ok = 0
+  let failed = 0
+
+  for (const row of pending) {
+    const f = JSON.parse(row.data_json)
+    try {
+      if (row.pending_action === 'delete') {
+        try {
+          await client.delete(`/api/findings/${row.id}/`)
+        } catch (error) {
+          // Ya no estaba: lo que se queria, que no este.
+          if (error?.response?.status !== 404) throw error
+        }
+        await markFindingSynced(row.id, null)
+      } else {
+        const datos = {
+          asset: f.asset,
+          description: f.description,
+          severity: f.severity,
+          out_of_service: !!f.out_of_service,
+          resolved_on_site: !!f.resolved_on_site,
+          resolution_notes: f.resolution_notes ?? '',
+        }
+        let respuesta = row.server_known
+          ? await client.patch(`/api/findings/${row.id}/`, datos)
+          : await client.post('/api/findings/', {
+              ...datos, id: row.id, work_order: row.work_order_id, reported_at: f.reported_at,
+            })
+        // 200 al alta: ya habia llegado (se perdio la respuesta). Lo corregido
+        // despues sin red va como correccion.
+        if (!row.server_known && respuesta.status === 200) {
+          respuesta = await client.patch(`/api/findings/${row.id}/`, datos)
+        }
+        await markFindingSynced(row.id, respuesta.data)
+      }
+      await logSync({ entityType: 'finding', entityId: row.id, action: row.pending_action, status: 'ok' })
+      ok += 1
+    } catch (error) {
+      await logSync({
+        entityType: 'finding',
+        entityId: row.id,
+        action: row.pending_action,
+        status: 'error',
+        errorMessage: errorText(error),
+      })
+      failed += 1
+    }
+    onItemDone?.()
+  }
+
+  return { ok, failed, total: pending.length }
+}
+
 export async function syncPhotos(onItemDone) {
   const pending = await getUnsyncedPhotos()
   let ok = 0
@@ -143,6 +206,8 @@ export async function syncPhotos(onItemDone) {
       const form = new FormData()
       form.append('work_order', row.work_order_id)
       if (row.task_id) form.append('task', row.task_id)
+      // Foto de un hallazgo: el hallazgo ya subio (syncFindings va antes).
+      if (row.finding_id) form.append('finding', row.finding_id)
       form.append('file', file)
       if (row.latitude != null) form.append('latitude', row.latitude)
       if (row.longitude != null) form.append('longitude', row.longitude)
@@ -319,16 +384,17 @@ export async function syncOfflineData({ onProgress } = {}) {
   }
 
   // El orden es deliberado: cantidad de tomas, respuestas, cierre de cada
-  // checklist, evidencia y al final el estado de la OT, que valida todo lo
-  // anterior.
+  // checklist, hallazgos (antes que las fotos que los referencian), evidencia
+  // y al final el estado de la OT, que valida todo lo anterior.
   const counts = await syncBlockCounts(tick)
   const fields = await syncFieldResponses(tick)
   const checklists = await syncChecklistCompletions(tick)
+  const findings = await syncFindings(tick)
   const photos = await syncPhotos(tick)
   const signatures = await syncSignatures(tick)
   const workOrders = await syncWorkOrderStatuses(tick)
 
-  const result = { counts, fields, checklists, photos, signatures, workOrders }
+  const result = { counts, fields, checklists, findings, photos, signatures, workOrders }
   const fases = Object.values(result)
   const failed = fases.reduce((acc, f) => acc + f.failed, 0)
   const synced = fases.reduce((acc, f) => acc + f.ok, 0)
