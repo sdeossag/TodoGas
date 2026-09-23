@@ -30,6 +30,8 @@ import UsersPage from '../pages/users/UsersPage'
 import ProfilePage from '../pages/users/ProfilePage'
 import ClientDashboard from '../pages/client/ClientDashboard'
 import ClientReportsPage from '../pages/client/ClientReportsPage'
+import ClientAssetPage from '../pages/client/ClientAssetPage'
+import ClientWorkOrderPage from '../pages/client/ClientWorkOrderPage'
 import NotFoundPage from '../pages/NotFoundPage'
 import UiSpinner from '../components/ui/Spinner'
 
@@ -142,6 +144,8 @@ export const router = createBrowserRouter(
           children: [
             { path: '/mis-dashboard', element: <ClientDashboard /> },
             { path: '/mis-activos', element: <MisActivosPage /> },
+            { path: '/mis-activos/:id', element: <ClientAssetPage /> },
+            { path: '/historial/:id', element: <ClientWorkOrderPage /> },
             { path: '/mis-reportes', element: <ClientReportsPage /> },
             { path: '/mi-perfil', element: <ProfilePage /> },
           ],

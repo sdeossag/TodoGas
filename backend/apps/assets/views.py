@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from apps.users import scope
 from apps.users.models import User
-from apps.users.permissions import IsAdmin, IsAdminOrSup, IsClient
+from apps.users.permissions import IsAdmin, IsAdminOrSup, IsAdminOrSupOrClient, IsClient
 
 from .models import Asset, AssetCustomField, AssetNode, Hospital
 from .serializers import (
@@ -185,6 +185,10 @@ class AssetViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
             return [IsAuthenticated()]
+        if self.action == "tasks":
+            # El historial del equipo tambien lo ve la cuenta de hospital
+            # (dentro de su alcance, por get_queryset).
+            return [IsAdminOrSupOrClient()]
         if self.action == "decommission":
             return [IsAdmin()]
         return [IsAdminOrSup()]
@@ -332,6 +336,15 @@ class AssetViewSet(viewsets.ModelViewSet):
             "-scheduled_date", "-created_at"
         )
         contexto = {"request": request, "with_reports": True}
+        if request.user.role == User.Role.CLI:
+            # El hospital ve lo hecho y lo que viene; no las anuladas ni la OT
+            # en curso de una tarea abierta (decision del 2026-09-23).
+            historial = historial.filter(status=Task.Status.DONE)
+            # Lo que viene son los mantenimientos del plan, como en su panel:
+            # la tarea de una OT manual abierta es trabajo en curso, y le
+            # saldria "vencido" mientras el tecnico la esta haciendo.
+            abiertas = abiertas.filter(Task.next_maintenance_q())
+            contexto["for_client"] = True
         return Response({
             "open": TaskSerializer(abiertas, many=True, context=contexto).data,
             "history": TaskSerializer(historial, many=True, context=contexto).data,
@@ -449,4 +462,60 @@ class ClientPortalView(APIView):
             'recent_reports': reports_data,
             # Alias historico: el APK publicado lee 'pending_reports'.
             'pending_reports': reports_data,
+            **_programacion_del_cliente(user),
         })
+
+
+def _programacion_del_cliente(user):
+    """
+    Lo que viene y como se ha cumplido, para la biomedica (decision del
+    2026-09-23): los proximos mantenimientos con su fecha y el cumplimiento de
+    los ultimos 12 meses. Solo tareas de plan: un correctivo no se programa.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.maintenance.models import Task
+
+    hoy = timezone.localdate()
+    del_plan = scope.assets(
+        Task.objects.filter(plan_task__isnull=False), user, prefix="asset__"
+    ).select_related("asset__node")
+
+    proximas = del_plan.filter(Task.next_maintenance_q()).order_by("scheduled_date", "asset__code")
+    vencidas = proximas.filter(scheduled_date__lt=hoy).count()
+
+    # Cumplimiento: de lo que tocaba en el periodo (fecha programada ya
+    # pasada), cuanto se hizo y cuanto a tiempo. Las anuladas no cuentan.
+    periodo = del_plan.filter(scheduled_date__gt=hoy - timedelta(days=365), scheduled_date__lte=hoy)
+    tocaba = periodo.exclude(status=Task.Status.CANCELLED)
+    hechas = tocaba.filter(status=Task.Status.DONE)
+    a_tiempo = sum(
+        1 for completada, programada in hechas.values_list("completed_at", "scheduled_date")
+        if completada and timezone.localtime(completada).date() <= programada
+    )
+    total = tocaba.count()
+    n_hechas = hechas.count()
+    return {
+        'upcoming': [
+            {
+                'task_id': str(t.id),
+                'title': t.title,
+                'scheduled_date': t.scheduled_date.isoformat(),
+                'is_overdue': t.scheduled_date < hoy,
+                'asset': {'id': str(t.asset_id), 'code': t.asset.code, 'name': t.asset.name,
+                          'node_path': t.asset.node.path if t.asset.node_id else ''},
+            }
+            for t in proximas[:15]
+        ],
+        'upcoming_total': proximas.count(),
+        'overdue_count': vencidas,
+        'compliance': {
+            'period_days': 365,
+            'planned': total,
+            'done': n_hechas,
+            'on_time': a_tiempo,
+            'percentage': round(n_hechas * 100 / total) if total else None,
+        },
+    }

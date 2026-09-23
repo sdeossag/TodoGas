@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { FechaProgramada } from './ClientAssetPage'
 import { useClientPortalSummary } from '../../api/clientPortal'
 import { useReportDownload } from '../../api/reports'
 import { useState } from 'react'
@@ -34,7 +35,10 @@ export default function ClientDashboard() {
     )
   }
 
-  const { hospital, total_assets, assets_by_status, recent_work_orders, recent_reports } = data
+  const {
+    hospital, total_assets, assets_by_status, recent_work_orders, recent_reports,
+    upcoming = [], upcoming_total = 0, overdue_count = 0, compliance,
+  } = data
 
   const statusEntries = Object.entries(assets_by_status || {}).filter(([, v]) => v > 0)
 
@@ -61,6 +65,36 @@ export default function ClientDashboard() {
         ))}
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Cumplimiento compliance={compliance} vencidos={overdue_count} />
+
+        <section className="bg-white rounded-xl border border-gray-200 shadow-card lg:col-span-2">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-700 text-sm">Próximos mantenimientos</h2>
+            {upcoming_total > upcoming.length && (
+              <span className="text-xs text-gray-500">{upcoming.length} de {upcoming_total}</span>
+            )}
+          </div>
+          {!upcoming.length ? (
+            <p className="text-center py-10 text-gray-500 text-sm">No hay mantenimientos programados.</p>
+          ) : (
+            <ul className="divide-y divide-gray-50">
+              {upcoming.map((t) => (
+                <li key={t.task_id} className="px-5 py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link to={`/mis-activos/${t.asset.id}`} className="text-sm font-medium text-gray-800 hover:underline truncate block">
+                      {t.asset.name} <span className="font-mono text-xs text-gray-500">{t.asset.code}</span>
+                    </Link>
+                    <p className="text-xs text-gray-500 truncate">{t.title}{t.asset.node_path ? ` · ${t.asset.node_path}` : ''}</p>
+                  </div>
+                  <FechaProgramada tarea={t} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="bg-white rounded-xl border border-gray-200 shadow-card">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -80,9 +114,9 @@ export default function ClientDashboard() {
               {recent_work_orders.map((wo) => (
                 <li key={wo.id} className="px-5 py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">
+                    <Link to={`/historial/${wo.id}`} className="text-sm font-medium text-gray-800 hover:underline truncate block">
                       {formatWoCode(wo)} — {wo.title}
-                    </p>
+                    </Link>
                     <p className="text-xs text-gray-500 truncate mt-0.5">
                       {wo.assets?.length > 1
                         ? `${wo.assets.length} activos`
@@ -137,6 +171,34 @@ export default function ClientDashboard() {
         </section>
       </div>
     </div>
+  )
+}
+
+/**
+ * Cumplimiento de los últimos 12 meses: de lo que tocaba (fecha ya pasada),
+ * cuánto se hizo y cuánto a tiempo. Lo calcula el servidor.
+ */
+function Cumplimiento({ compliance, vencidos }) {
+  const pct = compliance?.percentage
+  const color = pct == null ? 'text-gray-400' : pct >= 90 ? 'text-green-600' : pct >= 70 ? 'text-amber-600' : 'text-red-600'
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-card p-5">
+      <h2 className="font-semibold text-gray-700 text-sm">Cumplimiento</h2>
+      <p className="text-xs text-gray-500">Últimos 12 meses</p>
+      <p className={`text-4xl font-bold mt-3 ${color}`}>{pct == null ? '—' : `${pct}%`}</p>
+      {compliance?.planned ? (
+        <p className="text-sm text-gray-600 mt-2">
+          {compliance.done} de {compliance.planned} mantenimientos realizados; {compliance.on_time} a tiempo.
+        </p>
+      ) : (
+        <p className="text-sm text-gray-500 mt-2">Aún no hay mantenimientos programados en el periodo.</p>
+      )}
+      {vencidos > 0 && (
+        <p className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2 mt-3">
+          {vencidos === 1 ? '1 mantenimiento vencido' : `${vencidos} mantenimientos vencidos`}
+        </p>
+      )}
+    </section>
   )
 }
 

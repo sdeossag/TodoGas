@@ -1,11 +1,8 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAssets } from '../../api/assets'
-import { useWorkOrders } from '../../api/workOrders'
-import { useReportDownload } from '../../api/reports'
 import { ASSET_STATUS_COLORS, assetStatusLabel } from '../../constants/labels'
-import useModalDismiss from '../../hooks/useModalDismiss'
 import EmptyState from '../../components/ui/EmptyState'
-import { formatWoCode } from '../../utils/workOrder'
 
 function Spinner({ small }) {
   return (
@@ -22,7 +19,6 @@ function Spinner({ small }) {
 
 export default function MisActivosPage() {
   const [search, setSearch] = useState('')
-  const [selectedAsset, setSelectedAsset] = useState(null)
 
   const { data: assets = [], isLoading, isError } = useAssets({})
 
@@ -104,12 +100,9 @@ export default function MisActivosPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setSelectedAsset(asset)}
-                        className="text-xs text-brand hover:underline"
-                      >
-                        Ver OTs
-                      </button>
+                      <Link to={`/mis-activos/${asset.id}`} className="text-xs text-brand hover:underline">
+                        Ver historial
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -119,87 +112,6 @@ export default function MisActivosPage() {
         )}
       </div>
 
-      {selectedAsset && (
-        <AssetOTModal asset={selectedAsset} onClose={() => setSelectedAsset(null)} />
-      )}
-    </div>
-  )
-}
-
-function AssetOTModal({ asset, onClose }) {
-  useModalDismiss(onClose)
-  const { data: workOrders = [], isLoading } = useWorkOrders({ asset_id: asset.id })
-  const downloadMut = useReportDownload()
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px] p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <div>
-            <h3 className="font-semibold text-gray-800">{asset.name}</h3>
-            <p className="text-xs text-gray-500 font-mono">{asset.code}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-600 text-xl leading-none"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="overflow-y-auto flex-1 p-5">
-          {isLoading ? (
-            <div className="flex justify-center py-10">
-              <Spinner />
-            </div>
-          ) : workOrders.length === 0 ? (
-            <p className="text-gray-500 text-sm text-center py-10">
-              No hay ordenes de trabajo completadas para este activo.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {workOrders.map((wo) => (
-                <div
-                  key={wo.id}
-                  className="border border-gray-200 rounded-lg p-4 flex items-center justify-between gap-4 flex-wrap"
-                >
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-sm font-semibold text-gray-600">
-                        {formatWoCode(wo)}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
-                        Completada
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-700 truncate">{wo.title}</p>
-                    <p className="text-xs text-gray-500">{wo.scheduled_date}</p>
-                  </div>
-                  {wo.has_report && wo.report_id && (
-                    <button
-                      onClick={() => downloadMut.mutate(wo.report_id)}
-                      disabled={downloadMut.isPending}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-brand text-white text-xs font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 whitespace-nowrap"
-                    >
-                      {downloadMut.isPending ? <Spinner small /> : null}
-                      Descargar PDF
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="p-4 border-t border-gray-100 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

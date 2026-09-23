@@ -312,6 +312,10 @@ class TaskSerializer(serializers.ModelSerializer):
         wo = obj.work_order
         if wo is None:
             return None
+        # A la cuenta de hospital no se le muestra la OT de una tarea que
+        # sigue abierta: lo en curso no lo ve (decision del 2026-09-23).
+        if self.context.get("for_client") and obj.is_open:
+            return None
         datos = {"id": str(wo.id), "wo_code": wo.wo_code, "status": wo.status}
         if self.context.get("with_reports"):
             acta = max(wo.reports.all(), key=lambda r: r.generated_at, default=None)

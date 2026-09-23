@@ -56,3 +56,13 @@ class IsOwnerOrAdmin(BasePermission):
         if request.user.role == User.Role.ADMIN:
             return True
         return obj == request.user
+
+
+class IsAdminOrSupOrClient(BasePermission):
+    """ADMIN, SUP o la cuenta de un hospital (que ademas se limita a su alcance)."""
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated
+            and request.user.role in (User.Role.ADMIN, User.Role.SUP, User.Role.CLI)
+        )
