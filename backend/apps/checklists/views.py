@@ -6,7 +6,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.users.permissions import IsAdminOrSup
+from apps.users import scope
+from apps.users.models import User
+from apps.users.permissions import IsAdminOrSup, IsAdminOrSupOrTec
 from apps.work_orders.device_time import device_time
 
 from .models import ChecklistResponse, ChecklistTemplate, ChecklistTemplateVersion
@@ -35,8 +37,10 @@ class ChecklistTemplateViewSet(viewsets.ModelViewSet):
         return qs
 
     def get_permissions(self):
+        # Las plantillas son del trabajo interno: el hospital ve el checklist
+        # respondido en su OT, no el catalogo.
         if self.action in ("list", "retrieve"):
-            return [IsAuthenticated()]
+            return [IsAdminOrSupOrTec()]
         return [IsAdminOrSup()]
 
     def get_serializer_class(self):
@@ -81,7 +85,13 @@ class ChecklistTemplateViewSet(viewsets.ModelViewSet):
 
 class ChecklistResponseViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
-        return [IsAuthenticated()]
+        # Leer: todos, cada uno dentro de lo suyo (get_queryset). Escribir
+        # (crear, responder, cambiar tomas, cerrar): nunca una cuenta de
+        # hospital. Antes submit-field le respondia 200 a un cliente sobre el
+        # checklist abierto de otro hospital.
+        if self.action in ("list", "retrieve"):
+            return [IsAuthenticated()]
+        return [IsAdminOrSupOrTec()]
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -93,9 +103,12 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         qs = ChecklistResponse.objects.select_related(
             "version", "completed_by", "task__work_order"
         ).prefetch_related("field_responses__field")
-        if user.role == "TEC":
-            qs = qs.filter(task__work_order__assigned_to=user)
-        return qs
+        if user.role == User.Role.TEC:
+            return qs.filter(task__work_order__assigned_to=user)
+        if user.role == User.Role.CLI:
+            # Como sus OTs: solo lo finalizado, dentro de su alcance.
+            qs = qs.filter(task__work_order__status="COMPLETED")
+        return scope.work_orders(qs, user, prefix="task__work_order__")
 
     def destroy(self, request, *args, **kwargs):
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)

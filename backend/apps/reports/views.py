@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.users import scope
 from apps.users.models import User
 from apps.users.permissions import IsAdmin
 
@@ -27,13 +28,12 @@ class GeneratedReportViewSet(
             "work_order", "work_order__hospital"
         ).prefetch_related("send_logs")
 
-        if user.role == User.Role.ADMIN:
-            pass
-        elif user.role == User.Role.SUP:
-            pass
+        # Hospital o parte del arbol del usuario (apps.users.scope).
+        if user.role in (User.Role.ADMIN, User.Role.SUP):
+            qs = scope.work_orders(qs, user, prefix="work_order__")
         elif user.role == User.Role.CLI:
-            qs = qs.filter(
-                work_order__hospital=user.hospital
+            qs = scope.work_orders(
+                qs.filter(work_order__status="COMPLETED"), user, prefix="work_order__"
             )
         else:
             qs = qs.none()

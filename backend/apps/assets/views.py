@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.users import scope
 from apps.users.models import User
 from apps.users.permissions import IsAdmin, IsAdminOrSup, IsClient
 
@@ -38,7 +39,7 @@ class HospitalViewSet(viewsets.ModelViewSet):
         return HospitalSerializer
 
     def get_queryset(self):
-        qs = Hospital.objects.all()
+        qs = scope.hospitals(Hospital.objects.all(), self.request.user)
         is_active = self.request.query_params.get("is_active")
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == "true")
@@ -119,6 +120,7 @@ class AssetNodeViewSet(viewsets.ModelViewSet):
             children_total=_conteo_por_nodo(AssetNode, "parent"),
             asset_total=_conteo_por_nodo(Asset, "node"),
         )
+        qs = scope.asset_nodes(qs, self.request.user)
         hospital_id = self.request.query_params.get("hospital_id")
         if hospital_id:
             qs = qs.filter(hospital_id=hospital_id)
@@ -164,11 +166,15 @@ class AssetNodeViewSet(viewsets.ModelViewSet):
                 {"detail": "Se requiere el parámetro hospital_id."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        roots = AssetNode.objects.filter(
-            hospital_id=hospital_id,
-            parent=None,
-            is_active=True,
-        ).order_by("sort_order", "name")
+        visibles = scope.asset_nodes(
+            AssetNode.objects.filter(hospital_id=hospital_id, is_active=True), request.user
+        )
+        # Limitado a una parte del arbol, su raiz es el nodo que se le asigno.
+        user = request.user
+        if user.scope_node_id and visibles.filter(pk=user.scope_node_id).exists():
+            roots = visibles.filter(pk=user.scope_node_id)
+        else:
+            roots = visibles.filter(parent=None).order_by("sort_order", "name")
         serializer = AssetNodeTreeSerializer(roots, many=True)
         return Response(serializer.data)
 
@@ -227,8 +233,8 @@ class AssetViewSet(viewsets.ModelViewSet):
             _last_maint=Subquery(last_maint_sq),
         )
 
-        if user.role == User.Role.CLI:
-            qs = qs.filter(hospital=user.hospital)
+        # Hospital o parte del arbol del usuario (apps.users.scope).
+        qs = scope.assets(qs, user)
 
         hospital_id = self.request.query_params.get("hospital_id")
         if hospital_id:
@@ -377,7 +383,8 @@ class ClientPortalView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        assets = Asset.objects.filter(hospital=hospital)
+        # Todo por apps.users.scope: la cuenta puede estar limitada a un piso.
+        assets = scope.assets(Asset.objects.all(), user)
         total_assets = assets.count()
 
         status_counts = {}
@@ -385,9 +392,8 @@ class ClientPortalView(APIView):
             status_counts[s.value] = assets.filter(status=s).count()
 
         from apps.work_orders.models import WorkOrder
-        recent_wos = WorkOrder.objects.filter(
-            hospital=hospital,
-            status=WorkOrder.Status.COMPLETED,
+        recent_wos = scope.work_orders(
+            WorkOrder.objects.filter(status=WorkOrder.Status.COMPLETED), user
         ).prefetch_related('tasks__asset').order_by('-completed_at')[:5]
 
         wo_data = [
@@ -408,8 +414,9 @@ class ClientPortalView(APIView):
         ]
 
         from apps.reports.models import GeneratedReport
-        reports = GeneratedReport.objects.filter(
-            work_order__hospital=hospital
+        reports = scope.work_orders(
+            GeneratedReport.objects.filter(work_order__status=WorkOrder.Status.COMPLETED),
+            user, prefix="work_order__",
         ).select_related('work_order').order_by('-generated_at')[:10]
 
         from django.core.files.storage import default_storage

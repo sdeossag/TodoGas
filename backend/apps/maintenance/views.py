@@ -12,6 +12,7 @@ from rest_framework.response import Response
 
 from apps.assets.models import Asset, AssetNode
 from apps.users.permissions import IsAdmin, IsAdminOrSup
+from apps.users import scope
 
 from . import services
 from .models import MaintenancePlan, PlanTask, RescheduleCause, Task
@@ -312,6 +313,8 @@ class TaskViewSet(viewsets.ReadOnlyModelViewSet):
         qs = Task.objects.select_related(
             "asset__hospital", "asset__node", "plan_task__plan", "work_order",
         )
+        # Hospital o parte del arbol del planificador (apps.users.scope).
+        qs = scope.assets(qs, self.request.user, prefix="asset__")
         p = self.request.query_params
 
         estados = [s for s in p.get("status", "").split(",") if s]
@@ -392,7 +395,7 @@ class TaskViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="reschedule", url_name="bulk-reschedule")
     def bulk_reschedule(self, request):
-        entrada = BulkRescheduleInputSerializer(data=request.data)
+        entrada = BulkRescheduleInputSerializer(data=request.data, context={"request": request})
         entrada.is_valid(raise_exception=True)
         datos = entrada.validated_data
         try:
@@ -406,7 +409,7 @@ class TaskViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="cancel", url_name="bulk-cancel")
     def bulk_cancel(self, request):
-        entrada = BulkCancelInputSerializer(data=request.data)
+        entrada = BulkCancelInputSerializer(data=request.data, context={"request": request})
         entrada.is_valid(raise_exception=True)
         datos = entrada.validated_data
         try:

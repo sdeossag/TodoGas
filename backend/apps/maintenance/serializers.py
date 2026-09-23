@@ -4,6 +4,7 @@ from rest_framework.validators import UniqueValidator
 
 from apps.assets.models import Asset
 from apps.checklists.models import ChecklistTemplate
+from apps.users.scope import ScopedFieldsMixin
 
 from .models import MaintenancePlan, PlanTask, RescheduleCause, Task, TaskReschedule
 
@@ -376,9 +377,11 @@ def _task_ids_field():
     )
 
 
-class BulkRescheduleInputSerializer(RescheduleInputSerializer):
+class BulkRescheduleInputSerializer(ScopedFieldsMixin, RescheduleInputSerializer):
+    scoped_fields = {"task_ids": "tasks"}
     task_ids = _task_ids_field()
 
 
-class BulkCancelInputSerializer(CancelInputSerializer):
+class BulkCancelInputSerializer(ScopedFieldsMixin, CancelInputSerializer):
+    scoped_fields = {"task_ids": "tasks"}
     task_ids = _task_ids_field()

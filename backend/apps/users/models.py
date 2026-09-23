@@ -56,7 +56,19 @@ class User(AbstractBaseUser, PermissionsMixin):
         "assets.Hospital", on_delete=models.PROTECT,
         null=True, blank=True,
         related_name="users",
-        help_text="Hospital asignado (obligatorio para rol CLI, opcional para TEC)"
+        help_text=(
+            "Hospital al que se limita lo que ve el usuario (obligatorio para CLI). "
+            "Vacío: todos. No aplica a ADMIN."
+        ),
+    )
+    # Dentro del hospital, una parte del arbol (bloque, piso, servicio): el
+    # "Limitar acceso a esta localizacion" de Fracttal. Vacio: todo el
+    # hospital. Ver apps.users.scope.
+    scope_node = models.ForeignKey(
+        "assets.AssetNode", on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="scoped_users",
+        help_text="Parte del hospital a la que se limita el usuario. Vacío: todo el hospital.",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.users.permissions import IsAdminOrSup
+from apps.users.models import User
 
 from .dashboard import (
     calculate_assets_without_maintenance,
@@ -19,13 +20,25 @@ from .dashboard import (
 )
 
 
+def _hospital_del_tablero(request):
+    """
+    El hospital que pide el tablero, o el del usuario si esta limitado a uno
+    (apps.users.scope): un supervisor de una clinica no ve los indicadores de
+    todas. Los indicadores van por hospital, no por piso.
+    """
+    user = request.user
+    if user.role != User.Role.ADMIN and user.hospital_id:
+        return str(user.hospital_id)
+    return request.query_params.get("hospital_id") or None
+
+
 class DashboardView(APIView):
     """GET /api/dashboard/ — todos los KPIs en un solo request."""
 
     permission_classes = [IsAdminOrSup]
 
     def get(self, request):
-        hospital_id = request.query_params.get("hospital_id") or None
+        hospital_id = _hospital_del_tablero(request)
         days = int(request.query_params.get("days", 30))
 
         cache_key = f"dashboard_{hospital_id}_{days}"
@@ -54,7 +67,7 @@ class DashboardComplianceHistoryView(APIView):
     permission_classes = [IsAdminOrSup]
 
     def get(self, request):
-        hospital_id = request.query_params.get("hospital_id") or None
+        hospital_id = _hospital_del_tablero(request)
         months = int(request.query_params.get("months", 12))
 
         today = timezone.now().date()
@@ -78,7 +91,7 @@ class DashboardAssetsStatusView(APIView):
         from apps.assets.models import Asset
         from apps.maintenance.models import Task
 
-        hospital_id = request.query_params.get("hospital_id") or None
+        hospital_id = _hospital_del_tablero(request)
         today = timezone.now().date()
         due_soon_threshold = today + timedelta(days=30)
 

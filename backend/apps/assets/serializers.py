@@ -1,5 +1,8 @@
 from rest_framework import serializers
 
+from apps.users import scope
+from apps.users.scope import ScopedFieldsMixin
+
 from .models import Asset, AssetCustomField, AssetCustomFieldValue, AssetNode, Hospital
 
 
@@ -66,7 +69,7 @@ class AssetNodeSerializer(serializers.ModelSerializer):
         return anotado if anotado is not None else obj.assets.count()
 
 
-class AssetNodeCreateUpdateSerializer(serializers.ModelSerializer):
+class AssetNodeCreateUpdateSerializer(ScopedFieldsMixin, serializers.ModelSerializer):
     """Serializer de escritura para las ubicaciones.
 
     AssetNodeSerializer expone `hospital` y `parent` como SerializerMethodField,
@@ -77,6 +80,9 @@ class AssetNodeCreateUpdateSerializer(serializers.ModelSerializer):
 
     `path` no se acepta: lo materializa AssetNode.save() a partir del padre.
     """
+
+    # Un usuario limitado a una parte del arbol solo crea dentro de ella.
+    scoped_fields = {"hospital": "hospitals", "parent": "nodes"}
 
     class Meta:
         model = AssetNode
@@ -100,6 +106,10 @@ class AssetNodeCreateUpdateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         hospital = self._hospital_de(attrs, "hospital")
         parent = self._hospital_de(attrs, "parent")
+        if parent is None and scope.needs_node(self.context):
+            raise serializers.ValidationError(
+                {"parent": "Tu usuario está limitado a una parte del hospital: elige dónde va."}
+            )
 
         if parent is not None:
             if hospital and parent.hospital_id != hospital.pk:
@@ -299,7 +309,10 @@ class AssetListSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializ
         return None
 
 
-class AssetCreateUpdateSerializer(serializers.ModelSerializer):
+class AssetCreateUpdateSerializer(ScopedFieldsMixin, serializers.ModelSerializer):
+    # Un usuario limitado a una parte del arbol solo crea y mueve activos dentro de ella.
+    scoped_fields = {"hospital": "hospitals", "node": "nodes"}
+
     class Meta:
         model = Asset
         fields = [
@@ -337,6 +350,10 @@ class AssetCreateUpdateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         node = attrs.get("node", getattr(self.instance, "node", None))
         hospital = attrs.get("hospital", getattr(self.instance, "hospital", None))
+        if node is None and scope.needs_node(self.context):
+            raise serializers.ValidationError(
+                {"node": "Tu usuario está limitado a una parte del hospital: elige la ubicación."}
+            )
         if node and hospital and node.hospital_id != hospital.pk:
             raise serializers.ValidationError(
                 {"node": "El nodo no pertenece al mismo hospital que el activo."}

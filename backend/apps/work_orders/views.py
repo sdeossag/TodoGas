@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.models import AuditLog
+from apps.users import scope
 from apps.users.models import User
 from apps.users.permissions import IsAdmin, IsAdminOrSup
 
@@ -90,15 +91,16 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             "reports",
         )
 
+        # Hospital o parte del arbol (apps.users.scope). Al tecnico no se le
+        # aplica: ve lo que tiene asignado, y si se le asigna una OT de fuera de
+        # su alcance es porque alguien lo decidio.
         if user.role in (User.Role.ADMIN, User.Role.SUP):
-            pass
+            qs = scope.work_orders(qs, user)
         elif user.role == User.Role.TEC:
             qs = qs.filter(assigned_to=user)
         elif user.role == User.Role.CLI:
-            qs = qs.filter(
-                status=WorkOrder.Status.COMPLETED,
-                hospital=user.hospital,
-            )
+            # El hospital ve lo finalizado; lo que esta en curso no.
+            qs = scope.work_orders(qs.filter(status=WorkOrder.Status.COMPLETED), user)
         else:
             qs = qs.none()
 
@@ -346,7 +348,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
-        entrada = TaskIdsSerializer(data=request.data)
+        entrada = TaskIdsSerializer(data=request.data, context={"request": request})
         entrada.is_valid(raise_exception=True)
         try:
             avisos = services.add_tasks_to_work_order(wo, entrada.validated_data["task_ids"])
@@ -366,7 +368,9 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
-        entrada = TaskIdsSerializer(data={"task_ids": [request.data.get("task_id")]})
+        entrada = TaskIdsSerializer(
+            data={"task_ids": [request.data.get("task_id")]}, context={"request": request}
+        )
         entrada.is_valid(raise_exception=True)
         tarea = entrada.validated_data["task_ids"][0]
         if tarea.work_order_id != wo.id:

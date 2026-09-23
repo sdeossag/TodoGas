@@ -6,6 +6,7 @@ from apps.checklists.models import ChecklistTemplateVersion
 from apps.maintenance.models import Task
 from apps.reports.failures import has_report_failure
 from apps.users.models import User
+from apps.users.scope import ScopedFieldsMixin
 
 from .models import WorkOrder, WorkOrderStatusHistory
 
@@ -257,8 +258,10 @@ def _version_dict(tarea):
     }
 
 
-class ManualTaskSerializer(serializers.Serializer):
+class ManualTaskSerializer(ScopedFieldsMixin, serializers.Serializer):
     """Un activo de la visita, con su checklist opcional."""
+
+    scoped_fields = {"asset": "assets"}
 
     asset = serializers.PrimaryKeyRelatedField(
         queryset=Asset.objects.select_related("hospital")
@@ -352,7 +355,8 @@ class WorkOrderCreateSerializer(serializers.ModelSerializer):
         )
 
 
-class TaskIdsSerializer(serializers.Serializer):
+class TaskIdsSerializer(ScopedFieldsMixin, serializers.Serializer):
+    scoped_fields = {"task_ids": "tasks"}
     task_ids = serializers.PrimaryKeyRelatedField(
         many=True, allow_empty=False,
         queryset=Task.objects.select_related("asset", "plan_task__checklist_template"),
@@ -360,12 +364,14 @@ class TaskIdsSerializer(serializers.Serializer):
     )
 
 
-class WorkOrderFromTasksSerializer(serializers.Serializer):
+class WorkOrderFromTasksSerializer(ScopedFieldsMixin, serializers.Serializer):
     """
     OT a partir de tareas pendientes: el planificador las selecciona y arma la
     visita, como la columna de pendientes de Fracttal y su "+ Nueva OT". Todas
     del mismo hospital (D4).
     """
+
+    scoped_fields = {"task_ids": "tasks"}
 
     task_ids = serializers.PrimaryKeyRelatedField(
         many=True, allow_empty=False,

@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.audit.models import AuditLog
+from apps.users import scope
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 
@@ -24,15 +25,14 @@ def _get_client_ip(request):
 
 def _can_read_wo(user, wo):
     """Misma logica de visibilidad que WorkOrderViewSet.get_queryset."""
-    if user.role in (User.Role.ADMIN, User.Role.SUP):
+    if user.role == User.Role.ADMIN:
         return True
+    if user.role == User.Role.SUP:
+        return scope.can_see_work_order(user, wo)
     if user.role == User.Role.TEC:
         return wo.assigned_to_id == user.id
     if user.role == User.Role.CLI:
-        return (
-            wo.status == WorkOrder.Status.COMPLETED
-            and wo.hospital_id == user.hospital_id
-        )
+        return wo.status == WorkOrder.Status.COMPLETED and scope.can_see_work_order(user, wo)
     return False
 
 

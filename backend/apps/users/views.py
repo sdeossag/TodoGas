@@ -162,7 +162,7 @@ class UserViewSet(viewsets.ModelViewSet):
     - reset_password: ADMIN
     """
 
-    queryset = User.objects.select_related("hospital").order_by("last_name", "first_name")
+    queryset = User.objects.select_related("hospital", "scope_node").order_by("last_name", "first_name")
     serializer_class = UserSerializer
 
     def get_serializer_class(self):
