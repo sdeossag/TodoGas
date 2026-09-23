@@ -8,6 +8,7 @@ import {
   useToggleHospitalActive,
 } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
+import { formatDate } from '../../utils/maintenance'
 import useModalDismiss from '../../hooks/useModalDismiss'
 
 const EMPTY_FORM = {
@@ -229,13 +230,14 @@ export default function HospitalsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[42rem]">
+          <table className="w-full text-sm min-w-[50rem]">
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-medium text-gray-500">
                 <th className="px-4 py-3">Nombre</th>
                 <th className="px-4 py-3">Código</th>
                 <th className="px-4 py-3">Ciudad</th>
                 <th className="px-4 py-3 text-center">Activos</th>
+                <th className="px-4 py-3">Contrato</th>
                 <th className="px-4 py-3 text-center">Estado</th>
                 <th className="px-4 py-3 text-right">Acciones</th>
               </tr>
@@ -246,6 +248,7 @@ export default function HospitalsPage() {
                   onEdit={() => openEdit(h)}
                   onViewLocations={() => navigate(`/hospitales/${h.id}/ubicaciones`)}
                   onViewAssets={() => navigate(`/activos?hospital_id=${h.id}`)}
+                  onViewContracts={() => navigate(`/contratos?hospital_id=${h.id}`)}
                 />
               ))}
             </tbody>
@@ -261,7 +264,7 @@ export default function HospitalsPage() {
   )
 }
 
-function HospitalRow({ hospital: h, isAdmin, onEdit, onViewLocations, onViewAssets }) {
+function HospitalRow({ hospital: h, isAdmin, onEdit, onViewLocations, onViewAssets, onViewContracts }) {
   const toggleMut = useToggleHospitalActive(h.id)
 
   return (
@@ -273,6 +276,11 @@ function HospitalRow({ hospital: h, isAdmin, onEdit, onViewLocations, onViewAsse
         <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-brand font-semibold text-xs">
           {h.asset_count}
         </span>
+      </td>
+      <td className="px-4 py-3">
+        <button type="button" onClick={onViewContracts} className="text-left hover:underline">
+          <ContratoDelHospital estado={h.contract_status} />
+        </button>
       </td>
       <td className="px-4 py-3 text-center">
         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
@@ -310,6 +318,21 @@ function HospitalRow({ hospital: h, isAdmin, onEdit, onViewLocations, onViewAsse
         </div>
       </td>
     </tr>
+  )
+}
+
+/** Vigente hasta cuándo, o el aviso de que no tiene (solo avisa, no bloquea). */
+function ContratoDelHospital({ estado }) {
+  if (!estado) return null
+  if (!estado.has_active) {
+    return <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium">Sin contrato vigente</span>
+  }
+  const c = estado.current
+  return (
+    <span className={`text-xs ${c.status === 'EXPIRING' ? 'text-amber-800' : 'text-gray-600'}`}>
+      Hasta {formatDate(c.end_date)}
+      {c.status === 'EXPIRING' && ` · vence en ${c.days_left} día${c.days_left !== 1 ? 's' : ''}`}
+    </span>
   )
 }
 

@@ -5,6 +5,7 @@ import { useReportDownload } from '../../api/reports'
 import { useAssetTasks } from '../../api/tasks'
 import { useFindings } from '../../api/findings'
 import { EstadoParaHospital, SeverityBadge } from '../../components/findings/FindingsPanel'
+import { CoberturaEquipo } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
 import Spinner from '../../components/ui/Spinner'
 import { ASSET_STATUS_COLORS, assetStatusLabel } from '../../constants/labels'
@@ -49,8 +50,8 @@ export default function ClientAssetPage() {
         <p className="text-sm text-gray-500 font-mono">{activo.code}</p>
       </div>
 
-      {ficha.length > 0 && (
-        <section className="bg-white rounded-xl border border-gray-200 shadow-card p-5">
+      <section className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
+        {ficha.length > 0 && (
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             {ficha.map(([k, v]) => (
               <div key={k}>
@@ -59,8 +60,9 @@ export default function ClientAssetPage() {
               </div>
             ))}
           </dl>
-        </section>
-      )}
+        )}
+        <CoberturaEquipo coverage={activo.coverage} />
+      </section>
 
       <section className="bg-white rounded-xl border border-gray-200 shadow-card">
         <h2 className="px-5 py-4 border-b border-gray-100 font-semibold text-gray-700 text-sm">Próximos mantenimientos</h2>

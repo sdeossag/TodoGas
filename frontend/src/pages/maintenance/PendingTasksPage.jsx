@@ -11,6 +11,7 @@ import {
   useTasks,
 } from '../../api/tasks'
 import { useUsers } from '../../api/users'
+import { AvisoSinContrato } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
 import Modal from '../../components/ui/Modal'
 import Spinner from '../../components/ui/Spinner'
@@ -389,6 +390,7 @@ function CreateWorkOrderModal({ tasks: seleccion, onClose }) {
     <Modal title="Crear OT" subtitle={`${hospital.name} · ${tasks.length} tarea${tasks.length !== 1 ? 's' : ''}${minutos ? ` · ${formatMinutes(minutos)}` : ''}`}
       onClose={onClose} width="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-4">
+        <AvisoSinContrato hospitalId={hospital.id} />
         <ul className="border border-gray-100 rounded-lg divide-y divide-gray-50 max-h-40 overflow-y-auto text-sm">
           {tasks.map((t) => (
             <li key={t.id} className="px-3 py-2 flex justify-between gap-3">

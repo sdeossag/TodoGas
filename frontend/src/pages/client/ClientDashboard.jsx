@@ -9,9 +9,12 @@ import {
   assetStatusLabel,
   woStatusLabel,
 } from '../../constants/labels'
+import { EstadoDocumento } from '../../components/contracts/ContractStatus'
+import Icon from '../../components/ui/Icon'
 import Spinner from '../../components/ui/Spinner'
 import { formatDate } from '../../utils/maintenance'
 import { formatWoCode } from '../../utils/workOrder'
+import { mediaUrl } from '../../api/client'
 
 
 export default function ClientDashboard() {
@@ -40,6 +43,7 @@ export default function ClientDashboard() {
     hospital, total_assets, assets_by_status, recent_work_orders, recent_reports,
     upcoming = [], upcoming_total = 0, overdue_count = 0, compliance,
     recent_findings = [], open_findings_count = 0,
+    contracts = [],
   } = data
 
   const statusEntries = Object.entries(assets_by_status || {}).filter(([, v]) => v > 0)
@@ -128,6 +132,8 @@ export default function ClientDashboard() {
           </ul>
         </section>
       )}
+
+      <ContratosDelHospital contratos={contracts} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="bg-white rounded-xl border border-gray-200 shadow-card">
@@ -255,5 +261,52 @@ function StatCard({ label, value, color }) {
         </span>
       )}
     </div>
+  )
+}
+
+/**
+ * Contratos de mantenimiento y garantías del hospital, con su vigencia y el
+ * documento para descargar (decisión del 2026-09-23). Los vencidos del
+ * último año se ven como historial.
+ */
+function ContratosDelHospital({ contratos }) {
+  if (!contratos.length) return null
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-card">
+      <h2 className="px-5 py-4 border-b border-gray-100 font-semibold text-gray-700 text-sm">Contratos y garantías</h2>
+      <ul className="divide-y divide-gray-50">
+        {contratos.map((c) => (
+          <li key={c.id} className="px-5 py-3 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-800">{c.name}</p>
+              <p className="text-xs text-gray-500">
+                {c.kind_display} · {formatDate(c.start_date)} → {formatDate(c.end_date)}
+              </p>
+              {c.assets.length > 0 && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Cubre:{' '}
+                  {c.assets.slice(0, 4).map((a, i) => (
+                    <span key={a.id}>
+                      {i > 0 && ', '}
+                      <Link to={`/mis-activos/${a.id}`} className="text-brand hover:underline">{a.name}</Link>
+                    </span>
+                  ))}
+                  {c.assets.length > 4 && ` y ${c.assets.length - 4} más`}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <EstadoDocumento doc={c} />
+              {c.file_url && (
+                <a href={mediaUrl(c.file_url)} target="_blank" rel="noreferrer"
+                  className="text-xs px-2 py-1 rounded bg-brand/10 text-brand hover:bg-brand/20 inline-flex items-center gap-1">
+                  <Icon name="download" className="w-3.5 h-3.5" /> Documento
+                </a>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }

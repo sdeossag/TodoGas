@@ -7,6 +7,7 @@ import Icon from '../components/ui/Icon'
 import Avatar from '../components/ui/Avatar'
 import OfflineBanner from '../components/ui/OfflineBanner'
 import { useFindingsSummary } from '../api/findings'
+import { useContractsSummary } from '../api/contracts'
 
 const ROLE_LABELS = {
   ADMIN: 'Administrador',
@@ -32,6 +33,7 @@ const NAV_GROUPS = [
     links: [
       { to: '/hospitales', label: 'Hospitales', icon: 'hospital' },
       { to: '/activos', label: 'Activos', icon: 'asset' },
+      { to: '/contratos', label: 'Contratos y garantías', icon: 'document', alertKey: 'contracts' },
     ],
   },
   {
@@ -91,7 +93,13 @@ export default function AdminLayout() {
   const lowStockCount = alertData?.low_stock_count ?? 0
   // Hallazgos esperando decisión del planificador (bloque E).
   const { data: hallazgos } = useFindingsSummary()
-  const alertas = { inventory: lowStockCount, findings: hallazgos?.pending ?? 0 }
+  // Contratos y garantías por vencer en 60 días.
+  const { data: contratos } = useContractsSummary({ staleTime: 5 * 60_000 })
+  const alertas = {
+    inventory: lowStockCount,
+    findings: hallazgos?.pending ?? 0,
+    contracts: contratos?.expiring?.length ?? 0,
+  }
 
   // La preferencia solo se recuerda en escritorio: en movil siempre arranca cerrado.
   useEffect(() => {

@@ -15,6 +15,8 @@ import {
 
 import { useDashboard, useComplianceHistory, useAssetsStatus } from '../../api/dashboard'
 import { useHospitals } from '../../api/assets'
+import { useContractsSummary } from '../../api/contracts'
+import { EstadoDocumento } from '../../components/contracts/ContractStatus'
 import KpiCard from '../../components/dashboard/KpiCard'
 import Table from '../../components/ui/Table'
 import EmptyState from '../../components/ui/EmptyState'
@@ -475,6 +477,8 @@ export default function DashboardPage() {
         </Panel>
       </div>
 
+      <ContratosPorVencer hospitalId={hospitalId} />
+
       {/* Fila 4 — Estado de activos */}
       <div>
         <h2 className="text-sm font-semibold text-gray-800 mb-3">Estado de activos</h2>
@@ -501,5 +505,39 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Contratos y garantías que vencen en 60 días y hospitales sin contrato
+ * vigente. Solo aparece si hay algo que atender.
+ */
+function ContratosPorVencer({ hospitalId }) {
+  const { data } = useContractsSummary()
+  const deEste = (id) => !hospitalId || id === hospitalId
+  const porVencer = (data?.expiring ?? []).filter((c) => deEste(c.hospital_id))
+  const sinContrato = (data?.hospitals_without_contract ?? []).filter((h) => deEste(h.id))
+  if (!porVencer.length && !sinContrato.length) return null
+  return (
+    <Panel title="Contratos y garantías"
+      action={<Link to="/contratos" className="btn-link text-sm">Ver todos</Link>}>
+      <ul className="divide-y divide-gray-100">
+        {sinContrato.map((h) => (
+          <li key={h.id} className="flex items-center justify-between gap-3 px-5 py-3">
+            <p className="text-sm text-gray-800 truncate">{h.name}</p>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium whitespace-nowrap">Sin contrato vigente</span>
+          </li>
+        ))}
+        {porVencer.map((c) => (
+          <li key={c.id} className="flex items-center justify-between gap-3 px-5 py-3">
+            <div className="min-w-0">
+              <p className="text-sm text-gray-800 truncate">{c.name}</p>
+              <p className="text-xs text-gray-500 truncate">{c.hospital_name}</p>
+            </div>
+            <EstadoDocumento doc={c} />
+          </li>
+        ))}
+      </ul>
+    </Panel>
   )
 }

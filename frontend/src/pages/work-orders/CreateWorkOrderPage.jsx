@@ -4,6 +4,7 @@ import { useCreateWorkOrder } from '../../api/workOrders'
 import { useAssets, useAssetTree, useHospitals } from '../../api/assets'
 import { useUsers } from '../../api/users'
 import { useChecklistTemplates } from '../../api/checklists'
+import { AvisoSinContrato } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
 import { fieldLabel } from '../../constants/labels'
 import Spinner from '../../components/ui/Spinner'
@@ -219,6 +220,8 @@ export default function CreateWorkOrderPage() {
             </select>
           </Field>
         </div>
+
+        {hospital && <AvisoSinContrato hospitalId={hospital} />}
 
         {/* Activos de la visita */}
         <Field label="Activos" required hint="Una OT puede cubrir varios activos del mismo hospital.">

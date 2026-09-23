@@ -6,8 +6,17 @@ from apps.users.scope import ScopedFieldsMixin
 from .models import Asset, AssetCustomField, AssetCustomFieldValue, AssetNode, Hospital
 
 
-class HospitalSerializer(serializers.ModelSerializer):
+class _ContractStatusMixin:
+    """"Sin contrato vigente" se avisa en la ficha, la lista y al armar una OT."""
+
+    def get_contract_status(self, obj):
+        from .contracts import estado_del_hospital
+        return estado_del_hospital(obj)
+
+
+class HospitalSerializer(_ContractStatusMixin, serializers.ModelSerializer):
     asset_count = serializers.SerializerMethodField()
+    contract_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Hospital
@@ -15,6 +24,7 @@ class HospitalSerializer(serializers.ModelSerializer):
             "id", "name", "code", "nit", "address", "city", "department",
             "contact_name", "contact_phone", "contact_email",
             "latitude", "longitude", "is_active", "notes", "asset_count",
+            "contract_status",
         ]
         read_only_fields = ["id", "asset_count"]
 
@@ -22,12 +32,13 @@ class HospitalSerializer(serializers.ModelSerializer):
         return obj.assets.filter(status=Asset.Status.ACTIVE).count()
 
 
-class HospitalListSerializer(serializers.ModelSerializer):
+class HospitalListSerializer(_ContractStatusMixin, serializers.ModelSerializer):
     asset_count = serializers.SerializerMethodField()
+    contract_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Hospital
-        fields = ["id", "name", "code", "city", "is_active", "asset_count"]
+        fields = ["id", "name", "code", "city", "is_active", "asset_count", "contract_status"]
 
     def get_asset_count(self, obj):
         return obj.assets.filter(status=Asset.Status.ACTIVE).count()
@@ -248,6 +259,7 @@ class AssetSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
     next_maintenance_date = serializers.SerializerMethodField()
     maintenance_status = serializers.SerializerMethodField()
     plan = serializers.SerializerMethodField()
+    coverage = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
@@ -259,9 +271,14 @@ class AssetSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
             "qr_code", "photo_url", "installation_date", "warranty_expiry",
             "created_at", "updated_at", "custom_field_values",
             "last_maintenance_date", "next_maintenance_date", "maintenance_status",
-            "plan",
+            "plan", "coverage",
         ]
         read_only_fields = ["id", "qr_code", "created_at", "updated_at"]
+
+    def get_coverage(self, obj):
+        """Garantia y contrato vigentes que cubren el equipo (o None cada uno)."""
+        from .contracts import cobertura_del_activo
+        return cobertura_del_activo(obj)
 
     def get_hospital(self, obj):
         return {"id": str(obj.hospital_id), "name": obj.hospital.name}

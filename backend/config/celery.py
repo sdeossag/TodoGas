@@ -14,5 +14,10 @@ app.conf.beat_schedule = {
         'task': 'maintenance.generate_preventive_work_orders',
         'schedule': crontab(hour=11, minute=0),
     },
+    # 6:30 a. m. en Colombia: vencimientos de contratos y garantias.
+    'send-contract-expiry-notices-daily': {
+        'task': 'assets.send_contract_expiry_notices',
+        'schedule': crontab(hour=11, minute=30),
+    },
 }
 app.conf.timezone = 'UTC'

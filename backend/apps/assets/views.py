@@ -39,7 +39,11 @@ class HospitalViewSet(viewsets.ModelViewSet):
         return HospitalSerializer
 
     def get_queryset(self):
-        qs = scope.hospitals(Hospital.objects.all(), self.request.user)
+        from .contracts import prefetch_contratos_vigentes
+
+        qs = scope.hospitals(
+            Hospital.objects.prefetch_related(prefetch_contratos_vigentes()), self.request.user,
+        )
         is_active = self.request.query_params.get("is_active")
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == "true")
@@ -463,6 +467,7 @@ class ClientPortalView(APIView):
             # Alias historico: el APK publicado lee 'pending_reports'.
             'pending_reports': reports_data,
             **_programacion_del_cliente(user),
+            **_contratos_del_cliente(user),
         })
 
 
@@ -567,4 +572,44 @@ def _hallazgos_del_cliente(user):
     return {
         'open_findings_count': abiertos.count(),
         'recent_findings': [fila(f) for f in qs.order_by('-reported_at')[:10]],
+    }
+
+
+def _contratos_del_cliente(user):
+    """
+    Contratos y garantias del hospital con su vigencia y el documento, que
+    la biomedica puede descargar (decision del 2026-09-23). Los vigentes y
+    los proximos primero; de los vencidos, solo el ultimo año.
+    """
+    from datetime import timedelta
+
+    from django.core.files.storage import default_storage
+
+    from .contracts import hoy, resumen
+    from .models import Contract
+
+    dia = hoy()
+    qs = scope.contracts(
+        Contract.objects.filter(end_date__gte=dia - timedelta(days=365)).prefetch_related('assets'),
+        user,
+    )
+    orden = {'EXPIRING': 0, 'ACTIVE': 1, 'UPCOMING': 2, 'EXPIRED': 3}
+
+    def fila(c):
+        return {
+            **resumen(c, dia),
+            'kind_display': c.get_kind_display(),
+            'description': c.description,
+            'file_url': default_storage.url(c.file_key) if c.file_key else None,
+            'file_name': c.file_name,
+            'assets': [{'id': str(a.id), 'code': a.code, 'name': a.name} for a in c.assets.all()],
+        }
+
+    filas = sorted((fila(c) for c in qs), key=lambda f: (orden[f['status']], f['end_date']))
+    return {
+        'contracts': filas,
+        'has_active_contract': any(
+            f['kind'] == Contract.Kind.MAINTENANCE and f['status'] in ('ACTIVE', 'EXPIRING')
+            for f in filas
+        ),
     }

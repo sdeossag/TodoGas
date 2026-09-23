@@ -5,6 +5,7 @@ import { useAsset, useUpdateAsset, useDecommissionAsset } from '../../api/assets
 import { useReportDownload } from '../../api/reports'
 import { useAssetTasks } from '../../api/tasks'
 import { TASK_STATUS, formatDate as fechaCorta, formatFrequency } from '../../utils/maintenance'
+import { CoberturaEquipo } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
 import useModalDismiss from '../../hooks/useModalDismiss'
 
@@ -211,6 +212,8 @@ function InfoTab({ asset }) {
           </div>
         </div>
       </div>
+
+      <CoberturaEquipo coverage={asset.coverage} enlace={`/contratos?hospital_id=${asset.hospital?.id}`} />
 
       <div className="grid grid-cols-2 gap-x-8 gap-y-4">
         <InfoField label="Hospital" value={asset.hospital?.name} />

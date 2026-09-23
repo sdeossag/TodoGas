@@ -12,7 +12,7 @@ checklist: se filtraban para el tecnico y a un cliente le llegaban las de
 todos los hospitales.
 """
 
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 
 from apps.users.models import User
 
@@ -103,6 +103,34 @@ def work_orders(qs, user, prefix=""):
         asset__node_id__in=nodos,
     )
     return qs.filter(Exists(tareas))
+
+
+@_filtrar
+def contracts(qs, user):
+    """
+    Contratos y garantias del hospital. Con un nodo: el contrato que cubre
+    todo el hospital, una rama por encima o por debajo de la suya, y la
+    garantia con algun equipo de su parte del arbol. El contrato de otro
+    piso no le toca.
+    """
+    if not _limitado(user):
+        return qs
+    qs = qs.filter(hospital_id=user.hospital_id)
+    nodos = _nodos(user)
+    if nodos is None:
+        return qs
+    from apps.assets.models import AssetNode, ContractAsset
+
+    ancestros, actual = [], user.scope_node_id
+    while actual:
+        ancestros.append(actual)
+        actual = AssetNode.objects.filter(pk=actual).values_list("parent_id", flat=True).first()
+    equipos = ContractAsset.objects.filter(contract_id=OuterRef("pk"), asset__node_id__in=nodos)
+    return qs.filter(
+        Q(kind="MAINTENANCE", node__isnull=True)
+        | Q(kind="MAINTENANCE", node_id__in=[*nodos, *ancestros])
+        | Q(kind="WARRANTY") & Exists(equipos)
+    )
 
 
 def needs_node(context):

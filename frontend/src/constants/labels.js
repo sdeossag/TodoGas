@@ -47,6 +47,7 @@ export const ENTITY_TYPE_LABELS = {
   WorkOrder: 'Orden de trabajo',
   Asset: 'Activo',
   Hospital: 'Hospital',
+  Contract: 'Contrato o garantía',
   User: 'Usuario',
   Photo: 'Foto',
   Signature: 'Firma',

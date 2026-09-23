@@ -8,11 +8,13 @@ from .views import (
     ClientPortalView,
     HospitalViewSet,
 )
+from .views_contracts import ContractViewSet
 
 router = DefaultRouter()
 router.register(r"hospitals", HospitalViewSet, basename="hospitals")
 router.register(r"asset-nodes", AssetNodeViewSet, basename="asset-nodes")
 router.register(r"assets", AssetViewSet, basename="assets")
+router.register(r"contracts", ContractViewSet, basename="contracts")
 router.register(r"asset-custom-fields", AssetCustomFieldViewSet, basename="asset-custom-fields")
 
 urlpatterns = router.urls + [

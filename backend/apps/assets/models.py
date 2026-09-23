@@ -294,3 +294,112 @@ class AssetCustomFieldValue(models.Model):
 
     def __str__(self):
         return f"{self.asset.code}.{self.field.field_name} = {self.value[:50]}"
+
+
+class Contract(models.Model):
+    """
+    Contrato de mantenimiento con un hospital o garantia de equipos.
+    Fracttal: Configuracion -> Gestion Documental, con los grupos CONTRATO
+    MANTENIMIENTO y GARANTIA EQUIPO (decision del 2026-09-23).
+
+    El contrato cubre un hospital entero o una parte de su arbol (`node`); la
+    garantia, una lista de equipos. Un contrato vencido no bloquea nada: el
+    hospital queda marcado "sin contrato vigente" y el planificador decide.
+    """
+
+    class Kind(models.TextChoices):
+        MAINTENANCE = "MAINTENANCE", "Contrato de mantenimiento"
+        WARRANTY = "WARRANTY", "Garantía de equipos"
+
+    class Notice(models.TextChoices):
+        """Ultimo aviso de vencimiento enviado, para no repetirlo cada dia."""
+        NONE = "", "Ninguno"
+        DAYS_60 = "60", "60 días"
+        DAYS_30 = "30", "30 días"
+        EXPIRED = "EXPIRED", "Vencido"
+
+    # Con cuantos dias de anticipacion se avisa y se marca "por vencer".
+    EXPIRING_DAYS = 60
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=12, choices=Kind.choices)
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    hospital = models.ForeignKey(
+        Hospital, on_delete=models.PROTECT,
+        related_name="contracts",
+    )
+    node = models.ForeignKey(
+        AssetNode, on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="contracts",
+        help_text="Solo contratos: la parte del arbol que cubre. Vacio = todo el hospital.",
+    )
+    assets = models.ManyToManyField(
+        Asset, through="ContractAsset", related_name="contracts", blank=True,
+    )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    # Clave en el almacenamiento (S3 o disco), como Photo.file_url.
+    file_key = models.CharField(max_length=500, blank=True, default="")
+    file_name = models.CharField(max_length=255, blank=True, default="")
+    last_notice = models.CharField(
+        max_length=8, choices=Notice.choices, blank=True, default=Notice.NONE,
+    )
+    created_by = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="contracts_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "assets_contract"
+        ordering = ["-end_date", "name"]
+        indexes = [
+            models.Index(fields=["hospital", "kind", "end_date"], name="idx_contract_hosp_kind_end"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_date__gte=models.F("start_date")),
+                name="ck_contract_end_after_start",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.start_date} → {self.end_date})"
+
+    @staticmethod
+    def active_q(on_date):
+        return models.Q(start_date__lte=on_date, end_date__gte=on_date)
+
+    def status_on(self, on_date):
+        """UPCOMING, ACTIVE, EXPIRING (vigente y vence en 60 dias) o EXPIRED."""
+        if self.end_date < on_date:
+            return "EXPIRED"
+        if self.start_date > on_date:
+            return "UPCOMING"
+        if (self.end_date - on_date).days <= self.EXPIRING_DAYS:
+            return "EXPIRING"
+        return "ACTIVE"
+
+
+class ContractAsset(models.Model):
+    """Equipo cubierto por una garantia."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    contract = models.ForeignKey(
+        Contract, on_delete=models.PROTECT,
+        related_name="asset_links",
+    )
+    asset = models.ForeignKey(
+        Asset, on_delete=models.PROTECT,
+        related_name="contract_links",
+    )
+
+    class Meta:
+        db_table = "assets_contractasset"
+        constraints = [
+            models.UniqueConstraint(fields=["contract", "asset"], name="uq_contractasset"),
+        ]
