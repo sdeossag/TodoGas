@@ -8,7 +8,7 @@ import {
   useUpdateUser,
   useUsers,
 } from '../../api/users'
-import { useHospitals } from '../../api/assets'
+import { useAssetNodes, useHospitals } from '../../api/assets'
 import { useAuditLog } from '../../api/audit'
 import useAuthStore from '../../store/authStore'
 import Icon from '../../components/ui/Icon'
@@ -196,6 +196,7 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
     email: '',
     role: 'TEC',
     hospital: '',
+    scope_node: '',
     employee_code: '',
     phone: '',
   })
@@ -234,7 +235,8 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
       role: form.role,
       employee_code: form.role === 'TEC' ? form.employee_code.trim() : '',
       phone: form.role === 'TEC' ? form.phone.trim() : '',
-      hospital: form.role === 'CLI' ? form.hospital : null,
+      hospital: form.role !== 'ADMIN' ? form.hospital || null : null,
+      scope_node: form.role !== 'ADMIN' ? form.scope_node || null : null,
       password: generateTempPassword(),
     }
 
@@ -244,6 +246,11 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
         const emailErr = fieldError(err, 'email')
         if (emailErr) {
           setErrors((prev) => ({ ...prev, email: emailErr }))
+          return
+        }
+        const alcanceErr = fieldError(err, 'hospital') || fieldError(err, 'scope_node')
+        if (alcanceErr) {
+          setErrors((prev) => ({ ...prev, hospital: alcanceErr }))
           return
         }
         const passwordErr = fieldError(err, 'password')
@@ -299,22 +306,17 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
           </select>
         </div>
 
-        {form.role === 'CLI' && (
-          <div>
-            <label className={labelCls}>
-              Hospital <span className="text-red-400">*</span>
-            </label>
-            <select value={form.hospital} onChange={set('hospital')} className={inputCls}>
-              <option value="">Selecciona un hospital</option>
-              {hospitals.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name}
-                </option>
-              ))}
-            </select>
-            {errors.hospital && <p className="mt-1 text-xs text-red-600">{errors.hospital}</p>}
-          </div>
-        )}
+        <AlcanceFields
+          role={form.role}
+          hospitals={hospitals}
+          hospital={form.hospital}
+          scopeNode={form.scope_node}
+          error={errors.hospital}
+          onChange={(cambios) => {
+            setForm((f) => ({ ...f, ...cambios }))
+            setErrors((prev) => ({ ...prev, hospital: undefined }))
+          }}
+        />
 
         {form.role === 'TEC' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -362,6 +364,60 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
         </div>
       </form>
     </Modal>
+  )
+}
+
+// ── Alcance: hospital y parte del arbol ──────────────────────────────────────
+
+/**
+ * A qué se limita el usuario (apps/users/scope.py): un hospital y, dentro,
+ * una parte del árbol, como "Limitar acceso a esta localización" de Fracttal.
+ * La cuenta de hospital siempre tiene uno; al resto es opcional, y el
+ * administrador nunca se limita (el servidor lo ignora).
+ */
+function AlcanceFields({ role, hospitals, hospital, scopeNode, onChange, error }) {
+  const { data: nodos = [] } = useAssetNodes(hospital || null)
+  if (role === 'ADMIN') {
+    return <p className="text-xs text-gray-500">El administrador ve todos los hospitales.</p>
+  }
+  const esCliente = role === 'CLI'
+  const ordenados = [...nodos].filter((n) => n.is_active).sort((a, b) => a.path.localeCompare(b.path))
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <label className={labelCls}>
+          {esCliente ? <>Hospital <span className="text-red-400">*</span></> : 'Limitar a un hospital'}
+        </label>
+        <select
+          value={hospital}
+          onChange={(e) => onChange({ hospital: e.target.value, scope_node: '' })}
+          className={inputCls}
+        >
+          <option value="">{esCliente ? 'Selecciona un hospital' : 'Todos los hospitales'}</option>
+          {hospitals.map((h) => (
+            <option key={h.id} value={h.id}>{h.name}</option>
+          ))}
+        </select>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+      <div>
+        <label className={labelCls}>Parte del hospital</label>
+        <select
+          value={scopeNode}
+          disabled={!hospital}
+          onChange={(e) => onChange({ scope_node: e.target.value })}
+          className={`${inputCls} disabled:bg-gray-50 disabled:text-gray-400`}
+        >
+          <option value="">Todo el hospital</option>
+          {ordenados.map((n) => (
+            <option key={n.id} value={n.id}>
+              {'\u00a0\u00a0'.repeat(n.path.split('/').length - 1)}{n.name}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-gray-500">Incluye lo que cuelga de la ubicación elegida.</p>
+      </div>
+    </div>
   )
 }
 
@@ -413,6 +469,7 @@ function EditUserModal({ user, hospitals, currentUserId, onClose, onSaved }) {
     phone: user.phone ?? '',
     employee_code: user.employee_code ?? '',
     hospital: user.hospital ?? '',
+    scope_node: user.scope_node ?? '',
     is_active: user.is_active,
   })
   const [apiError, setApiError] = useState('')
@@ -430,12 +487,17 @@ function EditUserModal({ user, hospitals, currentUserId, onClose, onSaved }) {
         last_name: form.last_name.trim(),
         phone: form.phone.trim(),
         employee_code: form.employee_code.trim(),
-        hospital: user.role === 'CLI' ? form.hospital || null : user.hospital ?? null,
+        hospital: user.role !== 'ADMIN' ? form.hospital || null : null,
+        scope_node: user.role !== 'ADMIN' ? form.scope_node || null : null,
         is_active: form.is_active,
       },
       {
         onSuccess: () => onSaved(),
-        onError: (err) => setApiError(generalError(err, 'No se pudieron guardar los cambios.')),
+        onError: (err) => {
+          // El error del alcance ya sale junto a su campo (AlcanceFields).
+          if (fieldError(err, 'hospital') || fieldError(err, 'scope_node')) return
+          setApiError(generalError(err, 'No se pudieron guardar los cambios.'))
+        },
       }
     )
   }
@@ -483,19 +545,14 @@ function EditUserModal({ user, hospitals, currentUserId, onClose, onSaved }) {
               )}
             </div>
 
-            {user.role === 'CLI' && (
-              <div>
-                <label className={labelCls}>Hospital</label>
-                <select value={form.hospital ?? ''} onChange={set('hospital')} className={inputCls}>
-                  <option value="">Sin hospital</option>
-                  {hospitals.map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {h.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <AlcanceFields
+              role={user.role}
+              hospitals={hospitals}
+              hospital={form.hospital}
+              scopeNode={form.scope_node}
+              error={fieldError(update.error, 'hospital') || fieldError(update.error, 'scope_node')}
+              onChange={(cambios) => setForm((f) => ({ ...f, ...cambios }))}
+            />
 
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input
@@ -724,7 +781,7 @@ export default function UsersPage() {
                   <th className="px-4 py-3">Nombre completo</th>
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Rol</th>
-                  <th className="px-4 py-3">Hospital</th>
+                  <th className="px-4 py-3">Alcance</th>
                   <th className="px-4 py-3">Estado</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
@@ -744,7 +801,16 @@ export default function UsersPage() {
                         <RoleBadge role={u.role} />
                       </td>
                       <td className="px-4 py-3 text-gray-600 text-xs">
-                        {u.hospital ? hospitalNames[u.hospital] ?? '—' : '—'}
+                        {u.role === 'ADMIN' || !u.hospital ? (
+                          <span className="text-gray-400">Todos</span>
+                        ) : (
+                          <>
+                            {hospitalNames[u.hospital] ?? '—'}
+                            {u.scope_node_path && (
+                              <span className="block text-gray-400">{u.scope_node_path}</span>
+                            )}
+                          </>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <StatusCell active={u.is_active} />
