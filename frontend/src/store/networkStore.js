@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { Network } from '@capacitor/network'
 
+import { queryClient } from '../api/queryClient'
 import { countPendingSync } from '../db/repositories'
 import { syncOfflineData } from '../sync/syncEngine'
 
@@ -120,6 +121,12 @@ const useNetworkStore = create((set, get) => ({
         onProgress: (pending) => set({ pendingSyncCount: pending }),
       })
       set({ lastSyncAt: new Date().toISOString() })
+      // La pantalla pudo pedirle datos al servidor al volver la red, antes de
+      // que esto subiera: sin refrescar, el tecnico veria el checklist vacio
+      // durante los 5 minutos que TanStack da por frescos esos datos.
+      if (Object.values(result).some((fase) => fase.ok > 0)) {
+        queryClient.invalidateQueries()
+      }
       return result
     } catch (error) {
       console.error('[network] fallo la sincronizacion:', error)
