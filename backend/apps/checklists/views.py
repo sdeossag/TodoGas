@@ -1,11 +1,13 @@
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.users.permissions import IsAdminOrSup
+from apps.work_orders.device_time import device_time
 
 from .models import ChecklistResponse, ChecklistTemplate, ChecklistTemplateVersion
 from .serializers import (
@@ -200,7 +202,10 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        response.completed_at = timezone.now()
+        # Cerrado sin red, llega la hora en que el tecnico lo cerro en el telefono.
+        cuando = request.data.get("completed_at")
+        cuando = parse_datetime(cuando) if isinstance(cuando, str) else None
+        response.completed_at = device_time(cuando, response.task.work_order)
         response.completed_by = request.user
         response.save()
 

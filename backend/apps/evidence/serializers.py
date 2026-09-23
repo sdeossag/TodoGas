@@ -7,6 +7,7 @@ from django.core.files.storage import default_storage
 from rest_framework import serializers
 
 from apps.maintenance.models import Task
+from apps.work_orders.device_time import device_time
 from apps.work_orders.models import WorkOrder
 
 from .models import Photo, Signature
@@ -168,6 +169,8 @@ class SignatureCreateSerializer(serializers.Serializer):
     longitude = serializers.DecimalField(
         max_digits=12, decimal_places=7, required=False, allow_null=True
     )
+    # Hora en que se firmo en el telefono; la manda la cola offline.
+    signed_at = serializers.DateTimeField(required=False, allow_null=True)
 
     def validate_latitude(self, value):
         if value is None:
@@ -215,6 +218,7 @@ class SignatureCreateSerializer(serializers.Serializer):
             signer_name=validated_data["signer_name"],
             signer_role=validated_data.get("signer_role", ""),
             file_hash=file_hash,
+            signed_at=device_time(validated_data.get("signed_at"), work_order),
             latitude=validated_data.get("latitude"),
             longitude=validated_data.get("longitude"),
         )

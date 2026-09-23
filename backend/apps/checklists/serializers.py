@@ -3,6 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.maintenance.models import Task
+from apps.work_orders.device_time import device_time
 from apps.work_orders.models import WorkOrder
 
 from .models import (
@@ -264,10 +265,12 @@ class ChecklistResponseCreateSerializer(serializers.ModelSerializer):
 
 class ChecklistFieldResponseCreateSerializer(serializers.ModelSerializer):
     repetition = serializers.IntegerField(required=False, default=0, min_value=0)
+    # Hora en que el tecnico respondio en el telefono; la manda la cola offline.
+    answered_at = serializers.DateTimeField(required=False, allow_null=True)
 
     class Meta:
         model = ChecklistFieldResponse
-        fields = ["field", "repetition", "value", "notes"]
+        fields = ["field", "repetition", "value", "notes", "answered_at"]
 
     def validate_field(self, field):
         response = self.context["response"]
@@ -309,7 +312,9 @@ class ChecklistFieldResponseCreateSerializer(serializers.ModelSerializer):
             defaults={
                 "value": validated_data.get("value", ""),
                 "notes": validated_data.get("notes", ""),
-                "answered_at": timezone.now(),
+                "answered_at": device_time(
+                    validated_data.get("answered_at"), response.task.work_order
+                ),
             },
         )
         return obj

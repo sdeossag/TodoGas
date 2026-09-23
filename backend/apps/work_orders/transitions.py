@@ -134,10 +134,9 @@ def apply_transition(work_order, new_status, user, comment=""):
     elif new_status == WorkOrder.Status.CANCELLED:
         services.cancel_work_order_tasks(work_order)
 
-    if new_status == WorkOrder.Status.COMPLETED:
-        from apps.reports.tasks import generate_work_order_pdf
-        generate_work_order_pdf.delay(str(work_order.id))
-
+    # El historial va antes que el acta: de ahi sale el "Validado por" (quien
+    # aprobo y cuando). En desarrollo el acta se genera en el acto y saldria
+    # sin validacion.
     WorkOrderStatusHistory.objects.create(
         work_order=work_order,
         from_status=from_status,
@@ -145,5 +144,9 @@ def apply_transition(work_order, new_status, user, comment=""):
         changed_by=user,
         comment=comment,
     )
+
+    if new_status == WorkOrder.Status.COMPLETED:
+        from apps.reports.tasks import generate_work_order_pdf
+        generate_work_order_pdf.delay(str(work_order.id))
 
     return work_order

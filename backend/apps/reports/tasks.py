@@ -12,7 +12,7 @@ from django.utils import timezone
 from apps.work_orders.models import WorkOrder
 
 from .failures import record_report_failure
-from .generator import generate_service_report_pdf
+from .generator import field_facts, generate_service_report_pdf
 from .models import GeneratedReport, ReportSendLog
 from .utils import get_logo_base64
 
@@ -89,6 +89,8 @@ def send_report_email(self, work_order_id):
                 "hospital": hospital,
                 "report": report,
                 "frontend_url": settings.FRONTEND_URL,
+                # Lo mismo que dice el acta: cuando y quien, segun el campo.
+                **field_facts(work_order),
             },
         )
 

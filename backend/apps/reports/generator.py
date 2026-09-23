@@ -98,6 +98,83 @@ def _sections(respuesta):
     return secciones
 
 
+def _nombre(user):
+    return f"{user.first_name} {user.last_name}".strip() or user.email
+
+
+def _trabajo_en_campo(respuestas, photos, signatures):
+    """
+    Cuando se hizo el trabajo, segun lo que el tecnico registro en campo:
+    de la primera a la ultima respuesta, foto, cierre de checklist o firma.
+    Todas llevan la hora del telefono, tambien lo hecho sin red.
+
+    No se usan started_at/completed_at de la OT: el primero es cuando se marco
+    "en proceso" y el segundo cuando el supervisor aprobo, a veces dias
+    despues. Imprimirlos como hora del trabajo es lo que hacia falsas las
+    actas de Fracttal.
+    """
+    horas = [fr.answered_at for r in respuestas for fr in r.field_responses.all()]
+    horas += [r.completed_at for r in respuestas if r.completed_at]
+    horas += [p.taken_at for p in photos if p.taken_at]
+    horas += [s.signed_at for s in signatures if s.signed_at]
+    if not horas:
+        return None
+    inicio, fin = min(horas), max(horas)
+    return {"start": inicio, "end": fin, "duration": _duration_label(fin - inicio)}
+
+
+def _ejecutores(work_order, respuestas):
+    """
+    Quien hizo el trabajo: quienes cerraron los checklists. El asignado puede
+    haber cambiado despues (una reasignacion en revision), y en el acta de
+    Fracttal eso dejaba de responsable a alguien que no fue.
+    """
+    vistos = {}
+    for r in respuestas:
+        if r.completed_by_id and r.completed_by_id not in vistos:
+            vistos[r.completed_by_id] = _nombre(r.completed_by)
+    if vistos:
+        return list(vistos.values())
+    return [_nombre(work_order.assigned_to)] if work_order.assigned_to else []
+
+
+def field_facts(work_order):
+    """Periodo de trabajo en campo y ejecutores, para el correo del acta."""
+    respuestas = list(
+        ChecklistResponse.objects.filter(task__work_order=work_order)
+        .exclude(task__status="CANCELLED")
+        .select_related("completed_by")
+        .prefetch_related("field_responses")
+    )
+    return {
+        "field_work": _trabajo_en_campo(
+            respuestas,
+            list(Photo.objects.filter(work_order=work_order)),
+            list(Signature.objects.filter(work_order=work_order)),
+        ),
+        "executors": _ejecutores(work_order, respuestas),
+    }
+
+
+def _validacion(work_order):
+    """Quien aprobo la OT (la paso a completada) y cuando: el "Validado por"."""
+    from apps.work_orders.models import WorkOrder
+
+    h = (
+        work_order.status_history.filter(to_status=WorkOrder.Status.COMPLETED)
+        .select_related("changed_by")
+        .order_by("-changed_at")
+        .first()
+    )
+    if h is None or h.changed_by is None:
+        return None
+    return {
+        "name": _nombre(h.changed_by),
+        "role": h.changed_by.get_role_display(),
+        "at": h.changed_at,
+    }
+
+
 def generate_service_report_pdf(work_order):
     """
     Genera el PDF del acta de servicio para una OT y lo sube al storage.
@@ -118,7 +195,7 @@ def generate_service_report_pdf(work_order):
         r.task_id: r
         for r in ChecklistResponse.objects.filter(task__in=tareas).prefetch_related(
             "field_responses__field", "version__fields"
-        ).select_related("version")
+        ).select_related("version", "completed_by")
     }
 
     photos_qs = Photo.objects.filter(work_order=work_order).order_by("taken_at")
@@ -145,6 +222,9 @@ def generate_service_report_pdf(work_order):
             "checklist_response": respuestas.get(t.id),
             "sections": _sections(respuestas.get(t.id)),
             "photos": fotos_por_tarea.get(t.id, []),
+            "field_work": _trabajo_en_campo(
+                [respuestas[t.id]] if t.id in respuestas else [], [], []
+            ),
         }
         for t in tareas
     ]
@@ -162,7 +242,15 @@ def generate_service_report_pdf(work_order):
     context = {
         "work_order": work_order,
         "technician": technician,
-        "actual_duration": _duration_label(work_order.actual_duration),
+        "field_work": _trabajo_en_campo(list(respuestas.values()), photos, signatures),
+        "executors": _ejecutores(work_order, list(respuestas.values())),
+        "validation": _validacion(work_order),
+        "technician_signature": next(
+            (s for s in signatures if s.signature_type == Signature.SignatureType.TECHNICIAN), None
+        ),
+        "client_signature": next(
+            (s for s in signatures if s.signature_type == Signature.SignatureType.CLIENT), None
+        ),
         "blocks": bloques,
         "visit_photos": fotos_visita,
         "photos": photos,

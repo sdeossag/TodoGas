@@ -41,8 +41,9 @@
   .photo-grid td { border: none; padding: 8px; vertical-align: top; text-align: center; }
   .photo-grid img { max-width: 100%; max-height: 200px; border: 1px solid #ddd; }
   .photo-caption { font-size: 8pt; color: #555; margin-top: 4px; }
-  .sig-table td { border: 1px solid #ccc; padding: 12px; text-align: center; vertical-align: top; width: 50%; }
-  .sig-table img { max-width: 200px; max-height: 100px; border: 1px solid #ddd; background: white; }
+  .sig-table td { border: 1px solid #ccc; padding: 10px; text-align: center; vertical-align: top; width: 33%; }
+  .sig-table img { max-width: 160px; max-height: 90px; border: 1px solid #ddd; background: white; }
+  .validated { display: inline-block; border: 1px solid #1e3a5f; color: #1e3a5f; padding: 6px 8px; font-size: 8pt; font-weight: bold; }
   .label { font-size: 8pt; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
   .no-data { color: #888; font-style: italic; font-size: 9pt; padding: 8px 0; }
   .meta-row { font-size: 8pt; color: #666; margin-top: 8px; }
@@ -84,10 +85,11 @@
         <br><br><span class="label">Activos intervenidos</span><br>{{ blocks|length }}
       </td>
       <td style="width:50%">
-        <span class="label">Técnico responsable</span><br><strong>{% if technician %}{{ technician.first_name }} {{ technician.last_name }}{% else %}No asignado{% endif %}</strong>
+        {# Quien hizo el trabajo y cuando, segun lo registrado en campo; no el asignado ni la hora de aprobar. #}
+        <span class="label">Ejecutado por</span><br><strong>{% if executors %}{{ executors|join:", " }}{% else %}No registrado{% endif %}</strong>
         {% if work_order.scheduled_date %}<br><br><span class="label">Fecha programada</span><br>{{ work_order.scheduled_date|date:"d/m/Y" }}{% endif %}
-        {% if work_order.completed_at %}<br><br><span class="label">Fecha de intervención</span><br>{{ work_order.completed_at|date:"d/m/Y H:i" }}{% endif %}
-        {% if actual_duration %}<br><br><span class="label">Duración real</span><br>{{ actual_duration }}{% endif %}
+        {% if field_work %}<br><br><span class="label">Trabajo en campo</span><br>{{ field_work.start|date:"d/m/Y H:i" }} &ndash; {% if field_work.start|date:"d/m/Y" == field_work.end|date:"d/m/Y" %}{{ field_work.end|date:"H:i" }}{% else %}{{ field_work.end|date:"d/m/Y H:i" }}{% endif %}
+        <br><br><span class="label">Duración del trabajo</span><br>{{ field_work.duration }}{% endif %}
       </td>
     </tr>
   </table>
@@ -168,10 +170,13 @@
     {% empty %}
       <p class="no-data">El checklist no tiene respuestas.</p>
     {% endfor %}
+    {# started_at del checklist es cuando se creo con la OT: la hora real es la de sus respuestas. #}
+    {% if b.field_work %}
     <div class="meta-row">
-      {% if b.checklist_response.started_at %}Inicio: {{ b.checklist_response.started_at|date:"d/m/Y H:i" }}{% endif %}
-      {% if b.checklist_response.completed_at %} &nbsp;|&nbsp; Fin: {{ b.checklist_response.completed_at|date:"d/m/Y H:i" }}{% endif %}
+      Respondido: {{ b.field_work.start|date:"d/m/Y H:i" }} &ndash; {{ b.field_work.end|date:"H:i" }}
+      {% if b.checklist_response.completed_by %} &nbsp;|&nbsp; Por: {{ b.checklist_response.completed_by.first_name }} {{ b.checklist_response.completed_by.last_name }}{% endif %}
     </div>
+    {% endif %}
   {% else %}
     <p class="no-data">Esta tarea no tenía checklist asociado.</p>
   {% endif %}
@@ -243,37 +248,40 @@
 <!-- SECCION 6: Firmas -->
 <div class="section">
   <h2>6. Firmas</h2>
-  {% with tech_sig=None client_sig=None %}
-  {% for sig in signatures %}{% if sig.signature_type == "TECHNICIAN" %}{% with tech_sig=sig %}{% endwith %}{% endif %}{% endfor %}
-  {% for sig in signatures %}{% if sig.signature_type == "CLIENT" %}{% with client_sig=sig %}{% endwith %}{% endif %}{% endfor %}
+  {# Tres firmas, como en Fracttal: quien hizo, quien valido y quien recibio. #}
   <table class="sig-table">
     <tr>
       <td>
-        <div class="label">Firma del técnico</div>
-        {% for sig in signatures %}{% if sig.signature_type == "TECHNICIAN" %}
-          <br><img src="{{ sig.file_url }}" alt="Firma técnico">
+        <div class="label">Realizado por</div>
+        {% with sig=technician_signature %}{% if sig %}
+          <br><img src="{{ sig.file_url }}" alt="Firma del técnico">
           <br><strong>{{ sig.signer_name }}</strong>
           {% if sig.signer_role %}<br><span class="label">{{ sig.signer_role }}</span>{% endif %}
           <br><span class="label">{{ sig.signed_at|date:"d/m/Y H:i" }}</span>
           <br><span class="label" style="font-size:7pt">SHA-256: {{ sig.file_hash|slice:":16" }}...</span>
-        {% endif %}{% endfor %}
-        {% if not signatures %}<br><span class="no-data">No registrada</span>{% endif %}
+        {% else %}<br><span class="no-data">No registrada</span>{% endif %}{% endwith %}
       </td>
       <td>
-        <div class="label">Firma del receptor / cliente</div>
-        {% for sig in signatures %}{% if sig.signature_type == "CLIENT" %}
-          <br><img src="{{ sig.file_url }}" alt="Firma cliente">
+        <div class="label">Validado por</div>
+        {# La aprobacion de la OT en el sistema, autenticada y en el historial: no se dibuja. #}
+        {% if validation %}
+          <br><div class="validated">Aprobado en TodoGas CMMS</div>
+          <br><strong>{{ validation.name }}</strong>
+          <br><span class="label">{{ validation.role }}</span>
+          <br><span class="label">{{ validation.at|date:"d/m/Y H:i" }}</span>
+        {% else %}<br><span class="no-data">Pendiente de aprobación</span>{% endif %}
+      </td>
+      <td>
+        <div class="label">Aceptado por</div>
+        {% with sig=client_signature %}{% if sig %}
+          <br><img src="{{ sig.file_url }}" alt="Firma del cliente">
           <br><strong>{{ sig.signer_name }}</strong>
           {% if sig.signer_role %}<br><span class="label">{{ sig.signer_role }}</span>{% endif %}
           <br><span class="label">{{ sig.signed_at|date:"d/m/Y H:i" }}</span>
-        {% endif %}{% endfor %}
-        {% with has_client=False %}
-        {% for sig in signatures %}{% if sig.signature_type == "CLIENT" %}{% with has_client=True %}{% endwith %}{% endif %}{% endfor %}
-        {% endwith %}
+        {% else %}<br><span class="no-data">No registrada</span>{% endif %}{% endwith %}
       </td>
     </tr>
   </table>
-  {% endwith %}
 </div>
 
 </body>
