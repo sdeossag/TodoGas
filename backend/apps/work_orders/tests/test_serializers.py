@@ -86,19 +86,25 @@ class TestWorkOrderCreateSerializer:
         s = WorkOrderCreateSerializer(data=data, context=make_create_context(admin))
         assert s.is_valid(), s.errors
 
-    def test_preventive_task_type_is_rejected(self, admin, tec, active_asset):
+    # Catalogo de tipos (decision del 2026-09-23): a mano se elige cualquier
+    # tipo activo, preventivos incluidos.
+    @pytest.mark.parametrize("code", ["PREVENTIVE", "INSTALLATION", "CAMBIO_DE_FILTROS"])
+    def test_any_active_catalog_type_is_accepted(self, admin, tec, active_asset, code):
         data = self._valid_data(active_asset, tec)
-        data["task_type"] = WorkOrder.TaskType.PREVENTIVE
+        data["task_type"] = code
         s = WorkOrderCreateSerializer(data=data, context=make_create_context(admin))
-        assert not s.is_valid()
-        assert "task_type" in s.errors
+        assert s.is_valid(), s.errors
 
-    def test_installation_task_type_is_rejected(self, admin, tec, active_asset):
-        data = self._valid_data(active_asset, tec)
-        data["task_type"] = WorkOrder.TaskType.INSTALLATION
-        s = WorkOrderCreateSerializer(data=data, context=make_create_context(admin))
-        assert not s.is_valid()
-        assert "task_type" in s.errors
+    def test_unknown_or_inactive_type_is_rejected(self, admin, tec, active_asset):
+        from apps.maintenance.models import TaskTypeCatalog
+
+        TaskTypeCatalog.objects.filter(code="RETIRO").update(is_active=False)
+        for code in ("NO_EXISTE", "RETIRO"):
+            data = self._valid_data(active_asset, tec)
+            data["task_type"] = code
+            s = WorkOrderCreateSerializer(data=data, context=make_create_context(admin))
+            assert not s.is_valid()
+            assert "task_type" in s.errors
 
     def test_verification_task_type_is_accepted(self, admin, tec, active_asset):
         data = self._valid_data(active_asset, tec)

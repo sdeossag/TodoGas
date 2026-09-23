@@ -9,6 +9,7 @@ from django.core.mail import EmailMessage
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+from apps.maintenance.models import task_type_label
 from apps.work_orders.models import WorkOrder
 
 from .failures import record_report_failure
@@ -175,7 +176,7 @@ def generate_consolidated_report(
         "hospital": hospital,
         "date_from": date_from,
         "date_to": date_to,
-        "task_type": task_type,
+        "task_type": task_type_label(task_type) if task_type else None,
         "work_orders": list(qs.order_by("scheduled_date")),
         "summary": {
             "total_ots": total_ots,

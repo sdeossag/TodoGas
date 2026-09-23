@@ -23,6 +23,7 @@ import MaintenancePlanFormPage from '../pages/maintenance/MaintenancePlanFormPag
 import MaintenanceCalendarPage from '../pages/maintenance/MaintenanceCalendarPage'
 import PendingTasksPage from '../pages/maintenance/PendingTasksPage'
 import FindingsInboxPage from '../pages/maintenance/FindingsInboxPage'
+import TaskTypesPage from '../pages/maintenance/TaskTypesPage'
 import ReportsPage from '../pages/reports/ReportsPage'
 import ReportSettingsPage from '../pages/reports/ReportSettingsPage'
 import InventoryPage from '../pages/inventory/InventoryPage'
@@ -117,6 +118,7 @@ export const router = createBrowserRouter(
                 { path: '/usuarios', element: <UsersPage /> },
                 { path: '/auditoria', element: <AuditLogPage /> },
                 { path: '/formato-acta', element: <ReportSettingsPage /> },
+                { path: '/tipos-de-tarea', element: <TaskTypesPage /> },
               ],
             },
           ],

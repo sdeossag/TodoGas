@@ -56,7 +56,13 @@ class WorkOrder(models.Model):
         related_name="work_orders",
         help_text="Zona de la visita (\"Piso 3\"). Opcional.",
     )
-    task_type = models.CharField(max_length=15, choices=TaskType.choices)
+    # Codigo del catalogo de tipos (maintenance.TaskTypeCatalog). TaskType
+    # queda como las constantes de los tipos del sistema.
+    task_type = models.CharField(max_length=50)
+
+    def get_task_type_display(self):
+        from apps.maintenance.models import task_type_label
+        return task_type_label(self.task_type)
     title = models.CharField(max_length=500)
     description = models.TextField(blank=True, default="")
     classification_1 = models.CharField(max_length=100, blank=True, default="")

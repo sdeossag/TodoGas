@@ -8,6 +8,7 @@ import Avatar from '../components/ui/Avatar'
 import OfflineBanner from '../components/ui/OfflineBanner'
 import { useFindingsSummary } from '../api/findings'
 import { useContractsSummary } from '../api/contracts'
+import { useTaskTypes } from '../api/taskTypes'
 
 const ROLE_LABELS = {
   ADMIN: 'Administrador',
@@ -60,6 +61,7 @@ const NAV_GROUPS = [
       { to: '/usuarios', label: 'Usuarios', icon: 'users', adminOnly: true },
       { to: '/reportes', label: 'Reportes', icon: 'report' },
       { to: '/formato-acta', label: 'Formato del acta', icon: 'settings', adminOnly: true },
+      { to: '/tipos-de-tarea', label: 'Tipos de tarea', icon: 'wrench', adminOnly: true },
       { to: '/auditoria', label: 'Auditoria', icon: 'audit', adminOnly: true },
     ],
   },
@@ -81,6 +83,8 @@ function navClasses({ isActive }) {
 }
 
 export default function AdminLayout() {
+  // Nombres del catálogo de tipos de tarea, guardados para verlos también sin red.
+  useTaskTypes()
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuthStore()

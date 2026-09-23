@@ -17,8 +17,11 @@ def calculate_compliance_percentage(month=None, year=None, hospital_id=None):
     if year is None:
         year = today.year
 
+    from apps.maintenance.task_types import codes_counting_as
+
+    # Los tipos que el catalogo marca como preventivos (Cambio de filtros, Calibracion...).
     qs = WorkOrder.objects.filter(
-        task_type=WorkOrder.TaskType.PREVENTIVE,
+        task_type__in=codes_counting_as("PREVENTIVE"),
         scheduled_date__year=year,
         scheduled_date__month=month,
     )
@@ -46,8 +49,10 @@ def calculate_compliance_percentage(month=None, year=None, hospital_id=None):
 
 def calculate_mttr(hospital_id=None, days=30):
     since = timezone.now() - timedelta(days=days)
+    from apps.maintenance.task_types import codes_counting_as
+
     qs = WorkOrder.objects.filter(
-        task_type=WorkOrder.TaskType.CORRECTIVE,
+        task_type__in=codes_counting_as("CORRECTIVE"),
         status=WorkOrder.Status.COMPLETED,
         started_at__isnull=False,
         completed_at__isnull=False,

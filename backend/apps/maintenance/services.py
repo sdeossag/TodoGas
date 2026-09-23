@@ -26,7 +26,7 @@ from dateutil.relativedelta import relativedelta
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .models import MaintenancePlan, PlanTask, RescheduleCause, Task, TaskReschedule
+from .models import MaintenancePlan, PlanTask, RescheduleCause, Task, TaskReschedule, task_type_label
 
 ADELANTADO = "ADELANTADO"
 
@@ -466,7 +466,7 @@ def _default_title(tasks):
         tarea = tasks[0]
         prefijo = "[PM] " if tarea.plan_task_id else ""
         return f"{prefijo}{tarea.title} — {tarea.asset.name}"[:500]
-    tipo = MaintenancePlan.TaskType(tasks[0].task_type).label
+    tipo = task_type_label(tasks[0].task_type)
     return f"{tipo} — {len(tasks)} activos"[:500]
 
 

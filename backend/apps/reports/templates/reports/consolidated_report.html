@@ -63,7 +63,7 @@
     {% for wo in work_orders %}
     <tr>
       <td>{{ wo.wo_code }}</td>
-      <td>{{ wo.task_type }}</td>
+      <td>{{ wo.get_task_type_display }}</td>
       <td>{% with t=wo.primary_task %}{% if t %}{{ t.asset.name }} ({{ t.asset.code }}){% endif %}{% endwith %}</td>
       <td>{% if wo.assigned_to %}{{ wo.assigned_to.first_name }} {{ wo.assigned_to.last_name }}{% else %}—{% endif %}</td>
       <td>{{ wo.scheduled_date }}</td>

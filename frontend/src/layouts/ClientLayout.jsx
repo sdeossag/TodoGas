@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 import Icon from '../components/ui/Icon'
 import Avatar from '../components/ui/Avatar'
+import { useTaskTypes } from '../api/taskTypes'
 
 const NAV_LINKS = [
   { to: '/mis-dashboard', label: 'Dashboard' },
@@ -12,6 +13,8 @@ const NAV_LINKS = [
 ]
 
 export default function ClientLayout() {
+  // Nombres del catálogo de tipos de tarea, guardados para verlos también sin red.
+  useTaskTypes()
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const [showLogo, setShowLogo] = useState(true)

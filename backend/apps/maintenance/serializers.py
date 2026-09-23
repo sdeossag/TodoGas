@@ -6,7 +6,8 @@ from apps.assets.models import Asset
 from apps.checklists.models import ChecklistTemplate
 from apps.users.scope import ScopedFieldsMixin
 
-from .models import MaintenancePlan, PlanTask, RescheduleCause, Task, TaskReschedule
+from .models import MaintenancePlan, PlanTask, RescheduleCause, Task, TaskReschedule, TaskTypeCatalog
+from .task_types import TaskTypeField, code_from_name
 
 # Fase 2 del modelo de tareas: el plan es una cabecera (nombre, prioridad por
 # defecto, activo o pausado) y lo que se repite vive en sus tareas (PlanTask).
@@ -124,6 +125,7 @@ class AssetIdsSerializer(serializers.Serializer):
 # ── Tarea del plan ────────────────────────────────────────────────────────────
 
 class PlanTaskSerializer(serializers.ModelSerializer):
+    task_type = TaskTypeField(required=False)
     checklist_template = serializers.PrimaryKeyRelatedField(
         queryset=ChecklistTemplate.objects.all(), required=False, allow_null=True,
     )
@@ -335,6 +337,56 @@ class RescheduleCauseSerializer(serializers.ModelSerializer):
     class Meta:
         model = RescheduleCause
         fields = ["id", "name", "is_active", "sort_order"]
+
+
+class TaskTypeCatalogSerializer(serializers.ModelSerializer):
+    """
+    El codigo sale del nombre al crear y no cambia despues: es lo que guardan
+    las tareas y las OTs. Los tipos del sistema no se desactivan, y Preventivo
+    y Correctivo no cambian de indicador.
+    """
+
+    in_use = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TaskTypeCatalog
+        fields = ["id", "code", "name", "counts_as", "is_system", "is_active", "sort_order", "in_use"]
+        read_only_fields = ["id", "code", "is_system", "in_use"]
+        extra_kwargs = {"sort_order": {"required": False}}
+
+    def get_in_use(self, obj):
+        usos = self.context.get("usos")
+        return usos.get(obj.code, 0) if usos is not None else None
+
+    def validate_name(self, value):
+        value = " ".join(value.split())
+        if not value:
+            raise serializers.ValidationError("Ponle un nombre.")
+        return value
+
+    def validate(self, attrs):
+        tipo = self.instance
+        if tipo is not None and tipo.is_system:
+            if attrs.get("is_active") is False:
+                raise serializers.ValidationError({"is_active": "Los tipos del sistema no se desactivan."})
+            fijo = {"PREVENTIVE": "PREVENTIVE", "CORRECTIVE": "CORRECTIVE"}.get(tipo.code)
+            if fijo and attrs.get("counts_as", fijo) != fijo:
+                raise serializers.ValidationError(
+                    {"counts_as": f"{tipo.name} siempre cuenta como {tipo.get_counts_as_display().lower()}."}
+                )
+        return attrs
+
+    def create(self, validated_data):
+        base = code_from_name(validated_data["name"])
+        code, n = base, 2
+        while TaskTypeCatalog.objects.filter(code=code).exists():
+            code = f"{base[:46]}_{n}"
+            n += 1
+        validated_data["code"] = code
+        if "sort_order" not in validated_data:
+            ultimo = TaskTypeCatalog.objects.order_by("-sort_order").values_list("sort_order", flat=True).first()
+            validated_data["sort_order"] = (ultimo or 0) + 1
+        return super().create(validated_data)
 
 
 class TaskRescheduleSerializer(serializers.ModelSerializer):

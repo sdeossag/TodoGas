@@ -4,6 +4,7 @@ import useAuthStore from '../store/authStore'
 import Icon from '../components/ui/Icon'
 import Avatar from '../components/ui/Avatar'
 import OfflineBanner from '../components/ui/OfflineBanner'
+import { useTaskTypes } from '../api/taskTypes'
 
 const NAV_LINKS = [
   { to: '/mis-ordenes', label: 'Mis ordenes', icon: 'wrench' },
@@ -15,6 +16,8 @@ const NAV_LINKS = [
 const isNarrow = () => window.matchMedia('(max-width: 1023px)').matches
 
 export default function TechnicianLayout() {
+  // Nombres del catálogo de tipos de tarea, guardados para verlos también sin red.
+  useTaskTypes()
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuthStore()

@@ -4,15 +4,8 @@ import { useReports, useReportDownload } from '../../api/reports'
 import { useGenerateConsolidatedReport } from '../../api/dashboard'
 import { useHospitals } from '../../api/assets'
 import EmptyState from '../../components/ui/EmptyState'
+import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
 import { formatWoCode } from '../../utils/workOrder'
-
-const TASK_TYPES = [
-  { value: 'PREVENTIVE', label: 'Preventivo' },
-  { value: 'CORRECTIVE', label: 'Correctivo' },
-  { value: 'VERIFICATION', label: 'Verificacion' },
-  { value: 'INSTALLATION', label: 'Instalacion' },
-  { value: 'DELIVERY', label: 'Entrega' },
-]
 
 function Spinner({ small }) {
   return (
@@ -90,16 +83,12 @@ function ConsolidatedReportForm() {
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Tipo de OT</label>
-          <select
+          <TaskTypeSelect
             value={form.task_type}
             onChange={(e) => set('task_type', e.target.value)}
+            emptyLabel="Todos"
             className="input-field w-44"
-          >
-            <option value="">Todos</option>
-            {TASK_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
+          />
         </div>
         <button
           type="submit"

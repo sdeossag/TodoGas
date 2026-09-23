@@ -6,6 +6,7 @@ import { useUsers } from '../../api/users'
 import { useChecklistTemplates } from '../../api/checklists'
 import { AvisoSinContrato } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
+import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
 import { fieldLabel } from '../../constants/labels'
 import Spinner from '../../components/ui/Spinner'
 import { flattenTree, indentedLabel } from '../../utils/locationTree'
@@ -325,27 +326,8 @@ export default function CreateWorkOrderPage() {
 
         {/* Tipo de OT */}
         <Field label="Tipo de OT" required>
-          <div className="flex gap-3">
-            {[
-              { value: 'CORRECTIVE', label: 'Correctivo' },
-              { value: 'VERIFICATION', label: 'Verificación' },
-            ].map(({ value, label }) => (
-              <label key={value}
-                className={`relative flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border rounded-lg cursor-pointer text-sm font-medium transition-colors ${
-                  form.task_type === value
-                    ? 'border-brand bg-brand/5 text-brand'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <input type="radio" name="task_type" value={value}
-                  checked={form.task_type === value}
-                  onChange={() => set('task_type', value)}
-                  className="sr-only"
-                />
-                {label}
-              </label>
-            ))}
-          </div>
+          <TaskTypeSelect value={form.task_type} onChange={(e) => set('task_type', e.target.value)}
+            className={INPUT} aria-label="Tipo de OT" />
         </Field>
 
         {/* Título */}

@@ -4,6 +4,7 @@ from rest_framework import serializers
 from apps.assets.models import Asset, AssetNode
 from apps.checklists.models import ChecklistTemplateVersion
 from apps.maintenance.models import Task
+from apps.maintenance.task_types import TaskTypeField
 from apps.reports.failures import has_report_failure
 from apps.users.models import User
 from apps.users.scope import ScopedFieldsMixin
@@ -286,6 +287,8 @@ class WorkOrderCreateSerializer(serializers.ModelSerializer):
     """
 
     tasks = ManualTaskSerializer(many=True, write_only=True, allow_empty=False)
+    # Cualquier tipo activo del catalogo, preventivos incluidos (decision del 2026-09-23).
+    task_type = TaskTypeField()
     location = serializers.PrimaryKeyRelatedField(
         queryset=AssetNode.objects.select_related("hospital"),
         required=False, allow_null=True,
@@ -300,14 +303,6 @@ class WorkOrderCreateSerializer(serializers.ModelSerializer):
             "assigned_to", "notes", "request_number",
         ]
 
-    def validate_task_type(self, value):
-        allowed = {WorkOrder.TaskType.CORRECTIVE, WorkOrder.TaskType.VERIFICATION}
-        if value not in allowed:
-            raise serializers.ValidationError(
-                "Solo se pueden crear OTs de tipo CORRECTIVE o VERIFICATION. "
-                "Las OTs PREVENTIVE las genera el sistema automáticamente."
-            )
-        return value
 
     def validate_assigned_to(self, value):
         if value is None:

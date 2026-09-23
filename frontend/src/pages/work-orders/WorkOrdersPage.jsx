@@ -6,6 +6,7 @@ import StatusBadge from '../../components/workOrders/StatusBadge'
 import PriorityBadge from '../../components/workOrders/PriorityBadge'
 import Icon from '../../components/ui/Icon'
 import { taskTypeLabel } from '../../constants/labels'
+import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
 import Spinner from '../../components/ui/Spinner'
 import { formatWoCode } from '../../utils/workOrder'
 
@@ -105,15 +106,8 @@ export default function WorkOrdersPage() {
             <option value="LOW">Baja</option>
           </select>
 
-          <select value={typeFilter} onChange={handleFilterChange(setTypeFilter)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none">
-            <option value="">Todos los tipos</option>
-            <option value="CORRECTIVE">Correctivo</option>
-            <option value="PREVENTIVE">Preventivo</option>
-            <option value="VERIFICATION">Verificación</option>
-            <option value="INSTALLATION">Instalación</option>
-            <option value="DELIVERY">Entrega</option>
-          </select>
+          <TaskTypeSelect value={typeFilter} onChange={handleFilterChange(setTypeFilter)} emptyLabel="Todos los tipos"
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
 
           <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
             <input

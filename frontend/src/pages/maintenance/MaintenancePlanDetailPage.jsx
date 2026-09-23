@@ -18,7 +18,8 @@ import { useChecklistTemplates } from '../../api/checklists'
 import Icon from '../../components/ui/Icon'
 import Modal from '../../components/ui/Modal'
 import Spinner from '../../components/ui/Spinner'
-import { TASK_TYPE_LABELS, taskTypeLabel } from '../../constants/labels'
+import { taskTypeLabel } from '../../constants/labels'
+import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
 import { apiErrorMessage } from '../../utils/apiError'
 import { flattenTree, indentedLabel } from '../../utils/locationTree'
 import {
@@ -377,9 +378,7 @@ function PlanTaskModal({ plan, task, onClose }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className="block">
             <span className="block text-sm font-medium text-gray-700 mb-1">Tipo</span>
-            <select value={form.task_type} onChange={set('task_type')} className={input}>
-              {Object.entries(TASK_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            <TaskTypeSelect value={form.task_type} onChange={set('task_type')} className={input} />
           </label>
           <label className="block">
             <span className="block text-sm font-medium text-gray-700 mb-1">Prioridad</span>

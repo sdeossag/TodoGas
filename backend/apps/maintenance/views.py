@@ -15,7 +15,7 @@ from apps.users.permissions import IsAdmin, IsAdminOrSup
 from apps.users import scope
 
 from . import services
-from .models import MaintenancePlan, PlanTask, RescheduleCause, Task
+from .models import MaintenancePlan, PlanTask, RescheduleCause, Task, TaskTypeCatalog
 from .serializers import (
     AssetIdsSerializer,
     BulkCancelInputSerializer,
@@ -30,6 +30,7 @@ from .serializers import (
     RescheduleInputSerializer,
     TaskRescheduleSerializer,
     TaskSerializer,
+    TaskTypeCatalogSerializer,
 )
 
 _ABIERTAS = Q(occurrences__status__in=Task.OPEN_STATUSES)
@@ -426,3 +427,58 @@ class RescheduleCauseViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     permission_classes = [IsAdminOrSup]
     pagination_class = None
     queryset = RescheduleCause.objects.filter(is_active=True).order_by("sort_order", "name")
+
+
+class TaskTypeCatalogViewSet(viewsets.ModelViewSet):
+    """
+    /api/task-types/ — catalogo de tipos de tarea (decision del 2026-09-23).
+
+    Todos lo leen (el tecnico y el hospital ven el nombre del tipo); solo el
+    administrador lo cambia. `?active=1` trae solo los activos, que son los que
+    se ofrecen en los formularios. Un tipo en uso no se borra: se desactiva.
+    """
+
+    serializer_class = TaskTypeCatalogSerializer
+    pagination_class = None
+    queryset = TaskTypeCatalog.objects.all()
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [IsAuthenticated()]
+        return [IsAdmin()]
+
+    def get_queryset(self):
+        qs = TaskTypeCatalog.objects.order_by("sort_order", "name")
+        if self.request.query_params.get("active") in ("1", "true"):
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def get_serializer_context(self):
+        contexto = super().get_serializer_context()
+        if self.request.user.is_authenticated and self.request.user.role == "ADMIN":
+            contexto["usos"] = _usos_por_tipo()
+        return contexto
+
+    def destroy(self, request, *args, **kwargs):
+        tipo = self.get_object()
+        if tipo.is_system:
+            return Response({"detail": "Los tipos del sistema no se borran."}, status=status.HTTP_400_BAD_REQUEST)
+        usos = _usos_por_tipo().get(tipo.code, 0)
+        if usos:
+            return Response(
+                {"detail": f"Lo usan {usos} tareas u OTs. Desactivalo para que no se ofrezca mas."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        tipo.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _usos_por_tipo():
+    """Cuantas tareas de plan, tareas y OTs usan cada codigo."""
+    from apps.work_orders.models import WorkOrder
+
+    usos = {}
+    for modelo in (PlanTask, Task, WorkOrder):
+        for fila in modelo.objects.values("task_type").annotate(n=Count("pk")):
+            usos[fila["task_type"]] = usos.get(fila["task_type"], 0) + fila["n"]
+    return usos

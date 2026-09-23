@@ -4,6 +4,59 @@ from django.db import models
 from django.utils import timezone
 
 
+class TaskTypeCatalog(models.Model):
+    """
+    Catalogo de tipos de tarea (Fracttal: Plan de Tareas -> Tipo de Tarea, 21
+    tipos editables en la cuenta del cliente). Decision del 2026-09-23.
+
+    Las tareas y las OTs guardan el `code` como texto, no una llave: asi el
+    hash de las actas ya firmadas no cambia y el telefono sin red lo guarda
+    igual que antes. Los cinco tipos de siempre son del sistema: su codigo no
+    cambia y Preventivo y Correctivo no dejan de contar como tales (el motor de
+    planes y los hallazgos dependen de ellos).
+
+    `counts_as` dice en que indicador entra: cumplimiento de planes
+    (preventivo), tiempo medio de reparacion (correctivo) o ninguno.
+    """
+
+    class CountsAs(models.TextChoices):
+        PREVENTIVE = "PREVENTIVE", "Preventivo"
+        CORRECTIVE = "CORRECTIVE", "Correctivo"
+        OTHER = "OTHER", "Ninguno"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=100, unique=True)
+    counts_as = models.CharField(max_length=10, choices=CountsAs.choices, default=CountsAs.OTHER)
+    is_system = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "maintenance_tasktype"
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+def task_type_label(code):
+    """Nombre del tipo para mostrar; el codigo si ya no esta en el catalogo."""
+    if not code:
+        return ""
+    nombre = TaskTypeCatalog.objects.filter(code=code).values_list("name", flat=True).first()
+    return nombre or code
+
+
+class _TaskTypeDisplayMixin:
+    """`get_task_type_display` como cuando el campo tenia choices: lo usan las plantillas."""
+
+    def get_task_type_display(self):
+        return task_type_label(self.task_type)
+
+
 class MaintenancePlan(models.Model):
     """
     Plan de tareas: el contenedor de las tareas que se repiten sobre un tipo de
@@ -91,7 +144,7 @@ class MaintenancePlanExecution(models.Model):
         return f"{self.plan.name} — {self.executed_at:%Y-%m-%d}"
 
 
-class PlanTask(models.Model):
+class PlanTask(_TaskTypeDisplayMixin, models.Model):
     """
     Tarea de un plan: la definicion que se repite sobre cada activo del plan.
 
@@ -112,11 +165,8 @@ class PlanTask(models.Model):
     )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
-    task_type = models.CharField(
-        max_length=15,
-        choices=MaintenancePlan.TaskType.choices,
-        default=MaintenancePlan.TaskType.PREVENTIVE,
-    )
+    # Codigo del catalogo (TaskTypeCatalog).
+    task_type = models.CharField(max_length=50, default=MaintenancePlan.TaskType.PREVENTIVE)
     priority = models.CharField(
         max_length=10,
         choices=MaintenancePlan.Priority.choices,
@@ -188,7 +238,7 @@ class PlanTask(models.Model):
         return f"{self.plan.name} → {self.name}"
 
 
-class Task(models.Model):
+class Task(_TaskTypeDisplayMixin, models.Model):
     """
     Una ocurrencia de trabajo sobre un activo concreto.
 
@@ -235,9 +285,8 @@ class Task(models.Model):
     )
     title = models.CharField(max_length=500)
     description = models.TextField(blank=True, default="")
-    task_type = models.CharField(
-        max_length=15, choices=MaintenancePlan.TaskType.choices
-    )
+    # Codigo del catalogo (TaskTypeCatalog).
+    task_type = models.CharField(max_length=50)
     priority = models.CharField(
         max_length=10,
         choices=MaintenancePlan.Priority.choices,

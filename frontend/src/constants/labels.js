@@ -103,6 +103,33 @@ export const FIELD_LABELS = {
 
 export const assetStatusLabel = (value) => ASSET_STATUS_LABELS[value] ?? value ?? '—'
 export const woStatusLabel = (value) => WO_STATUS_LABELS[value] ?? value ?? '—'
-export const taskTypeLabel = (value) => TASK_TYPE_LABELS[value] ?? value ?? '—'
+// Nombres del catálogo de tipos de tarea: los guarda useTaskTypes y quedan en
+// el navegador para verlos sin red. Sin catálogo aún, el código se lee legible
+// ("CAMBIO_DE_FILTROS" → "Cambio de filtros").
+const TASK_TYPE_KEY = 'task_type_labels'
+let taskTypeNames = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(TASK_TYPE_KEY) ?? '{}') ?? {}
+  } catch {
+    return {}
+  }
+})()
+
+export function rememberTaskTypeLabels(tipos) {
+  taskTypeNames = { ...taskTypeNames, ...Object.fromEntries(tipos.map((t) => [t.code, t.name])) }
+  try {
+    localStorage.setItem(TASK_TYPE_KEY, JSON.stringify(taskTypeNames))
+  } catch {
+    // Sin almacenamiento solo se pierde el nombre guardado; queda el código legible.
+  }
+}
+
+function legible(code) {
+  const texto = code.replace(/_/g, ' ').toLowerCase()
+  return texto.charAt(0).toUpperCase() + texto.slice(1)
+}
+
+export const taskTypeLabel = (value) =>
+  value ? (taskTypeNames[value] ?? TASK_TYPE_LABELS[value] ?? legible(value)) : '—'
 export const entityTypeLabel = (value) => ENTITY_TYPE_LABELS[value] ?? value ?? '—'
 export const fieldLabel = (value) => FIELD_LABELS[value] ?? value
