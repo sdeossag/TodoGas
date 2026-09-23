@@ -30,10 +30,11 @@ export function useOfflineWorkOrders(params = {}) {
       if (isOnline) {
         const rows = await fetchWorkOrders(params)
         // Cachear para poder servirlas sin red mas adelante: la lista ya, y en
-        // segundo plano el detalle y los checklists de cada OT abierta.
+        // segundo plano el detalle y los checklists de cada OT abierta, esten
+        // o no en esta pestaña.
         try {
           await saveWorkOrdersOffline(rows)
-          downloadOfflineBundles(rows)
+          downloadOfflineBundles()
         } catch (error) {
           console.warn('[offline] no se pudieron cachear las OT:', error?.message ?? error)
         }

@@ -58,6 +58,8 @@ export async function syncFieldResponses(onItemDone) {
         repetition: row.repetition ?? 0,
         value: row.value ?? '',
         notes: row.notes ?? '',
+        // La hora en que se respondio aqui, no la de sincronizar: es la del acta.
+        answered_at: row.answered_at ?? null,
       })
       await markFieldResponseSynced(row.response_id, row.field_id, row.repetition ?? 0)
       await logSync({
@@ -95,7 +97,9 @@ export async function syncChecklistCompletions(onItemDone) {
 
   for (const row of pending) {
     try {
-      await client.post(`/api/checklists/responses/${row.id}/complete/`)
+      await client.post(`/api/checklists/responses/${row.id}/complete/`, {
+        completed_at: row.local_completed_at ?? null,
+      })
       await markChecklistCompletionSynced(row.id)
       await logSync({ entityType: 'checklist', entityId: row.id, action: 'complete', status: 'ok' })
       ok += 1
@@ -190,6 +194,7 @@ export async function syncSignatures(onItemDone) {
         image_data: (row.image_base64 ?? '').replace(/^data:image\/\w+;base64,/, ''),
         signer_name: row.signer_name,
         signer_role: row.signer_role,
+        signed_at: row.signed_at ?? null,
         // Sin esto el backend cae al default TECHNICIAN y una firma de
         // cliente capturada sin conexion se subiria con el tipo equivocado.
         ...(row.signature_type ? { signature_type: row.signature_type } : {}),

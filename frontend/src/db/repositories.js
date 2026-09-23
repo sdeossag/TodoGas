@@ -38,7 +38,11 @@ export async function saveWorkOrdersOffline(workOrders = []) {
           checklist_response_id, notes, synced_at, offline_uuid, raw_json,
           location_name, assets_count,
           local_status_changed, local_status_comment, detail_json
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+        ) VALUES (?,?,?,?,?,
+          -- Un estado cambiado sin red y aun sin subir gana al del servidor: si
+          -- no, la sincronizacion mandaria el estado viejo y el cambio se perderia.
+          COALESCE((SELECT status FROM offline_work_orders WHERE id = ? AND local_status_changed = 1), ?),
+          ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
           COALESCE((SELECT local_status_changed FROM offline_work_orders WHERE id = ?), 0),
           (SELECT local_status_comment FROM offline_work_orders WHERE id = ?),
           (SELECT detail_json FROM offline_work_orders WHERE id = ?)
@@ -49,6 +53,7 @@ export async function saveWorkOrdersOffline(workOrders = []) {
           wo.title ?? null,
           wo.description ?? null,
           wo.task_type ?? null,
+          wo.id,
           wo.status ?? null,
           wo.priority ?? null,
           wo.scheduled_date ?? null,
@@ -397,7 +402,9 @@ export async function markBlockCountsSynced(responseId) {
 
 export async function getPendingChecklistCompletions() {
   if (!(await ready())) return []
-  return query('SELECT id FROM offline_checklist_responses WHERE completion_pending = 1')
+  return query(
+    'SELECT id, local_completed_at FROM offline_checklist_responses WHERE completion_pending = 1'
+  )
 }
 
 export async function markChecklistCompletionSynced(responseId) {

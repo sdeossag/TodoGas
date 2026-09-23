@@ -5,6 +5,7 @@ import {
   getOfflineWorkOrderDetail,
   saveWorkOrderBundle,
   saveWorkOrderDetailOffline,
+  saveWorkOrdersOffline,
 } from '../db/repositories'
 import useAuthStore from '../store/authStore'
 import useNetworkStore from '../store/networkStore'
@@ -67,15 +68,23 @@ export function useWorkOrder(id) {
 
 let descargando = null
 
+const ESTADOS_ABIERTOS = ['PENDING', 'IN_PROGRESS']
+
 /**
- * Descarga el paquete offline (detalle y checklists) de las OT abiertas del
- * tecnico. Corre en segundo plano al cargar su lista con conexion; una sola
+ * Descarga el paquete offline (detalle y checklists) de TODAS las OT abiertas
+ * del tecnico, sin importar la pestaña que tenga a la vista: la lista abre en
+ * "Pendientes" y una OT ya en proceso que no se hubiera abierto no llegaba al
+ * telefono. Corre en segundo plano al cargar la lista con conexion; una sola
  * tanda a la vez aunque la lista se refresque.
  */
-export function downloadOfflineBundles(workOrders = []) {
+export function downloadOfflineBundles() {
   if (descargando) return descargando
-  const abiertas = workOrders.filter((wo) => ['PENDING', 'IN_PROGRESS'].includes(wo.status))
   descargando = (async () => {
+    const abiertas = (
+      await Promise.all(ESTADOS_ABIERTOS.map((status) => fetchWorkOrders({ status })))
+    ).flat()
+    // La fila de la lista tambien, para que la OT aparezca en su pestaña sin red.
+    await saveWorkOrdersOffline(abiertas)
     for (const wo of abiertas) {
       try {
         const { data } = await client.get(`/api/work-orders/${wo.id}/offline-bundle/`)
@@ -84,9 +93,13 @@ export function downloadOfflineBundles(workOrders = []) {
         console.warn('[offline] no se pudo descargar la OT', wo.id, error?.message ?? error)
       }
     }
-  })().finally(() => {
-    descargando = null
-  })
+  })()
+    .catch((error) =>
+      console.warn('[offline] no se pudieron listar las OT abiertas:', error?.message ?? error)
+    )
+    .finally(() => {
+      descargando = null
+    })
   return descargando
 }
 
