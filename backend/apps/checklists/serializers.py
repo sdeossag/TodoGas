@@ -317,4 +317,10 @@ class ChecklistFieldResponseCreateSerializer(serializers.ModelSerializer):
                 ),
             },
         )
+        # Un campo "Lectura de medidor" atado a una unidad deja la lectura en
+        # el medidor del equipo y puede abrir una tarea por uso o por umbral.
+        from apps.assets.meters import record_from_checklist
+
+        request = self.context.get("request")
+        record_from_checklist(obj, getattr(request, "user", None))
         return obj

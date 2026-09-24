@@ -17,6 +17,9 @@ _PATH_ENTITY_MAP = [
     ('/api/assets/', 'Asset'),
     ('/api/hospitals/', 'Hospital'),
     ('/api/contracts/', 'Contract'),
+    ('/api/meter-units/', 'MeterUnit'),
+    ('/api/meter-readings/', 'MeterReading'),
+    ('/api/meters/', 'Meter'),
     ('/api/work-orders/', 'WorkOrder'),
     # Estos dos prefijos estaban escritos con guion ('/api/checklist-templates/',
     # '/api/maintenance-plans/') y las rutas reales llevan barra, asi que no

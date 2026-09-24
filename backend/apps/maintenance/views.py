@@ -312,7 +312,8 @@ class TaskViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         qs = Task.objects.select_related(
-            "asset__hospital", "asset__node", "plan_task__plan", "work_order",
+            "asset__hospital", "asset__node", "plan_task__plan", "plan_task__meter_unit",
+            "work_order", "trigger_reading__meter__unit",
         )
         # Hospital o parte del arbol del planificador (apps.users.scope).
         qs = scope.assets(qs, self.request.user, prefix="asset__")

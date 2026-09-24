@@ -130,6 +130,8 @@ class PlanTaskSerializer(serializers.ModelSerializer):
         queryset=ChecklistTemplate.objects.all(), required=False, allow_null=True,
     )
     checklist_template_name = serializers.SerializerMethodField()
+    meter_unit_label = serializers.SerializerMethodField()
+    meter_unit_symbol = serializers.CharField(source="meter_unit.symbol", read_only=True, default=None)
     open_count = serializers.SerializerMethodField()
     done_count = serializers.SerializerMethodField()
 
@@ -141,6 +143,8 @@ class PlanTaskSerializer(serializers.ModelSerializer):
             "trigger", "frequency_value", "frequency_unit", "repeat_count",
             "fixed_schedule", "estimated_duration", "downtime_duration",
             "start_date", "sort_order", "is_active", "open_count", "done_count",
+            "meter_unit", "meter_unit_label", "meter_unit_symbol", "meter_interval",
+            "meter_comparator", "meter_threshold",
         ]
         read_only_fields = ["id"]
         extra_kwargs = {
@@ -150,6 +154,9 @@ class PlanTaskSerializer(serializers.ModelSerializer):
 
     def get_checklist_template_name(self, obj):
         return obj.checklist_template.name if obj.checklist_template_id else None
+
+    def get_meter_unit_label(self, obj):
+        return str(obj.meter_unit) if obj.meter_unit_id else None
 
     def get_open_count(self, obj):
         if hasattr(obj, "open_total"):
@@ -208,7 +215,10 @@ class PlanTaskSerializer(serializers.ModelSerializer):
                 return attrs[campo]
             return getattr(instancia, campo) if instancia else defecto
 
-        if actual("trigger", PlanTask.Trigger.DATE) == PlanTask.Trigger.DATE:
+        trigger = actual("trigger", PlanTask.Trigger.DATE)
+        if trigger in (PlanTask.Trigger.EVERY, PlanTask.Trigger.WHEN):
+            self._validar_medidor(trigger, actual)
+        if trigger == PlanTask.Trigger.DATE:
             errores = {}
             valor = actual("frequency_value")
             if not valor or valor <= 0:
@@ -218,6 +228,28 @@ class PlanTaskSerializer(serializers.ModelSerializer):
             if errores:
                 raise serializers.ValidationError(errores)
         return attrs
+
+    def _validar_medidor(self, trigger, actual):
+        """Activadores por medidor: la unidad y el intervalo o el umbral."""
+        errores = {}
+        unidad = actual("meter_unit")
+        if unidad is None:
+            errores["meter_unit"] = "Elige la unidad del medidor."
+        if trigger == PlanTask.Trigger.EVERY:
+            if unidad is not None and not unidad.is_counter:
+                errores["meter_unit"] = (
+                    f"{unidad} no acumula: «cada N» solo va con un contador, como las horas."
+                )
+            intervalo = actual("meter_interval")
+            if intervalo is None or intervalo <= 0:
+                errores["meter_interval"] = "Indica cada cuantas unidades (mayor a 0)."
+        else:
+            if not actual("meter_comparator"):
+                errores["meter_comparator"] = "Elige la condicion."
+            if actual("meter_threshold") is None:
+                errores["meter_threshold"] = "Indica el valor del umbral."
+        if errores:
+            raise serializers.ValidationError(errores)
 
     def _user(self):
         request = self.context.get("request")
@@ -232,7 +264,7 @@ class PlanTaskSerializer(serializers.ModelSerializer):
             ultima = plan.tasks.order_by("-sort_order").values_list("sort_order", flat=True).first()
             validated_data["sort_order"] = (ultima or 0) + 1
         tarea = PlanTask.objects.create(**validated_data)
-        if tarea.is_active and tarea.trigger == PlanTask.Trigger.DATE and plan.is_active:
+        if tarea.is_active and tarea.trigger in (PlanTask.Trigger.DATE, PlanTask.Trigger.EVERY) and plan.is_active:
             services.sync_plan_task(tarea, self._user())
         return tarea
 
@@ -268,6 +300,7 @@ class TaskSerializer(serializers.ModelSerializer):
     work_order = serializers.SerializerMethodField()
     is_overdue = serializers.SerializerMethodField()
     is_rescheduled = serializers.SerializerMethodField()
+    meter_trigger = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -275,7 +308,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "id", "status", "status_display", "title", "description", "task_type",
             "priority", "calculated_date", "scheduled_date", "completed_at",
             "estimated_duration", "cancellation_note", "is_overdue", "is_rescheduled",
-            "asset", "hospital", "plan", "plan_task", "work_order",
+            "asset", "hospital", "plan", "plan_task", "work_order", "meter_trigger",
         ]
 
     def get_asset(self, obj):
@@ -308,6 +341,11 @@ class TaskSerializer(serializers.ModelSerializer):
             "frequency_value": pt.frequency_value,
             "frequency_unit": pt.frequency_unit,
             "fixed_schedule": pt.fixed_schedule,
+            "meter_interval": pt.meter_interval,
+            "meter_comparator": pt.meter_comparator,
+            "meter_threshold": pt.meter_threshold,
+            "meter_unit_label": str(pt.meter_unit) if pt.meter_unit_id else None,
+            "meter_unit_symbol": pt.meter_unit.symbol if pt.meter_unit_id else None,
         }
 
     def get_work_order(self, obj):
@@ -331,6 +369,24 @@ class TaskSerializer(serializers.ModelSerializer):
 
     def get_is_rescheduled(self, obj):
         return obj.scheduled_date != obj.calculated_date
+
+    def get_meter_trigger(self, obj):
+        """La lectura que abrio la tarea, para decir por que esta pendiente."""
+        r = obj.trigger_reading
+        if r is None:
+            return None
+        unidad = r.meter.unit
+        datos = {
+            "unit": str(unidad),
+            "symbol": unidad.symbol,
+            "value": float(r.value.normalize()),
+            "read_at": r.read_at,
+            "meter_due": float(obj.meter_due.normalize()) if obj.meter_due is not None else None,
+        }
+        pt = obj.plan_task
+        if pt is not None and pt.meter_comparator:
+            datos["condition"] = f"{pt.get_meter_comparator_display().lower()} {pt.meter_threshold.normalize():f}"
+        return datos
 
 
 class RescheduleCauseSerializer(serializers.ModelSerializer):

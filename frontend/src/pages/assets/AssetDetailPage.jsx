@@ -7,6 +7,7 @@ import { useAssetTasks } from '../../api/tasks'
 import { TASK_STATUS, formatDate as fechaCorta, formatFrequency } from '../../utils/maintenance'
 import { CoberturaEquipo } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
+import MetersPanel from '../../components/meters/MetersPanel'
 import useModalDismiss from '../../hooks/useModalDismiss'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
@@ -23,7 +24,7 @@ const PRIORITY_LABELS = {
   LOW: { label: 'Baja', cls: 'bg-gray-100 text-gray-500' },
 }
 
-const TABS = ['Información general', 'Tareas', 'Campos personalizados']
+const TABS = ['Información general', 'Tareas', 'Medidores', 'Campos personalizados']
 
 export default function AssetDetailPage() {
   const { id } = useParams()
@@ -131,7 +132,8 @@ export default function AssetDetailPage() {
         <div className="p-6">
           {tab === 0 && <InfoTab asset={asset} />}
           {tab === 1 && <TasksTab assetId={asset.id} />}
-          {tab === 2 && <CustomFieldsTab asset={asset} />}
+          {tab === 2 && <MetersPanel assetId={asset.id} />}
+          {tab === 3 && <CustomFieldsTab asset={asset} />}
         </div>
       </div>
 

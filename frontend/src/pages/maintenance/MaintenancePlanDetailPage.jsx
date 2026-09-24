@@ -36,6 +36,7 @@ import {
   splitDuration,
   todayIso,
 } from '../../utils/maintenance'
+import { COMPARATORS, useMeterUnits } from '../../api/meters'
 
 const btnPrimary = 'px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 flex items-center gap-2'
 const btnGhost = 'px-4 py-2 text-sm text-gray-600 hover:text-gray-800'
@@ -277,6 +278,10 @@ function emptyTask(plan) {
     dur_minutes: '',
     start_date: todayIso(),
     block_counts: {},
+    meter_unit: '',
+    meter_interval: '',
+    meter_comparator: 'LT',
+    meter_threshold: '',
   }
 }
 
@@ -304,6 +309,10 @@ function PlanTaskModal({ plan, task, onClose }) {
       dur_minutes: minutes,
       start_date: task.start_date ?? '',
       block_counts: task.block_counts ?? {},
+      meter_unit: task.meter_unit ?? '',
+      meter_interval: task.meter_interval ?? '',
+      meter_comparator: task.meter_comparator || 'LT',
+      meter_threshold: task.meter_threshold ?? '',
     }
   })
 
@@ -316,6 +325,11 @@ function PlanTaskModal({ plan, task, onClose }) {
   // marcada; si desapareciera, el guardado fallaría sin explicación visible.
   const huerfana = templates.find((c) => c.id === form.checklist_template && !c.current_version_id)
   const porFecha = form.trigger === 'DATE'
+  const porUso = form.trigger === 'EVERY'
+  const porUmbral = form.trigger === 'WHEN'
+  const { data: unidades = [] } = useMeterUnits({ active: true })
+  // "Cada N" solo con un contador (las horas); "cuando" con cualquier unidad.
+  const unidadesDelActivador = porUso ? unidades.filter((u) => u.is_counter) : unidades
   // Grupos repetibles del checklist elegido: la tarea dice cuántas veces va
   // cada uno, como el plan "20 TOMAS" de Fracttal.
   const repetibles = templates.find((c) => c.id === form.checklist_template)?.current_repeatable_groups ?? []
@@ -340,6 +354,9 @@ function PlanTaskModal({ plan, task, onClose }) {
     setError('')
     if (!form.name.trim()) { setError('El nombre es obligatorio.'); return }
     if (porFecha && !(parseInt(form.frequency_value, 10) > 0)) { setError('La frecuencia debe ser mayor a 0.'); return }
+    if ((porUso || porUmbral) && !form.meter_unit) { setError('Elige la unidad del medidor.'); return }
+    if (porUso && !(Number(form.meter_interval) > 0)) { setError('Indica cada cuántas unidades (mayor a 0).'); return }
+    if (porUmbral && form.meter_threshold === '') { setError('Indica el valor del umbral.'); return }
     const payload = {
       ...(task ? { id: task.id } : { plan: plan.id }),
       name: form.name.trim(),
@@ -351,7 +368,11 @@ function PlanTaskModal({ plan, task, onClose }) {
       frequency_value: porFecha ? parseInt(form.frequency_value, 10) : null,
       frequency_unit: porFecha ? form.frequency_unit : '',
       repeat_count: form.repeat === 'times' ? parseInt(form.repeat_count, 10) || 1 : null,
-      fixed_schedule: porFecha && form.fixed_schedule,
+      fixed_schedule: (porFecha || porUso) && form.fixed_schedule,
+      meter_unit: porUso || porUmbral ? form.meter_unit : null,
+      meter_interval: porUso ? form.meter_interval : null,
+      meter_comparator: porUmbral ? form.meter_comparator : '',
+      meter_threshold: porUmbral ? form.meter_threshold : null,
       estimated_duration: buildDuration(form.dur_hours, form.dur_minutes),
       start_date: porFecha && form.start_date ? form.start_date : null,
       block_counts: Object.fromEntries(
@@ -439,7 +460,12 @@ function PlanTaskModal({ plan, task, onClose }) {
         <fieldset className="border border-gray-100 rounded-lg p-4 space-y-3">
           <legend className="text-sm font-medium text-gray-700 px-1">Cuándo se hace</legend>
           <div className="flex gap-4 flex-wrap">
-            {[['DATE', 'Por fecha (se repite sola)'], ['EVENT', 'Por evento (la creas tú cuando ocurre)']].map(([v, l]) => (
+            {[
+              ['DATE', 'Por fecha (se repite sola)'],
+              ['EVERY', 'Por uso del medidor (cada N horas)'],
+              ['WHEN', 'Por umbral de una lectura'],
+              ['EVENT', 'Por evento (la creas tú cuando ocurre)'],
+            ].map(([v, l]) => (
               <label key={v} className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="radio" name="trigger" value={v} checked={form.trigger === v} onChange={set('trigger')} />
                 {l}
@@ -468,6 +494,48 @@ function PlanTaskModal({ plan, task, onClose }) {
             </div>
           )}
 
+          {(porUso || porUmbral) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-sm text-gray-700 mb-1">Medidor</span>
+                <select value={form.meter_unit} onChange={set('meter_unit')} className={input}>
+                  <option value="">Elige la unidad</option>
+                  {unidadesDelActivador.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+                </select>
+              </label>
+              {porUso ? (
+                <div>
+                  <span className="block text-sm text-gray-700 mb-1">Frecuencia</span>
+                  <div className="flex gap-2 items-center">
+                    <span className="text-sm text-gray-500">Cada</span>
+                    <input type="number" min="0" step="any" value={form.meter_interval} onChange={set('meter_interval')}
+                      aria-label="Cada cuántas unidades" className="w-28 border border-gray-200 rounded-lg px-2 py-2 text-sm" />
+                    <span className="text-sm text-gray-500">
+                      {unidades.find((u) => u.id === form.meter_unit)?.symbol ?? 'unidades'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <span className="block text-sm text-gray-700 mb-1">Cuando la lectura sea</span>
+                  <div className="flex gap-2">
+                    <select value={form.meter_comparator} onChange={set('meter_comparator')} aria-label="Condición"
+                      className="flex-1 border border-gray-200 rounded-lg px-2 py-2 text-sm">
+                      {COMPARATORS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                    <input type="number" step="any" value={form.meter_threshold} onChange={set('meter_threshold')}
+                      aria-label="Umbral" className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-sm" />
+                  </div>
+                </div>
+              )}
+              <p className="sm:col-span-2 text-xs text-gray-500">
+                {porUso
+                  ? 'Las lecturas llegan del checklist (campo «Lectura de medidor» con esta unidad) o se registran en la ficha del equipo. Al alcanzar el uso se abre la tarea pendiente con fecha de hoy. El ciclo empieza con la primera lectura.'
+                  : 'Si una lectura cumple la condición se abre la tarea pendiente con fecha de hoy y se avisa por correo a los administradores. Mientras esté abierta, otra lectura no abre otra.'}
+              </p>
+            </div>
+          )}
+
           <div className="flex items-center gap-4 flex-wrap text-sm text-gray-700">
             <span>Repetir</span>
             <label className="flex items-center gap-2">
@@ -484,13 +552,17 @@ function PlanTaskModal({ plan, task, onClose }) {
             </label>
           </div>
 
-          {porFecha && (
+          {(porFecha || porUso) && (
             <label className="flex items-start gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={form.fixed_schedule} onChange={set('fixed_schedule')} className="mt-0.5" />
               <span>
                 Programación fija
                 <span className="block text-xs text-gray-500">
-                  {form.fixed_schedule
+                  {porUso
+                    ? (form.fixed_schedule
+                      ? 'La siguiente se cuenta desde el uso en que vencía: hacerla tarde no corre el ciclo.'
+                      : 'Sin marcar (lo normal): la siguiente se cuenta desde la lectura al cerrarla.')
+                    : form.fixed_schedule
                     ? 'La siguiente se cuenta desde la fecha calculada: adelantar o aplazar una visita no corre el ciclo.'
                     : 'Sin marcar (lo normal): la siguiente se cuenta desde el día en que se hizo, como en Fracttal.'}
                 </span>

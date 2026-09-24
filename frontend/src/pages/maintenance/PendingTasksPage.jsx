@@ -13,6 +13,7 @@ import {
 import { useUsers } from '../../api/users'
 import { AvisoSinContrato } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
+import { formatReading } from '../../api/meters'
 import Modal from '../../components/ui/Modal'
 import Spinner from '../../components/ui/Spinner'
 import { taskTypeLabel } from '../../constants/labels'
@@ -255,6 +256,14 @@ export default function PendingTasksPage() {
                     <td className="px-4 py-3">
                       <p className="text-gray-800">{t.title}</p>
                       <p className="text-xs text-gray-500">{taskTypeLabel(t.task_type)}{t.plan && ` · ${t.plan.name}`}</p>
+                      {t.meter_trigger && (
+                        <p className="text-xs text-amber-800 mt-0.5">
+                          Abierta por lectura: {formatReading(t.meter_trigger.value)} {t.meter_trigger.symbol}
+                          {t.meter_trigger.condition
+                            ? ` (umbral: ${t.meter_trigger.condition} ${t.meter_trigger.symbol})`
+                            : t.meter_trigger.meter_due !== null && ` (vencía a los ${formatReading(t.meter_trigger.meter_due)} ${t.meter_trigger.symbol})`}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatFrequency(t.plan_task)}</td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDuration(t.estimated_duration)}</td>

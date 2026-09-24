@@ -158,6 +158,18 @@ class PlanTask(_TaskTypeDisplayMixin, models.Model):
     class Trigger(models.TextChoices):
         DATE = "DATE", "Fecha"
         EVENT = "EVENT", "Evento"
+        # Fracttal "Lectura Cada": cada N unidades de un contador (horas).
+        EVERY = "EVERY", "Cada N unidades del medidor"
+        # Fracttal "Lectura Cuando": una lectura cruza un umbral.
+        WHEN = "WHEN", "Cuando la lectura cruza un umbral"
+
+    class Comparator(models.TextChoices):
+        EQ = "EQ", "Igual a"
+        NE = "NE", "Diferente a"
+        GT = "GT", "Mayor que"
+        GTE = "GTE", "Mayor o igual a"
+        LT = "LT", "Menor que"
+        LTE = "LTE", "Menor o igual a"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     plan = models.ForeignKey(
@@ -194,6 +206,16 @@ class PlanTask(_TaskTypeDisplayMixin, models.Model):
         help_text="Vacio = se repite siempre. N = se ejecuta N veces y no se "
                   "vuelve a generar (Fracttal: Repetir por N).",
     )
+    # Activadores por medidor (decision del 2026-09-24). EVERY: cada
+    # `meter_interval` unidades de un contador. WHEN: cuando una lectura de la
+    # unidad cumple `meter_comparator` `meter_threshold`.
+    meter_unit = models.ForeignKey(
+        "assets.MeterUnit", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="plan_tasks",
+    )
+    meter_interval = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
+    meter_comparator = models.CharField(max_length=3, choices=Comparator.choices, blank=True, default="")
+    meter_threshold = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
     fixed_schedule = models.BooleanField(
         default=False,
         help_text="Con programacion fija la siguiente fecha calculada sale de la "
@@ -224,13 +246,31 @@ class PlanTask(_TaskTypeDisplayMixin, models.Model):
             # siguiente ocurrencia; el de evento no la necesita.
             models.CheckConstraint(
                 condition=(
-                    models.Q(trigger="EVENT")
+                    ~models.Q(trigger="DATE")
                     | (
                         models.Q(frequency_value__isnull=False)
                         & ~models.Q(frequency_unit="")
                     )
                 ),
                 name="ck_plantask_date_trigger_has_frequency",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(trigger="EVERY")
+                    | (models.Q(meter_unit__isnull=False) & models.Q(meter_interval__gt=0))
+                ),
+                name="ck_plantask_every_has_interval",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(trigger="WHEN")
+                    | (
+                        models.Q(meter_unit__isnull=False)
+                        & ~models.Q(meter_comparator="")
+                        & models.Q(meter_threshold__isnull=False)
+                    )
+                ),
+                name="ck_plantask_when_has_threshold",
             ),
         ]
 
@@ -304,6 +344,13 @@ class Task(_TaskTypeDisplayMixin, models.Model):
     scheduled_date = models.DateField()
     estimated_duration = models.DurationField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # Tareas abiertas por un medidor: la lectura que las disparo y, en las de
+    # "cada N unidades", el uso acumulado en que vencian.
+    trigger_reading = models.ForeignKey(
+        "assets.MeterReading", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="triggered_tasks",
+    )
+    meter_due = models.DecimalField(max_digits=16, decimal_places=3, null=True, blank=True)
     cancellation_note = models.TextField(
         blank=True, default="",
         help_text="Por que se cancelo: OT cancelada, cambio de plan, anulada a mano.",
@@ -420,3 +467,24 @@ class TaskReschedule(models.Model):
 
     def __str__(self):
         return f"{self.task.title}: {self.from_date} → {self.to_date}"
+
+
+class MeterSchedule(models.Model):
+    """
+    Hasta donde llega el ciclo de una tarea "cada N unidades" en un activo:
+    cuando el uso acumulado del medidor alcanza `next_due`, se abre la tarea.
+    Al cerrarla, el siguiente vencimiento sale del uso al cerrar (o del
+    vencimiento anterior, con programacion fija), como las fechas.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    plan_task = models.ForeignKey(PlanTask, on_delete=models.PROTECT, related_name="meter_schedules")
+    asset = models.ForeignKey("assets.Asset", on_delete=models.PROTECT, related_name="meter_schedules")
+    next_due = models.DecimalField(max_digits=16, decimal_places=3)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "maintenance_meterschedule"
+        constraints = [
+            models.UniqueConstraint(fields=["plan_task", "asset"], name="uq_meterschedule_plantask_asset"),
+        ]

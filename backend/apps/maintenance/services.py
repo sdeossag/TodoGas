@@ -153,7 +153,15 @@ def ensure_open_task(plan_task, asset, fecha=None, created_by=None):
 
 
 def sync_plan_task(plan_task, created_by=None):
-    """Tras crear o reactivar una tarea del plan, abre la pendiente de cada activo."""
+    """
+    Tras crear o reactivar una tarea del plan, abre la pendiente de cada activo.
+    Una "cada N unidades" no abre nada: fija en cada activo el uso en que vence.
+    """
+    if plan_task.trigger == PlanTask.Trigger.EVERY:
+        from .meters import init_schedules_for_plan_task
+
+        init_schedules_for_plan_task(plan_task)
+        return 0
     creadas = 0
     for asset in plan_task.plan.assets.all():
         _, creada = ensure_open_task(plan_task, asset, created_by=created_by)
@@ -189,15 +197,23 @@ def _move_first_occurrences(plan_task, old_start):
             tarea.save(update_fields=["calculated_date", "scheduled_date", "updated_at"])
 
 
+_COMO_SE_ACTIVA = {
+    PlanTask.Trigger.EVENT: "evento",
+    PlanTask.Trigger.EVERY: "uso del medidor",
+    PlanTask.Trigger.WHEN: "umbral del medidor",
+}
+
+
 @transaction.atomic
 def plan_task_changed(plan_task, before, created_by=None):
     """
     Aplica a las tareas abiertas un cambio en la definicion de la tarea del plan.
 
     `before` trae is_active, trigger y start_date como estaban antes de guardar.
-    Desactivar la tarea, o pasarla a activarse por evento, anula sus pendientes:
-    "esta ya no toca". Reactivarla vuelve a abrir la de cada activo, contada
-    desde su ultima realizacion. Cambiar la frecuencia no mueve las pendientes:
+    Desactivar la tarea, o pasarla a otro activador que no sea la fecha, anula
+    sus pendientes por fecha: "esta ya no toca". Pasarla a "cada N unidades"
+    fija en cada activo el uso en que vence, contado desde hoy. Reactivarla
+    vuelve a abrir la de cada activo, contada desde su ultima realizacion. Cambiar la frecuencia no mueve las pendientes:
     la nueva se aplica al calcular la siguiente, como en Fracttal.
     """
     por_fecha = PlanTask.Trigger.DATE
@@ -209,8 +225,17 @@ def plan_task_changed(plan_task, before, created_by=None):
         return
     if antes and not ahora:
         _cancel_pending_of(
-            plan_task, f"La tarea «{plan_task.name}» del plan pasó a activarse por evento."
+            plan_task,
+            f"La tarea «{plan_task.name}» del plan pasó a activarse por "
+            f"{_COMO_SE_ACTIVA.get(plan_task.trigger, 'evento')}.",
         )
+    if plan_task.trigger == PlanTask.Trigger.EVERY and plan_task.is_active and plan_task.plan.is_active:
+        from .meters import init_schedules_for_plan_task
+
+        recien = before["trigger"] != PlanTask.Trigger.EVERY or not before["is_active"]
+        init_schedules_for_plan_task(plan_task, reset=recien)
+        return
+    if antes and not ahora:
         return
     if ahora:
         if before["start_date"] and before["start_date"] != plan_task.start_date:
@@ -277,6 +302,10 @@ def set_asset_plan(asset, new_plan, created_by=None):
     if new_plan is not None:
         for plan_task in new_plan.tasks.filter(is_active=True, trigger=PlanTask.Trigger.DATE):
             ensure_open_task(plan_task, asset, fecha=heredada, created_by=created_by)
+        from .meters import init_schedule
+
+        for plan_task in new_plan.tasks.filter(is_active=True, trigger=PlanTask.Trigger.EVERY):
+            init_schedule(plan_task, asset, reset=True)
     return heredada
 
 
@@ -570,6 +599,10 @@ def complete_work_order_tasks(work_order):
         tarea.status = Task.Status.DONE
         tarea.completed_at = ahora
         tarea.save(update_fields=["status", "completed_at", "updated_at"])
+        if tarea.plan_task_id and tarea.plan_task.trigger == PlanTask.Trigger.EVERY:
+            from .meters import task_completed
+
+            task_completed(tarea)
         if tarea.plan_task_id and can_generate(tarea.plan_task, tarea.asset):
             fecha = next_calculated_date(tarea.plan_task, tarea)
             siguientes.append(_new_pending(tarea.plan_task, tarea.asset, fecha))

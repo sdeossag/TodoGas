@@ -4,6 +4,11 @@
  * conoce el cliente: calculada, programada y de realización.
  */
 
+// Condiciones de los activadores "cuando" (Fracttal: Lectura Cuando).
+export const COMPARATOR_LABELS = {
+  EQ: 'Igual a', NE: 'Diferente a', GT: 'Mayor que', GTE: 'Mayor o igual a', LT: 'Menor que', LTE: 'Menor o igual a',
+}
+
 export const FREQ_UNITS = [
   { value: 'DAYS', one: 'día', many: 'días' },
   { value: 'WEEKS', one: 'semana', many: 'semanas' },
@@ -43,8 +48,14 @@ export function priorityLabel(value) {
 export function formatFrequency(task) {
   if (!task) return '—'
   let base
+  const numero = (n) => Number(n).toLocaleString('es-CO', { maximumFractionDigits: 3 })
   if (task.trigger === 'EVENT') {
     base = 'Por evento'
+  } else if (task.trigger === 'EVERY') {
+    base = `Cada ${numero(task.meter_interval)} ${task.meter_unit_symbol ?? ''}`.trim()
+  } else if (task.trigger === 'WHEN') {
+    const cond = COMPARATOR_LABELS[task.meter_comparator]?.toLowerCase() ?? ''
+    base = `Cuando ${task.meter_unit_label ?? 'la lectura'} sea ${cond} ${numero(task.meter_threshold)}`
   } else {
     const unit = FREQ_UNITS.find((u) => u.value === task.frequency_unit)
     const n = task.frequency_value

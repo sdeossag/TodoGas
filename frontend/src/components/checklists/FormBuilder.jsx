@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { FIELD_TYPES, getFieldType } from '../../constants/checklistFields'
 import Icon from '../ui/Icon'
+import { useMeterUnits } from '../../api/meters'
 
 function uid() {
   return Math.random().toString(36).slice(2, 9) + Date.now().toString(36)
@@ -359,16 +360,27 @@ function FieldCard({
                   }
                   className="w-20 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none"
                 />
-                <input
-                  placeholder="Unidad (°C, bar…)"
-                  value={field.options_json?.unit ?? ''}
-                  onChange={(e) =>
-                    onChange({ options_json: { ...field.options_json, unit: e.target.value } })
-                  }
-                  className="w-28 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none"
-                />
+                {field.field_type === 'METER' ? (
+                  <MeterUnitSelect field={field} onChange={onChange} />
+                ) : (
+                  <input
+                    placeholder="Unidad (°C, bar…)"
+                    value={field.options_json?.unit ?? ''}
+                    onChange={(e) =>
+                      onChange({ options_json: { ...field.options_json, unit: e.target.value } })
+                    }
+                    className="w-28 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none"
+                  />
+                )}
               </div>
             </div>
+          )}
+          {field.field_type === 'METER' && (
+            <p className="text-xs text-gray-500 pl-[6.75rem]">
+              {field.options_json?.meter_unit
+                ? 'Lo que responda el técnico queda como lectura del medidor del equipo y puede abrir tareas por uso o por umbral.'
+                : 'Sin medidor, la lectura solo queda en el acta. Elige uno para llevarla al equipo.'}
+            </p>
           )}
 
           {/* SELECT / MULTI_SELECT: options */}
@@ -415,5 +427,28 @@ function FieldCard({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Unidad del medidor al que va la lectura (HORAS, PSI…). Guarda el id en
+ * `meter_unit` y el símbolo en `unit`, que es lo que muestran el teléfono y
+ * el acta.
+ */
+function MeterUnitSelect({ field, onChange }) {
+  const { data: unidades = [] } = useMeterUnits({ active: true })
+  return (
+    <select
+      value={field.options_json?.meter_unit ?? ''}
+      aria-label="Medidor"
+      onChange={(e) => {
+        const u = unidades.find((x) => x.id === e.target.value)
+        onChange({ options_json: { ...field.options_json, meter_unit: u?.id, unit: u?.symbol ?? field.options_json?.unit } })
+      }}
+      className="w-44 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none bg-white"
+    >
+      <option value="">Sin medidor</option>
+      {unidades.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+    </select>
   )
 }

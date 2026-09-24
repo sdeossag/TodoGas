@@ -403,3 +403,102 @@ class ContractAsset(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["contract", "asset"], name="uq_contractasset"),
         ]
+
+
+class MeterUnit(models.Model):
+    """
+    Unidad de medidor (Fracttal: Catalogos -> unidades de medidor). El cliente
+    usa seis: AMPERIOS, HORAS, PRESION (inHg), PRESION (PSI), TEMPERATURA y
+    VOLTAJE. `is_counter`: la lectura acumula (el horometro), y sobre ella se
+    puede programar "cada N unidades"; las demas son lecturas puntuales.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    symbol = models.CharField(max_length=20)
+    is_counter = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "assets_meterunit"
+        ordering = ["sort_order", "name"]
+        constraints = [
+            models.UniqueConstraint(fields=["name", "symbol"], name="uq_meterunit_name_symbol"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.symbol})"
+
+
+class Meter(models.Model):
+    """
+    Medidor de un equipo: uno por unidad (la bomba de vacio tiene amperios,
+    voltaje, horas, temperatura y presion). Se crea solo la primera vez que
+    llega una lectura de esa unidad, o a mano desde la ficha.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name="meters")
+    unit = models.ForeignKey(MeterUnit, on_delete=models.PROTECT, related_name="meters")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "assets_meter"
+        ordering = ["asset", "unit__sort_order"]
+        constraints = [
+            models.UniqueConstraint(fields=["asset", "unit"], name="uq_meter_asset_unit"),
+        ]
+
+    def __str__(self):
+        return f"{self.asset.code} · {self.unit}"
+
+
+class MeterReading(models.Model):
+    """
+    Lectura de un medidor: del checklist de una tarea (una por respuesta, que
+    se corrige con ella) o registrada a mano.
+
+    `accumulated` solo en contadores: el uso total, que no se rompe cuando el
+    horometro se reinicia o se cambia (en Fracttal un reinicio dejo la bomba
+    con ultima lectura 582 H y maximo 12.901 H). Una lectura menor que la
+    anterior, o marcada como reinicio, cuenta como un contador que arranco de
+    cero.
+    """
+
+    class Source(models.TextChoices):
+        CHECKLIST = "CHECKLIST", "Checklist"
+        MANUAL = "MANUAL", "Registro manual"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    meter = models.ForeignKey(Meter, on_delete=models.PROTECT, related_name="readings")
+    value = models.DecimalField(max_digits=14, decimal_places=3)
+    accumulated = models.DecimalField(max_digits=16, decimal_places=3, null=True, blank=True)
+    read_at = models.DateTimeField()
+    source = models.CharField(max_length=10, choices=Source.choices)
+    field_response = models.OneToOneField(
+        "checklists.ChecklistFieldResponse", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="meter_reading",
+    )
+    task = models.ForeignKey(
+        "maintenance.Task", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="meter_readings",
+    )
+    is_reset = models.BooleanField(default=False)
+    note = models.CharField(max_length=255, blank=True, default="")
+    recorded_by = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="meter_readings",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "assets_meterreading"
+        ordering = ["-read_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["meter", "read_at"], name="idx_reading_meter_date"),
+        ]
+
+    def __str__(self):
+        return f"{self.meter} = {self.value}"
