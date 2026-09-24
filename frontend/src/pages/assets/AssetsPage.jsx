@@ -21,7 +21,7 @@ const PM_DOT = {
   on_time:  { cls: 'bg-green-500',  title: 'Mantenimiento al día' },
   due_soon: { cls: 'bg-yellow-400', title: 'Próximo mantenimiento en ≤15 días' },
   overdue:  { cls: 'bg-red-500',    title: 'Mantenimiento vencido' },
-  no_plan:  { cls: 'bg-gray-300',   title: 'Sin plan de mantenimiento' },
+  no_plan:  { cls: 'bg-gray-300',   title: 'Sin protocolo' },
 }
 
 function PmDot({ status }) {
@@ -247,7 +247,7 @@ export default function AssetsPage() {
                         <td className="px-4 py-3 text-xs text-gray-500">
                           {a.next_maintenance_date
                             ? new Date(a.next_maintenance_date + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
-                            : <span className="text-gray-500">Sin plan</span>}
+                            : <span className="text-gray-500">Sin protocolo</span>}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button

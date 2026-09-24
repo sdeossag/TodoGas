@@ -109,7 +109,7 @@ def generate_work_orders_for_plan(plan, triggered_by=None, manual=False):
             if tarea.status == Task.Status.SCHEDULED:
                 omitidas += 1
                 avisos.append(
-                    f"Activo '{tarea.asset.code}': ya tiene una OT activa para este plan."
+                    f"Activo '{tarea.asset.code}': ya tiene una OT activa para este protocolo."
                 )
                 continue
             if tarea.scheduled_date > hoy:
@@ -117,7 +117,7 @@ def generate_work_orders_for_plan(plan, triggered_by=None, manual=False):
                     continue
                 services.reschedule_task(
                     tarea, hoy, adelanto, triggered_by,
-                    note="Disparo manual desde el plan de tareas.",
+                    note="Disparo manual desde el protocolo.",
                 )
                 avisos.append(
                     f"Activo '{tarea.asset.code}': la tarea se adelantó al {hoy} "

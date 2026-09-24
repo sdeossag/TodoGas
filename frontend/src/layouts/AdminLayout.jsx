@@ -44,7 +44,7 @@ const NAV_GROUPS = [
       { to: '/tareas-pendientes', label: 'Tareas pendientes', icon: 'clock' },
       { to: '/hallazgos', label: 'Hallazgos', icon: 'warning', alertKey: 'findings' },
       { to: '/ordenes', label: 'Ordenes de trabajo', icon: 'workOrder' },
-      { to: '/planes-pm', label: 'Planes de tareas', icon: 'plan' },
+      { to: '/planes-pm', label: 'Protocolos', icon: 'plan' },
       { to: '/calendario-pm', label: 'Calendario', icon: 'calendar' },
     ],
   },

@@ -267,16 +267,16 @@ export default function AssetFormPage() {
                 </Field>
               </div>
 
-              <Field label="Plan de tareas" error={errors.plan}>
+              <Field label="Protocolo" error={errors.plan}>
                 <select value={form.plan} onChange={(e) => set('plan', e.target.value)} className={sel(errors.plan)}>
-                  <option value="">Sin plan</option>
+                  <option value="">Sin protocolo</option>
                   {plans.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}{p.is_active ? '' : ' (pausado)'}</option>
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   {isEdit && existing?.plan && form.plan !== existing.plan.id
-                    ? 'Al cambiarlo, sus pendientes del plan anterior se anulan y las del nuevo conservan la fecha.'
+                    ? 'Al cambiarlo, sus pendientes del protocolo anterior se anulan y las del nuevo conservan la fecha.'
                     : 'Qué tareas se le hacen y cada cuánto. Se le asigna una vez y el sistema lleva sus fechas.'}
                 </p>
               </Field>

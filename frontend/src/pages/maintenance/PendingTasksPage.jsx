@@ -123,7 +123,7 @@ export default function PendingTasksPage() {
           </select>
         </label>
         <label className="block">
-          <span className="block text-xs font-medium text-gray-500 mb-1">Plan de tareas</span>
+          <span className="block text-xs font-medium text-gray-500 mb-1">Protocolo</span>
           <select value={plan} onChange={(e) => setPlan(e.target.value)} className={input}>
             <option value="">Todos</option>
             {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}

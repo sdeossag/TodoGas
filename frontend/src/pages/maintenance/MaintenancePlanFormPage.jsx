@@ -72,7 +72,7 @@ export default function MaintenancePlanFormPage() {
       // Un plan nuevo no hace nada hasta tener tareas: se abre en esa pestaña.
       navigate(`/planes-pm/${result.id}`, { state: isEdit ? undefined : { created: true } })
     } catch (err) {
-      setError(apiErrorMessage(err, 'No se pudo guardar el plan.'))
+      setError(apiErrorMessage(err, 'No se pudo guardar el protocolo.'))
     }
   }
 
@@ -91,7 +91,7 @@ export default function MaintenancePlanFormPage() {
           <Icon name="arrowLeft" className="w-5 h-5" />
         </button>
         <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">
-          {isEdit ? 'Editar plan de tareas' : 'Nuevo plan de tareas'}
+          {isEdit ? 'Editar protocolo' : 'Nuevo protocolo'}
         </h1>
       </div>
 
@@ -107,7 +107,7 @@ export default function MaintenancePlanFormPage() {
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Prioridad por defecto" hint="La toman las tareas nuevas del plan.">
+          <Field label="Prioridad por defecto" hint="La toman las tareas nuevas del protocolo.">
             <select value={form.priority} onChange={set('priority')} className={input}>
               {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
@@ -143,7 +143,7 @@ export default function MaintenancePlanFormPage() {
           <button type="submit" disabled={isPending}
             className="px-6 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 flex items-center gap-2">
             {isPending && <Spinner />}
-            {isEdit ? 'Guardar cambios' : 'Crear plan'}
+            {isEdit ? 'Guardar cambios' : 'Crear protocolo'}
           </button>
         </div>
       </form>

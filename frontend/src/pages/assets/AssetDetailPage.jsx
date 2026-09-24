@@ -169,7 +169,7 @@ const PM_STATUS_BADGE = {
   on_time:  { label: 'Al día',          cls: 'bg-green-100 text-green-700' },
   due_soon: { label: 'Próximo a vencer', cls: 'bg-yellow-100 text-yellow-700' },
   overdue:  { label: 'Vencido',          cls: 'bg-red-100 text-red-700' },
-  no_plan:  { label: 'Sin plan',         cls: 'bg-gray-100 text-gray-500' },
+  no_plan:  { label: 'Sin protocolo',         cls: 'bg-gray-100 text-gray-500' },
 }
 
 function InfoTab({ asset }) {
@@ -183,11 +183,11 @@ function InfoTab({ asset }) {
         <h3 className="text-sm font-semibold text-gray-600 mb-3">Estado de mantenimiento</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div>
-            <p className="text-xs font-medium text-gray-500 mb-0.5">Plan de tareas</p>
+            <p className="text-xs font-medium text-gray-500 mb-0.5">Protocolo</p>
             <p className="text-sm text-gray-800">
               {asset.plan
                 ? <Link to={`/planes-pm/${asset.plan.id}`} className="text-brand hover:underline">{asset.plan.name}</Link>
-                : <span className="text-gray-500">Sin plan</span>}
+                : <span className="text-gray-500">Sin protocolo</span>}
             </p>
           </div>
           <div>
@@ -195,7 +195,7 @@ function InfoTab({ asset }) {
             <p className="text-sm text-gray-800">
               {asset.next_maintenance_date
                 ? new Date(asset.next_maintenance_date + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
-                : <span className="text-gray-500">Sin plan</span>}
+                : <span className="text-gray-500">Sin protocolo</span>}
             </p>
           </div>
           <div>

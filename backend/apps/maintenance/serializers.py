@@ -103,7 +103,7 @@ class MaintenancePlanCreateUpdateSerializer(serializers.ModelSerializer):
         max_length=255,
         validators=[UniqueValidator(
             queryset=MaintenancePlan.objects.all(),
-            message="Ya existe un plan de tareas con ese nombre.",
+            message="Ya existe un protocolo con ese nombre.",
         )],
     )
 

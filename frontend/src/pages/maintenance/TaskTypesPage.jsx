@@ -44,7 +44,7 @@ export default function TaskTypesPage() {
       <div>
         <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Tipos de tarea</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          Los que se eligen en las tareas de los planes y en las OTs. «Cuenta como» decide en qué indicador entra cada uno.
+          Los que se eligen en las tareas de los protocolos y en las OTs. «Cuenta como» decide en qué indicador entra cada uno.
         </p>
       </div>
 

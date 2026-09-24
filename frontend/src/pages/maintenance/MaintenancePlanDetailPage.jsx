@@ -60,7 +60,7 @@ export default function MaintenancePlanDetailPage() {
     return (
       <div className="text-center py-20 text-gray-500">
         <Icon name="warning" className="w-10 h-10 mx-auto mb-3 text-amber-500" />
-        <p>No se encontró el plan</p>
+        <p>No se encontró el protocolo</p>
         <button onClick={() => navigate('/planes-pm')} className="mt-3 text-sm text-brand hover:underline">Volver</button>
       </div>
     )
@@ -71,7 +71,7 @@ export default function MaintenancePlanDetailPage() {
   return (
     <div className="space-y-5 max-w-6xl">
       <nav className="text-sm text-gray-500 flex gap-1">
-        <button onClick={() => navigate('/planes-pm')} className="hover:text-brand">Planes de tareas</button>
+        <button onClick={() => navigate('/planes-pm')} className="hover:text-brand">Protocolos</button>
         <span>/</span>
         <span className="text-gray-600 truncate">{plan.name}</span>
       </nav>
@@ -119,7 +119,7 @@ export default function MaintenancePlanDetailPage() {
 
         <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t pt-4">
           <InfoItem label="Tareas activas" value={tareasActivas.length} />
-          <InfoItem label="Activos con este plan" value={plan.assets_count} />
+          <InfoItem label="Activos con este protocolo" value={plan.assets_count} />
           <InfoItem label="Próxima fecha"
             value={plan.next_due_date ? `${formatDate(plan.next_due_date)} (${relativeDue(plan.next_due_date)})` : '—'} />
           <InfoItem label="Pendientes vencidas"
@@ -130,7 +130,7 @@ export default function MaintenancePlanDetailPage() {
       {recienCreado && plan.tasks.length === 0 && (
         <div className="bg-brand/5 border border-brand/10 rounded-xl px-4 py-3 text-sm text-gray-700 flex items-center gap-2">
           <Icon name="checkCircle" className="w-4 h-4 text-green-600 flex-shrink-0" />
-          Plan creado. Agrégale su primera tarea y después asígnalo a los activos.
+          Protocolo creado. Agrégale su primera tarea y después asígnalo a los activos.
         </div>
       )}
 
@@ -179,7 +179,7 @@ function TasksTab({ plan, isAdmin }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-gray-500">
-          Cada tarea, en cada activo del plan, lleva su propio ciclo: al cerrarse la OT se crea la siguiente.
+          Cada tarea, en cada activo del protocolo, lleva su propio ciclo: al cerrarse la OT se crea la siguiente.
         </p>
         {isAdmin && (
           <button onClick={() => setEditing({})} className={btnPrimary}>
@@ -190,7 +190,7 @@ function TasksTab({ plan, isAdmin }) {
 
       {plan.tasks.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-10">
-          Este plan todavía no tiene tareas, así que no genera nada en sus activos.
+          Este protocolo todavía no tiene tareas, así que no genera nada en sus activos.
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -388,7 +388,7 @@ function PlanTaskModal({ plan, task, onClose }) {
   }
 
   return (
-    <Modal title={task ? `Editar «${task.name}»` : 'Nueva tarea del plan'} onClose={onClose} width="max-w-2xl">
+    <Modal title={task ? `Editar «${task.name}»` : 'Nueva tarea del protocolo'} onClose={onClose} width="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block">
           <span className="block text-sm font-medium text-gray-700 mb-1">Nombre *</span>
@@ -586,7 +586,7 @@ function PlanTaskModal({ plan, task, onClose }) {
 
         {!task && porFecha && plan.assets_count > 0 && (
           <p className="text-sm text-gray-600 bg-brand/5 border border-brand/10 rounded-lg px-3 py-2">
-            Los {plan.assets_count} activos del plan quedan con esta tarea pendiente para el{' '}
+            Los {plan.assets_count} activos del protocolo quedan con esta tarea pendiente para el{' '}
             {formatDate(form.start_date || todayIso())}.
           </p>
         )}
@@ -626,12 +626,12 @@ function ToggleTaskModal({ task, onClose }) {
       <div className="space-y-4 text-sm text-gray-600">
         {desactivar ? (
           <p>
-            Deja de generarse en los activos del plan.
+            Deja de generarse en los activos del protocolo.
             {task.open_count > 0 && ` Sus pendientes se anulan; las que ya están dentro de una OT siguen su curso.`}
             {' '}El historial se conserva y se puede volver a activar.
           </p>
         ) : (
-          <p>Cada activo del plan vuelve a tener su pendiente, contada desde la última vez que se hizo.</p>
+          <p>Cada activo del protocolo vuelve a tener su pendiente, contada desde la última vez que se hizo.</p>
         )}
         {error && <p className="text-red-600" role="alert">{error}</p>}
         <div className="flex justify-between gap-3 flex-wrap">
@@ -679,7 +679,7 @@ function EventOccurrenceModal({ plan, task, onClose }) {
         <label className="block">
           <span className="block text-sm font-medium text-gray-700 mb-1">Activo *</span>
           <select value={asset} onChange={(e) => setAsset(e.target.value)} required className={input}>
-            <option value="">Elige un activo del plan</option>
+            <option value="">Elige un activo del protocolo</option>
             {plan.assets.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
           </select>
         </label>
@@ -721,7 +721,7 @@ function AssetsTab({ plan, isAdmin }) {
       </div>
 
       {plan.assets.length === 0 ? (
-        <p className="text-sm text-gray-500 text-center py-10">Ningún activo tiene este plan todavía.</p>
+        <p className="text-sm text-gray-500 text-center py-10">Ningún activo tiene este protocolo todavía.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -769,10 +769,10 @@ function AssetsTab({ plan, isAdmin }) {
 
       {assigning && <AssignAssetsModal plan={plan} onClose={() => setAssigning(false)} />}
       {removing && (
-        <Modal title={`Quitar el plan a ${removing.code}`} onClose={() => setRemoving(null)} width="max-w-md">
+        <Modal title={`Quitar el protocolo a ${removing.code}`} onClose={() => setRemoving(null)} width="max-w-md">
           <div className="space-y-4 text-sm text-gray-600">
             <p>
-              {removing.name} queda sin plan de tareas. Sus pendientes de este plan se anulan; si tiene
+              {removing.name} queda sin protocolo. Sus pendientes de este protocolo se anulan; si tiene
               una tarea dentro de una OT, esa se hace igual.
             </p>
             {removeMut.isError && <p className="text-red-600">{apiErrorMessage(removeMut.error)}</p>}
@@ -780,7 +780,7 @@ function AssetsTab({ plan, isAdmin }) {
               <button onClick={() => setRemoving(null)} className={btnGhost}>Cancelar</button>
               <button disabled={removeMut.isPending} className={btnPrimary}
                 onClick={() => removeMut.mutate([removing.id], { onSuccess: () => setRemoving(null) })}>
-                {removeMut.isPending && <Spinner />} Quitar plan
+                {removeMut.isPending && <Spinner />} Quitar protocolo
               </button>
             </div>
           </div>
@@ -854,11 +854,11 @@ function AssignAssetsModal({ plan, onClose }) {
           <div className="text-sm bg-green-50 border border-green-100 rounded-lg px-3 py-2 text-green-800 space-y-1" role="status">
             <p className="flex items-center gap-1.5">
               <Icon name="checkCircle" className="w-4 h-4" />
-              Plan asignado a {result.assigned} activo{result.assigned !== 1 ? 's' : ''}.
+              Protocolo asignado a {result.assigned} activo{result.assigned !== 1 ? 's' : ''}.
             </p>
             {result.moved.length > 0 && (
               <p className="text-xs">
-                Cambiaron de plan:{' '}
+                Cambiaron de protocolo:{' '}
                 {result.moved.map((m) => (
                   `${m.code} (antes «${m.from_plan}»${m.kept_date ? `; conserva su fecha, ${formatDate(m.kept_date)}` : ''})`
                 )).join(', ')}.
@@ -893,7 +893,7 @@ function AssignAssetsModal({ plan, onClose }) {
           </form>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={soloSinPlan} onChange={(e) => setSoloSinPlan(e.target.checked)} />
-            Solo activos sin plan
+            Solo activos sin protocolo
           </label>
         </div>
 
@@ -913,7 +913,7 @@ function AssignAssetsModal({ plan, onClose }) {
                   </th>
                   <th className="px-3 py-2">Activo</th>
                   <th className="px-3 py-2">Ubicación</th>
-                  <th className="px-3 py-2">Plan actual</th>
+                  <th className="px-3 py-2">Protocolo actual</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -929,7 +929,7 @@ function AssignAssetsModal({ plan, onClose }) {
                     </td>
                     <td className="px-3 py-2 text-xs text-gray-500">{a.node?.path ?? '—'}</td>
                     <td className="px-3 py-2 text-xs">
-                      {a.plan ? <span className="text-amber-700">{a.plan.name}</span> : <span className="text-gray-400">Sin plan</span>}
+                      {a.plan ? <span className="text-amber-700">{a.plan.name}</span> : <span className="text-gray-400">Sin protocolo</span>}
                     </td>
                   </tr>
                 ))}
@@ -940,7 +940,7 @@ function AssignAssetsModal({ plan, onClose }) {
 
         {cambian.length > 0 && (
           <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-            {cambian.length} de los marcados ya tienen otro plan: se cambian a este. Si tenían una tarea
+            {cambian.length} de los marcados ya tienen otro protocolo: se cambian a este. Si tenían una tarea
             pendiente, la nueva conserva su fecha.
           </p>
         )}
@@ -999,7 +999,7 @@ function ComplianceTab({ planId }) {
   return (
     <div>
       <h3 className="text-sm font-semibold text-gray-600 mb-1">Cumplimiento de los últimos 12 meses</h3>
-      <p className="text-xs text-gray-500 mb-4">Tareas del plan programadas en cada mes y cuántas se hicieron.</p>
+      <p className="text-xs text-gray-500 mb-4">Tareas del protocolo programadas en cada mes y cuántas se hicieron.</p>
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
           <XAxis dataKey="name" tick={{ fontSize: 11 }} />

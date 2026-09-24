@@ -41,16 +41,16 @@ export default function MaintenancePlansPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Planes de tareas</h1>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Protocolos</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Cada activo tiene un plan; el plan dice qué tareas se le hacen y cada cuánto.
+            Cada activo tiene un protocolo; el protocolo dice qué tareas se le hacen y cada cuánto.
           </p>
         </div>
         {isAdmin && (
           <button onClick={() => navigate('/planes-pm/nuevo')}
             className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors flex items-center gap-1.5">
             <Icon name="plus" className="w-4 h-4" />
-            Nuevo plan
+            Nuevo protocolo
           </button>
         )}
       </div>
@@ -73,7 +73,7 @@ export default function MaintenancePlansPage() {
         <form onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()) }}
           className="flex items-center gap-2 ml-auto">
           <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Buscar plan por nombre" aria-label="Buscar plan por nombre"
+            placeholder="Buscar protocolo por nombre" aria-label="Buscar protocolo por nombre"
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-brand/30" />
           <button type="submit" className="px-3 py-1.5 text-sm rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">
             Buscar
@@ -84,17 +84,17 @@ export default function MaintenancePlansPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         {isError ? (
           <div className="text-center py-16 text-red-600 text-sm">
-            No se pudieron cargar los planes de tareas. Revisa tu conexión e intenta de nuevo.
+            No se pudieron cargar los protocolos. Revisa tu conexión e intenta de nuevo.
           </div>
         ) : isLoading ? (
           <div className="flex justify-center py-16"><Spinner /></div>
         ) : plans.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
             <Icon name="plan" className="w-10 h-10 mx-auto mb-3 text-gray-400" />
-            <p className="font-medium">{search ? `Ningún plan coincide con «${search}»` : 'No hay planes de tareas'}</p>
+            <p className="font-medium">{search ? `Ningún protocolo coincide con «${search}»` : 'No hay protocolos'}</p>
             {isAdmin && !search && (
               <button onClick={() => navigate('/planes-pm/nuevo')} className="mt-3 text-sm text-brand hover:underline">
-                Crear el primer plan
+                Crear el primer protocolo
               </button>
             )}
           </div>
@@ -103,7 +103,7 @@ export default function MaintenancePlansPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr className="text-left text-xs font-medium text-gray-500">
-                  <th className="px-4 py-3">Plan</th>
+                  <th className="px-4 py-3">Protocolo</th>
                   <th className="px-4 py-3">Tareas</th>
                   <th className="px-4 py-3">Activos</th>
                   <th className="px-4 py-3">Próxima fecha</th>

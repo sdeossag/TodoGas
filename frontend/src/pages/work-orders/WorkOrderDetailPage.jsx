@@ -64,6 +64,7 @@ import CompletedChecklistView, {
   SIN_CONEXION,
   groupFields,
 } from '../../components/checklists/CompletedChecklist'
+import GoogleMap, { parseLatLng, UbicacionGps } from '../../components/maps/GoogleMap'
 
 // Margen sobre la ventana de sondeo de useWorkOrderReports (24 intentos x 5s).
 const REPORT_POLL_TIMEOUT_MS = REPORT_POLL_ATTEMPTS * 5000
@@ -271,7 +272,7 @@ export default function WorkOrderDetailPage() {
               }
             />
             {wo.tasks?.length === 1 && wo.tasks[0].plan && (
-              <InfoRow label="Plan de tareas" value={wo.tasks[0].plan.name} />
+              <InfoRow label="Protocolo" value={wo.tasks[0].plan.name} />
             )}
           </dl>
         </div>
@@ -629,7 +630,7 @@ function EditModal({ wo, onClose, onSuccess }) {
             {checklistLocked && (
               <p className="text-xs text-gray-500 mt-1">
                 {variasTareas
-                  ? 'La OT tiene varias tareas: cada una lleva el checklist de su plan.'
+                  ? 'La OT tiene varias tareas: cada una lleva el checklist de su protocolo.'
                   : 'El checklist ya tiene respuestas y no se puede cambiar.'}
               </p>
             )}
@@ -742,9 +743,9 @@ function TasksTab({ wo, user, refetch }) {
           {!puedeAjustar && visibles[0].checklist?.block_changes?.length > 0 && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               {visibles[0].checklist.block_changes.map((b) =>
-                `${b.group}: el plan dice ${b.planned}, en campo se encontraron ${b.count}`
+                `${b.group}: el protocolo dice ${b.planned}, en campo se encontraron ${b.count}`
               ).join(' · ')}
-              . Revisa el plan del activo.
+              . Revisa el protocolo del activo.
             </p>
           )}
           <TaskChecklist wo={wo} task={visibles[0]} canEdit={canEdit} onChange={refetch} onComplete={alCerrarChecklist} />
@@ -821,7 +822,7 @@ function TaskRow({ task, abierta, onToggle, onRemove = null }) {
         {c?.block_changes?.length > 0 && (
           <p className="mt-1.5 text-xs text-amber-700">
             {c.block_changes.map((b) =>
-              `${b.group}: el plan dice ${b.planned}, en campo ${b.count}`
+              `${b.group}: el protocolo dice ${b.planned}, en campo ${b.count}`
             ).join(' · ')}
           </p>
         )}
@@ -1409,7 +1410,7 @@ function RepeatedGroup({ response, group, answeredMap, canEdit, renderField, onC
     <div className="space-y-2">
       {planeadas && planeadas !== cuantas && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          El plan dice {planeadas} y aquí hay {cuantas}. Se le avisará al administrador.
+          El protocolo dice {planeadas} y aquí hay {cuantas}. Se le avisará al administrador.
         </p>
       )}
       {numeros.map((n) => {
@@ -1632,9 +1633,14 @@ function ChecklistFieldInput({ field, workOrderId, taskId, value, fieldResponse,
 
       {/* GPS */}
       {field.field_type === 'GPS' && (
+        <div className="space-y-2">
         <div className="flex items-center gap-2">
           <div className={`flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm ${value ? 'text-gray-700' : 'text-gray-500'}`}>
-            {value || 'Sin ubicación capturada'}
+            {value ? (
+              <UbicacionGps value={value} conMapa={false}
+                address={fieldResponse?.value === value ? fieldResponse.geo_address : ''}
+                answeredAt={fieldResponse?.value === value ? fieldResponse.answered_at : null} />
+            ) : 'Sin ubicación capturada'}
           </div>
           {!disabled && (
             <button
@@ -1655,6 +1661,10 @@ function ChecklistFieldInput({ field, workOrderId, taskId, value, fieldResponse,
               Capturar
             </button>
           )}
+        </div>
+        {parseLatLng(value) && (
+          <GoogleMap lat={parseLatLng(value).lat} lng={parseLatLng(value).lng} height={220} />
+        )}
         </div>
       )}
 

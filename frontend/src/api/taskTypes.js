@@ -42,7 +42,7 @@ export function useDeleteTaskType() {
 }
 
 export const COUNTS_AS = [
-  { value: 'PREVENTIVE', label: 'Preventivo', hint: 'Entra en el cumplimiento de planes' },
+  { value: 'PREVENTIVE', label: 'Preventivo', hint: 'Entra en el cumplimiento de protocolos' },
   { value: 'CORRECTIVE', label: 'Correctivo', hint: 'Entra en el tiempo medio de reparación' },
   { value: 'OTHER', label: 'Ninguno', hint: 'No entra en esos indicadores' },
 ]

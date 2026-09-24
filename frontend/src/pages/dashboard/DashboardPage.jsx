@@ -45,7 +45,7 @@ const ASSET_STATUS_CARDS = [
   { key: 'on_time', label: 'Al dia', filter: 'on_time', color: 'text-green-700', dot: 'bg-green-600' },
   { key: 'due_soon', label: 'Proximo vencimiento', filter: 'due_soon', color: 'text-amber-700', dot: 'bg-amber-500' },
   { key: 'overdue', label: 'Vencido', filter: 'overdue', color: 'text-red-700', dot: 'bg-red-500' },
-  { key: 'no_plan', label: 'Sin plan', filter: 'no_plan', color: 'text-gray-700', dot: 'bg-gray-400' },
+  { key: 'no_plan', label: 'Sin protocolo', filter: 'no_plan', color: 'text-gray-700', dot: 'bg-gray-400' },
 ]
 
 function CardSkeleton() {
@@ -283,7 +283,7 @@ export default function DashboardPage() {
         ) : (
           <>
             <KpiCard
-              title="Cumplimiento de planes"
+              title="Cumplimiento de protocolos"
               value={`${compliance?.percentage ?? 0}%`}
               subtitle={`${compliance?.completed ?? 0}/${compliance?.generated ?? 0} OTs`}
               color={complianceColorName}
@@ -452,7 +452,7 @@ export default function DashboardPage() {
               compact
               icon="checkCircle"
               title="Todo al dia"
-              description="Ningun activo con plan asignado lleva demasiado tiempo sin intervencion."
+              description="Ningún activo con protocolo asignado lleva demasiado tiempo sin intervencion."
             />
           ) : (
             <ul className="divide-y divide-gray-100">

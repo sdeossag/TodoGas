@@ -91,7 +91,7 @@ def test_duplicate_plan_name_is_explained(plan, admin_user):
     client = auth_client(admin_user)
     resp = client.post('/api/maintenance/plans/', {'name': plan.name}, format='json')
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
-    assert resp.json()['name'] == ['Ya existe un plan de tareas con ese nombre.']
+    assert resp.json()['name'] == ['Ya existe un protocolo con ese nombre.']
 
 
 def test_sup_cannot_create_plan(sup_user):

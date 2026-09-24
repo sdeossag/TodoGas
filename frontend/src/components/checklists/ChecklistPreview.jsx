@@ -34,7 +34,7 @@ export default function ChecklistPreview({ fields = [], repeatableGroups = [] })
           {group.name && (
             <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2">
               {repeatableGroups.includes(group.name)
-                ? `${group.name} 1 (se repite las veces que diga el plan)`
+                ? `${group.name} 1 (se repite las veces que diga el protocolo)`
                 : group.name}
             </h3>
           )}

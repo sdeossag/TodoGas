@@ -221,12 +221,12 @@ def plan_task_changed(plan_task, before, created_by=None):
     ahora = plan_task.is_active and plan_task.trigger == por_fecha
 
     if before["is_active"] and not plan_task.is_active:
-        _cancel_pending_of(plan_task, f"La tarea «{plan_task.name}» del plan se desactivó.")
+        _cancel_pending_of(plan_task, f"La tarea «{plan_task.name}» del protocolo se desactivó.")
         return
     if antes and not ahora:
         _cancel_pending_of(
             plan_task,
-            f"La tarea «{plan_task.name}» del plan pasó a activarse por "
+            f"La tarea «{plan_task.name}» del protocolo pasó a activarse por "
             f"{_COMO_SE_ACTIVA.get(plan_task.trigger, 'evento')}.",
         )
     if plan_task.trigger == PlanTask.Trigger.EVERY and plan_task.is_active and plan_task.plan.is_active:
@@ -252,7 +252,7 @@ def create_event_task(plan_task, asset, fecha, created_by):
     if plan_task.trigger != PlanTask.Trigger.EVENT:
         raise TaskStateError("Solo las tareas con activador por evento se crean a mano.")
     if asset.plan_id != plan_task.plan_id:
-        raise TaskStateError("El activo no tiene asignado el plan de esta tarea.")
+        raise TaskStateError("El activo no tiene asignado el protocolo de esta tarea.")
     if _open_task(plan_task, asset) is not None:
         raise TaskStateError("Ese activo ya tiene esta tarea abierta.")
     return _new_pending(plan_task, asset, fecha, created_by)
@@ -293,7 +293,7 @@ def set_asset_plan(asset, new_plan, created_by=None):
             heredada = min(t.scheduled_date for t in pendientes)
         destino = f"«{new_plan.name}»" if new_plan else "ninguno"
         for tarea in pendientes:
-            _cancel(tarea, f"El activo cambió de plan de tareas (ahora: {destino}).")
+            _cancel(tarea, f"El activo cambió de protocolo (ahora: {destino}).")
 
     if asset.plan_id != nuevo_id:
         asset.plan = new_plan

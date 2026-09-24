@@ -250,7 +250,7 @@ function RepeatableGroups({ fields, value, onChange }) {
         <p className="text-sm font-medium text-gray-800">Grupos que se repiten</p>
         <p className="text-xs text-gray-500">
           Un grupo repetible se responde una vez por toma, gas o salida. Cuántas veces lo dice la
-          tarea del plan, y el técnico puede ajustarlo en campo.
+          tarea del protocolo, y el técnico puede ajustarlo en campo.
         </p>
       </div>
       {grupos.length === 0 ? (

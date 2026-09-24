@@ -163,7 +163,7 @@ class MaintenancePlanViewSet(viewsets.ModelViewSet):
             ajenos = [a.code for a in activos if a.hospital_id != plan.restrict_to_hospital_id]
             if ajenos:
                 raise ValidationError({"asset_ids": (
-                    f"El plan es solo para {plan.restrict_to_hospital.name}. "
+                    f"El protocolo es solo para {plan.restrict_to_hospital.name}. "
                     f"No son de ese hospital: {', '.join(ajenos[:10])}."
                 )})
 
