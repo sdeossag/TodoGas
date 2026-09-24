@@ -1,4 +1,4 @@
-import { getFieldType } from '../../constants/checklistFields'
+import { booleanLabel, booleanOptions, getFieldType } from '../../constants/checklistFields'
 import Icon from '../ui/Icon'
 
 function groupFields(fields) {
@@ -102,18 +102,15 @@ function FieldPreview({ field }) {
 
       {field.field_type === 'BOOLEAN' && (
         <div className="flex gap-2">
-          <button
-            disabled
-            className="px-5 py-2 border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50"
-          >
-            Sí
-          </button>
-          <button
-            disabled
-            className="px-5 py-2 border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50"
-          >
-            No
-          </button>
+          {booleanOptions(field).map((v) => (
+            <button
+              key={v}
+              disabled
+              className="px-5 py-2 border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50"
+            >
+              {booleanLabel(v)}
+            </button>
+          ))}
         </div>
       )}
 

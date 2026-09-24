@@ -49,8 +49,8 @@ def _valor(fr, corto=False):
     if fr.field.field_type == "PHOTO":
         return "Foto" if corto else "Foto adjunta (ver fotos del activo)"
     if fr.field.field_type == "BOOLEAN":
-        # El campo guarda 'true'/'false': el acta no imprime eso.
-        return {"true": "Sí", "false": "No"}.get(fr.value, fr.value)
+        # El campo guarda 'true'/'false'/'na': el acta no imprime eso.
+        return {"true": "Sí", "false": "No", "na": "N/A"}.get(fr.value, fr.value)
     return fr.value
 
 

@@ -14,7 +14,10 @@ def validate_field_value(field, value):
     result = {}
 
     if ft == ChecklistField.FieldType.BOOLEAN:
-        if value.lower() not in ("true", "false", "1", "0", "yes", "no", "si"):
+        if value.lower() == "na":
+            if not field.allows_na:
+                raise ValueError(f"El campo '{field.label}' no admite N/A.")
+        elif value.lower() not in ("true", "false", "1", "0", "yes", "no", "si"):
             raise ValueError(f"El campo '{field.label}' debe ser verdadero o falso (true/false).")
 
     elif ft in (ChecklistField.FieldType.NUMBER, ChecklistField.FieldType.METER):

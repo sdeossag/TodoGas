@@ -3,6 +3,7 @@ import { mediaUrl } from '../../api/client'
 import Icon from '../ui/Icon'
 import useNetworkStore from '../../store/networkStore'
 import { countFor, isRepeatable, slotKey } from '../../utils/checklistSlots'
+import { booleanLabel } from '../../constants/checklistFields'
 
 /**
  * Checklist cerrado, de solo lectura. Lo comparten el detalle de la OT y el
@@ -135,7 +136,7 @@ export default function CompletedChecklistView({ response }) {
                   ) : field.field_type === 'PHOTO' ? (
                     <FotoDelChecklist workOrderId={response.work_order} value={fr.value} />
                   ) : field.field_type === 'BOOLEAN' ? (
-                    ({ true: 'Sí', false: 'No' })[fr.value] ?? fr.value
+                    booleanLabel(fr.value)
                   ) : (
                     fr.value
                   )}

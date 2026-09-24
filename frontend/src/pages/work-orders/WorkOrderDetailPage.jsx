@@ -24,7 +24,7 @@ import {
   useCompleteChecklist,
   useSetBlockCount,
 } from '../../api/checklists'
-import { getFieldType } from '../../constants/checklistFields'
+import { booleanLabel, booleanOptions, getFieldType } from '../../constants/checklistFields'
 import StatusBadge from '../../components/workOrders/StatusBadge'
 import PriorityBadge from '../../components/workOrders/PriorityBadge'
 import TransitionButton from '../../components/workOrders/TransitionButton'
@@ -1547,7 +1547,7 @@ function ChecklistFieldInput({ field, workOrderId, taskId, value, fieldResponse,
       {/* BOOLEAN */}
       {field.field_type === 'BOOLEAN' && (
         <div className="flex gap-2">
-          {['true', 'false'].map((v) => (
+          {booleanOptions(field).map((v) => (
             <button
               key={v}
               type="button"
@@ -1555,13 +1555,11 @@ function ChecklistFieldInput({ field, workOrderId, taskId, value, fieldResponse,
               onClick={() => onCommit(v)}
               className={`px-5 py-2 rounded-lg border text-sm font-medium transition-colors disabled:cursor-default ${
                 value === v
-                  ? v === 'true'
-                    ? 'bg-green-600 text-white border-green-600'
-                    : 'bg-red-500 text-white border-red-500'
+                  ? { true: 'bg-green-600 text-white border-green-600', false: 'bg-red-500 text-white border-red-500', na: 'bg-gray-500 text-white border-gray-500' }[v]
                   : 'border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
-              {v === 'true' ? 'Sí' : 'No'}
+              {booleanLabel(v)}
             </button>
           ))}
         </div>

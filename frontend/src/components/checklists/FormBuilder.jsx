@@ -15,6 +15,11 @@ function normalizeOptionsJson(field) {
     return typeof oj === 'object' && !Array.isArray(oj) && oj !== null ? oj : {}
   }
   if (ft.hasOptions) return Array.isArray(field.options_json) ? field.options_json : []
+  // Un Sí/No publicado antes del N/A trae []: sin N/A, como se publicó.
+  if (ft.value === 'BOOLEAN') {
+    const oj = field.options_json
+    return typeof oj === 'object' && !Array.isArray(oj) && oj !== null ? oj : {}
+  }
   return []
 }
 
@@ -51,7 +56,8 @@ export default function FormBuilder({
         group: '',
         is_required: false,
         sort_order: prev.length,
-        options_json: ft.hasMinMax ? {} : ft.hasOptions ? ['Opción 1'] : [],
+        // Un Sí/No nuevo permite N/A por defecto, como en Fracttal.
+        options_json: ft.hasMinMax ? {} : ft.hasOptions ? ['Opción 1'] : ft.value === 'BOOLEAN' ? { allow_na: true } : [],
         help_text: '',
         _expanded: true,
       },
@@ -325,6 +331,19 @@ function FieldCard({
               className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand/30"
             />
           </div>
+
+          {/* BOOLEAN: permite N/A */}
+          {field.field_type === 'BOOLEAN' && (
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={!!field.options_json?.allow_na}
+                disabled={readOnly}
+                onChange={(e) => onChange({ options_json: { ...field.options_json, allow_na: e.target.checked } })}
+              />
+              Permite N/A (no aplica)
+            </label>
+          )}
 
           {/* NUMBER / METER: range + unit */}
           {ft.hasMinMax && (

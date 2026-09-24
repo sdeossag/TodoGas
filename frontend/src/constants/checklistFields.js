@@ -13,6 +13,21 @@ export const FIELD_TYPES = [
   { value: 'SIGNATURE',    label: 'Firma digital',         icon: 'signature',  hasOptions: false, hasMinMax: false, hasUnit: false },
 ]
 
+// Sí/No/N/A (decisión del 2026-09-24): el N/A es una opción del Sí/No y el
+// campo guarda 'true', 'false' o 'na'.
+export function allowsNa(field) {
+  const o = field?.options_json
+  return field?.field_type === 'BOOLEAN' && !!o && !Array.isArray(o) && !!o.allow_na
+}
+
+export function booleanOptions(field) {
+  return allowsNa(field) ? ['true', 'false', 'na'] : ['true', 'false']
+}
+
+export function booleanLabel(value) {
+  return { true: 'Sí', false: 'No', na: 'N/A' }[value] ?? value
+}
+
 export function getFieldType(value) {
   return FIELD_TYPES.find((ft) => ft.value === value) ?? FIELD_TYPES[0]
 }

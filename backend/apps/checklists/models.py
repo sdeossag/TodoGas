@@ -166,6 +166,12 @@ class ChecklistField(models.Model):
             "apuntan a el."
         )
 
+    @property
+    def allows_na(self):
+        """Un Si/No con "Permite N/A" (decision del 2026-09-24): guarda "na"."""
+        opciones = self.options_json if isinstance(self.options_json, dict) else {}
+        return self.field_type == self.FieldType.BOOLEAN and bool(opciones.get("allow_na"))
+
     def __str__(self):
         return f"{self.version} → {self.label[:60]}"
 

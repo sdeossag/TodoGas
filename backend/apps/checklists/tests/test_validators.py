@@ -58,3 +58,35 @@ def test_text_accepts_any_value():
     field = make_field("TEXT")
     result = validate_field_value(field, "cualquier texto libre")
     assert result == {}
+
+
+# Si/No/N/A (decision del 2026-09-24): el N/A es una opcion del Si/No. Con
+# campos reales (sin guardar): allows_na es una propiedad del modelo.
+
+def si_no(options_json):
+    from apps.checklists.models import ChecklistField
+
+    return ChecklistField(field_type="BOOLEAN", options_json=options_json, label="Fuga")
+
+def test_boolean_con_na_acepta_na():
+    field = si_no({"allow_na": True})
+    assert field.allows_na
+    validate_field_value(field, "na")
+    validate_field_value(field, "false")
+
+
+def test_boolean_sin_na_lo_rechaza():
+    for opciones in ([], {}, {"allow_na": False}):
+        field = si_no(opciones)
+        assert not field.allows_na
+        with pytest.raises(ValueError, match="no admite N/A"):
+            validate_field_value(field, "na")
+
+
+def test_el_acta_imprime_na():
+    from types import SimpleNamespace
+
+    from apps.reports.generator import _valor
+
+    campo = si_no({"allow_na": True})
+    assert [_valor(SimpleNamespace(field=campo, value=v)) for v in ("true", "false", "na")] == ["Sí", "No", "N/A"]
