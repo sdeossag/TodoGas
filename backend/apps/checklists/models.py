@@ -258,6 +258,9 @@ class ChecklistFieldResponse(models.Model):
     # toma 1, la toma 2...). El mismo campo se responde una vez por toma.
     repetition = models.PositiveSmallIntegerField(default=0)
     answered_at = models.DateTimeField(default=timezone.now)
+    # Campo GPS: la direccion de las coordenadas, como el *LOCALIZACION de
+    # Fracttal. La pide el servidor a Google al llegar la respuesta.
+    geo_address = models.CharField(max_length=300, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

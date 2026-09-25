@@ -153,7 +153,7 @@ class ChecklistFieldResponseSerializer(serializers.ModelSerializer):
         model = ChecklistFieldResponse
         fields = [
             "id", "field", "field_label", "field_type", "repetition",
-            "value", "notes", "answered_at", "out_of_range",
+            "value", "notes", "answered_at", "out_of_range", "geo_address",
         ]
 
     def get_out_of_range(self, obj):
@@ -305,6 +305,9 @@ class ChecklistFieldResponseCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         response = self.context["response"]
         field = validated_data["field"]
+        anterior = ChecklistFieldResponse.objects.filter(
+            response=response, field=field, repetition=validated_data.get("repetition", 0),
+        ).values_list("value", flat=True).first()
         obj, _ = ChecklistFieldResponse.objects.update_or_create(
             response=response,
             field=field,
@@ -323,4 +326,15 @@ class ChecklistFieldResponseCreateSerializer(serializers.ModelSerializer):
 
         request = self.context.get("request")
         record_from_checklist(obj, getattr(request, "user", None))
+        # Un GPS nuevo o cambiado se convierte en direccion al confirmar: Google
+        # no frena la sincronizacion del telefono.
+        if field.field_type == "GPS" and obj.value != anterior:
+            from django.db import transaction
+
+            from .tasks import geocode_field_response
+
+            if obj.geo_address:
+                ChecklistFieldResponse.objects.filter(pk=obj.pk).update(geo_address="")
+                obj.geo_address = ""
+            transaction.on_commit(lambda: geocode_field_response.delay(str(obj.pk)))
         return obj

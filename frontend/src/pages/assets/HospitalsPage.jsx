@@ -10,10 +10,12 @@ import {
 import Icon from '../../components/ui/Icon'
 import { formatDate } from '../../utils/maintenance'
 import useModalDismiss from '../../hooks/useModalDismiss'
+import GoogleMap, { mapsDisponible } from '../../components/maps/GoogleMap'
 
 const EMPTY_FORM = {
   name: '', code: '', nit: '', city: '', department: '',
   address: '', contact_name: '', contact_phone: '', contact_email: '',
+  latitude: null, longitude: null,
 }
 
 function HospitalModal({ hospital, onClose }) {
@@ -29,6 +31,8 @@ function HospitalModal({ hospital, onClose }) {
     contact_name: hospital.contact_name ?? '',
     contact_phone: hospital.contact_phone ?? '',
     contact_email: hospital.contact_email ?? '',
+    latitude: hospital.latitude ?? null,
+    longitude: hospital.longitude ?? null,
   } : EMPTY_FORM)
   const [errors, setErrors] = useState({})
 
@@ -115,6 +119,28 @@ function HospitalModal({ hospital, onClose }) {
             <input value={form.address} onChange={(e) => set('address', e.target.value)}
               className={input()} placeholder="Calle 10 # 5-20" />
           </Field>
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-600">Ubicación en el mapa</p>
+            <GoogleMap editable buscar height={220}
+              lat={form.latitude} lng={form.longitude}
+              onChange={({ lat, lng, address }) => {
+                // 7 decimales (~1 cm), lo que guarda el servidor.
+                setForm((f) => ({
+                  ...f,
+                  latitude: Number(lat.toFixed(7)),
+                  longitude: Number(lng.toFixed(7)),
+                  ...(address && !f.address.trim() && { address }),
+                }))
+              }} />
+            {!mapsDisponible() && (
+              <p className="text-xs text-gray-500">
+                El mapa aparece cuando se configura la clave de Google Maps.
+              </p>
+            )}
+            {form.latitude !== null && (
+              <p className="text-xs text-gray-500 tabular-nums">Lat: {form.latitude} · Long: {form.longitude}</p>
+            )}
+          </div>
           <p className="text-xs font-semibold text-gray-500 pt-2">Contacto</p>
           <div className="grid grid-cols-3 gap-4">
             <Field label="Nombre" error={errors.contact_name}>

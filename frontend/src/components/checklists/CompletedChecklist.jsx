@@ -4,6 +4,7 @@ import Icon from '../ui/Icon'
 import useNetworkStore from '../../store/networkStore'
 import { countFor, isRepeatable, slotKey } from '../../utils/checklistSlots'
 import { booleanLabel } from '../../constants/checklistFields'
+import { UbicacionGps } from '../maps/GoogleMap'
 
 /**
  * Checklist cerrado, de solo lectura. Lo comparten el detalle de la OT y el
@@ -133,6 +134,8 @@ export default function CompletedChecklistView({ response }) {
                 >
                   {!fr?.value ? (
                     <span className="text-gray-500 italic">Sin respuesta</span>
+                  ) : field.field_type === 'GPS' ? (
+                    <UbicacionGps value={fr.value} address={fr.geo_address} answeredAt={fr.answered_at} />
                   ) : field.field_type === 'PHOTO' ? (
                     <FotoDelChecklist workOrderId={response.work_order} value={fr.value} />
                   ) : field.field_type === 'BOOLEAN' ? (

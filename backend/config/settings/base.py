@@ -160,6 +160,11 @@ DEFAULT_FROM_EMAIL = config(
     default="TodoGas CMMS <noreply@todogas.com.co>",
 )
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
+
+# Google Maps (decision del 2026-09-24): el servidor convierte el GPS del
+# checklist en direccion (Geocoding API) y pone un mapa pequeno en el acta
+# (Maps Static API). Sin clave, el acta sale con las coordenadas y nada falla.
+GOOGLE_MAPS_API_KEY = config("GOOGLE_MAPS_API_KEY", default="")
 BACKEND_URL = config("BACKEND_URL", default="http://localhost:8000")
 
 SIMPLE_JWT = {

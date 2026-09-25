@@ -51,10 +51,23 @@ def _valor(fr, corto=False):
     if fr.field.field_type == "BOOLEAN":
         # El campo guarda 'true'/'false'/'na': el acta no imprime eso.
         return {"true": "Sí", "false": "No", "na": "N/A"}.get(fr.value, fr.value)
+    if fr.field.field_type == "GPS" and fr.geo_address:
+        # Como el *LOCALIZACION de Fracttal: la direccion, y las coordenadas.
+        return fr.geo_address if corto else f"{fr.geo_address} ({fr.value})"
     return fr.value
 
 
-def _sections(respuesta):
+def _mapa(fr, opciones):
+    """El mapa pequeno de un campo GPS para el acta, si esta encendido."""
+    if fr.field.field_type != "GPS" or not (opciones or {}).get("checklist_mapa", True):
+        return ""
+    from apps.assets.geo import parse_latlng, static_map_data_uri
+
+    punto = parse_latlng(fr.value)
+    return static_map_data_uri(*punto) if punto else ""
+
+
+def _sections(respuesta, opciones=None):
     """
     El checklist de una tarea, por grupos, en el orden de sus respuestas.
 
@@ -73,7 +86,7 @@ def _sections(respuesta):
     for grupo, respuestas in por_grupo.items():
         if grupo not in repetibles:
             secciones.append({"name": grupo, "repeated": False, "rows": [
-                {"label": fr.field.label, "value": _valor(fr), "notes": fr.notes}
+                {"label": fr.field.label, "value": _valor(fr), "notes": fr.notes, "map": _mapa(fr, opciones)}
                 for fr in respuestas
             ]})
             continue
@@ -222,7 +235,7 @@ def _render(work_order, opciones):
             "task": t,
             "asset": t.asset,
             "checklist_response": respuestas.get(t.id),
-            "sections": _sections(respuestas.get(t.id)),
+            "sections": _sections(respuestas.get(t.id), opciones),
             "photos": fotos_por_tarea.get(t.id, []),
             "field_work": _trabajo_en_campo(
                 [respuestas[t.id]] if t.id in respuestas else [], [], []

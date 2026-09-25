@@ -30,6 +30,7 @@ CATALOGO = [
     ("activo_checklist", "Checklist", "Nombre y versión del checklist"),
     ("checklist_observaciones", "Checklist", "Observaciones de cada respuesta"),
     ("checklist_respondido", "Checklist", "Hora y técnico que respondió"),
+    ("checklist_mapa", "Checklist", "Mapa de la localización GPS"),
     ("hallazgos", "Hallazgos", "Hallazgos encontrados y reportados"),
     ("fotos_activo", "Fotos", "Fotos de cada activo"),
     ("fotos_visita", "Fotos", "Fotos generales de la visita"),
