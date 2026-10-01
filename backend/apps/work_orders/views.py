@@ -116,13 +116,33 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             qs = qs.filter(task_type=v)
         if v := params.get("priority"):
             qs = qs.filter(priority=v)
-        if v := params.get("asset_id"):
-            qs = qs.filter(tasks__asset_id=v)
+        # Un id mal formado no encuentra nada, en vez de un 500.
+        def _uuid(nombre):
+            v = params.get(nombre)
+            if not v:
+                return None
+            try:
+                return _uuid_mod.UUID(str(v))
+            except ValueError:
+                return False
+
+        if (v := _uuid("asset_id")) is not None:
+            qs = qs.filter(tasks__asset_id=v) if v else qs.none()
             via_tareas = True
-        if v := params.get("hospital_id"):
-            qs = qs.filter(hospital_id=v)
-        if v := params.get("assigned_to_id"):
-            qs = qs.filter(assigned_to_id=v)
+        if (v := _uuid("hospital_id")) is not None:
+            qs = qs.filter(hospital_id=v) if v else qs.none()
+        # Una ubicacion trae lo de todo lo que tiene dentro (el piso, sus
+        # servicios y salas), como el filtro de activos (audio2 03:53). Cuenta
+        # la ubicacion de la visita y la de cada activo: una visita puede
+        # cubrir varios pisos.
+        if (v := _uuid("node_id")) is not None:
+            from apps.assets.models import AssetNode
+
+            ids = AssetNode.subtree_ids(v) if v else []
+            qs = qs.filter(Q(location_id__in=ids) | Q(tasks__asset__node_id__in=ids))
+            via_tareas = True
+        if (v := _uuid("assigned_to_id")) is not None:
+            qs = qs.filter(assigned_to_id=v) if v else qs.none()
         if v := params.get("scheduled_date_from"):
             qs = qs.filter(scheduled_date__gte=v)
         if v := params.get("scheduled_date_to"):

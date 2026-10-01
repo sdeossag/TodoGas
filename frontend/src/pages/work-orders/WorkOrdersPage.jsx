@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import { useWorkOrders } from '../../api/workOrders'
+import { useAssets, useAssetTree, useHospitals } from '../../api/assets'
+import { flattenTree, indentedLabel } from '../../utils/locationTree'
 import StatusBadge from '../../components/workOrders/StatusBadge'
 import PriorityBadge from '../../components/workOrders/PriorityBadge'
 import Icon from '../../components/ui/Icon'
@@ -26,7 +28,37 @@ export default function WorkOrdersPage() {
   const [isOverdue, setIsOverdue] = useState(false)
   const [page, setPage] = useState(1)
 
+  // Hospital, ubicacion y activo (audio2 03:53). Viven en la URL para poder
+  // enlazar "las OT de este equipo" o "las de este piso" desde otras pantallas.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const hospital = searchParams.get('hospital_id') ?? ''
+  const node = searchParams.get('node_id') ?? ''
+  const asset = searchParams.get('asset_id') ?? ''
+
+  /** Cambiar uno limpia los que dependen de él: otro hospital, otros pisos y equipos. */
+  function setLugar(cambios) {
+    const next = new URLSearchParams(searchParams)
+    for (const [k, v] of Object.entries(cambios)) {
+      if (v) next.set(k, v)
+      else next.delete(k)
+    }
+    setSearchParams(next, { replace: true })
+    setPage(1)
+  }
+
+  const { data: hospitals = [] } = useHospitals()
+  const { data: tree = [] } = useAssetTree(hospital)
+  const nodos = useMemo(() => flattenTree(tree), [tree])
+  const { data: assets = [] } = useAssets(
+    { hospital_id: hospital, ...(node && { node_id: node, include_sublocations: true }) },
+    { enabled: !!hospital },
+  )
+  const hayLugar = !!(hospital || node || asset)
+
   const params = {
+    ...(hospital && { hospital_id: hospital }),
+    ...(node && { node_id: node }),
+    ...(asset && { asset_id: asset }),
     ...(statusFilter && { status: statusFilter }),
     ...(priorityFilter && { priority: priorityFilter }),
     ...(typeFilter && { task_type: typeFilter }),
@@ -118,6 +150,42 @@ export default function WorkOrdersPage() {
             />
             Solo vencidas
           </label>
+        </div>
+
+        <div className="flex flex-wrap gap-3 items-center mt-3 pt-3 border-t border-gray-100">
+          <select value={hospital} aria-label="Hospital"
+            onChange={(e) => setLugar({ hospital_id: e.target.value, node_id: '', asset_id: '' })}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none max-w-[14rem]">
+            <option value="">Todos los hospitales</option>
+            {hospitals.map((h) => (
+              <option key={h.id} value={h.id}>{h.name}{h.is_active ? '' : ' (inactivo)'}</option>
+            ))}
+          </select>
+
+          <select value={node} aria-label="Ubicación" disabled={!hospital}
+            title={hospital ? 'Incluye lo que tiene dentro' : 'Elige primero el hospital'}
+            onChange={(e) => setLugar({ node_id: e.target.value, asset_id: '' })}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none max-w-[14rem] disabled:bg-gray-50 disabled:text-gray-400">
+            <option value="">{hospital ? 'Todas las ubicaciones' : 'Ubicación'}</option>
+            {nodos.map((n) => <option key={n.id} value={n.id}>{indentedLabel(n.name, n.depth)}</option>)}
+          </select>
+
+          <select value={asset} aria-label="Activo" disabled={!hospital}
+            title={hospital ? '' : 'Elige primero el hospital'}
+            onChange={(e) => setLugar({ asset_id: e.target.value })}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none max-w-[16rem] disabled:bg-gray-50 disabled:text-gray-400">
+            <option value="">{hospital ? 'Todos los activos' : 'Activo'}</option>
+            {assets.map((a) => (
+              <option key={a.id} value={a.id}>{a.code} · {a.name}{a.node?.path ? ` — ${a.node.path}` : ''}</option>
+            ))}
+          </select>
+
+          {hayLugar && (
+            <button type="button" onClick={() => setLugar({ hospital_id: '', node_id: '', asset_id: '' })}
+              className="text-sm text-gray-500 hover:text-gray-700">
+              Quitar filtros de lugar
+            </button>
+          )}
         </div>
       </div>
 

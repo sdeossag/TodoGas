@@ -131,7 +131,7 @@ export default function AssetDetailPage() {
 
         <div className="p-6">
           {tab === 0 && <InfoTab asset={asset} />}
-          {tab === 1 && <TasksTab assetId={asset.id} />}
+          {tab === 1 && <TasksTab assetId={asset.id} hospitalId={asset.hospital?.id} />}
           {tab === 2 && <MetersPanel assetId={asset.id} />}
           {tab === 3 && <CustomFieldsTab asset={asset} />}
         </div>
@@ -286,7 +286,7 @@ function CustomFieldsTab({ asset }) {
   )
 }
 
-function TasksTab({ assetId }) {
+function TasksTab({ assetId, hospitalId }) {
   const { data, isLoading, isError } = useAssetTasks(assetId)
   const download = useReportDownload()
 
@@ -347,7 +347,12 @@ function TasksTab({ assetId }) {
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold text-gray-600 mb-1">Historial</h3>
+        <div className="flex items-baseline justify-between gap-3 mb-1">
+          <h3 className="text-sm font-semibold text-gray-600">Historial</h3>
+          <Link to={`/ordenes?hospital_id=${hospitalId}&asset_id=${assetId}`} className="text-xs text-brand hover:underline">
+            Ver todas sus OT
+          </Link>
+        </div>
         <p className="text-xs text-gray-500 mb-3">
           Calculada: la que puso la frecuencia. Programada: la que quedó tras reprogramar. Realización: cuando se cerró.
         </p>
