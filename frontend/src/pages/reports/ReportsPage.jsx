@@ -120,8 +120,15 @@ export default function ReportsPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [appliedFilters, setAppliedFilters] = useState({})
+  // Las actas de un hospital (audio3 07:12). Se aplica al elegirlo.
+  const [hospital, setHospital] = useState('')
+  const { data: hospitals = [] } = useHospitals()
+  const hospitalList = Array.isArray(hospitals) ? hospitals : hospitals?.results ?? []
 
-  const { data: reports = [], isLoading, isError } = useReports(appliedFilters)
+  const { data: reports = [], isLoading, isError } = useReports({
+    ...appliedFilters,
+    ...(hospital && { hospital_id: hospital }),
+  })
   const downloadMut = useReportDownload()
 
   function handleApply(e) {
@@ -134,6 +141,7 @@ export default function ReportsPage() {
   }
 
   function handleClear() {
+    setHospital('')
     setWoNumber('')
     setDateFrom('')
     setDateTo('')
@@ -155,6 +163,21 @@ export default function ReportsPage() {
         className="bg-white rounded-xl border border-gray-200 shadow-card p-4"
       >
         <div className="flex flex-wrap gap-3 items-end">
+          {hospitalList.length > 1 && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Hospital</label>
+              <select
+                value={hospital}
+                onChange={(e) => setHospital(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 w-56"
+              >
+                <option value="">Todos</option>
+                {hospitalList.map((h) => (
+                  <option key={h.id} value={h.id}>{h.name}{h.is_active ? '' : ' (inactivo)'}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-xs text-gray-500 mb-1">N° OT</label>
             <input
@@ -190,7 +213,7 @@ export default function ReportsPage() {
             >
               Filtrar
             </button>
-            {Object.keys(appliedFilters).length > 0 && (
+            {(Object.keys(appliedFilters).length > 0 || hospital) && (
               <button
                 type="button"
                 onClick={handleClear}

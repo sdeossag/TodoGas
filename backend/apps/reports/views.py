@@ -1,5 +1,8 @@
+import uuid
+
 from django.core.files.storage import default_storage
 from django.http import HttpResponse
+from django.utils.dateparse import parse_date
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -38,25 +41,36 @@ class GeneratedReportViewSet(
         else:
             qs = qs.none()
 
-        wo_id = self.request.query_params.get("work_order")
-        if wo_id:
-            qs = qs.filter(work_order_id=wo_id)
+        # Un valor mal formado no encuentra nada, en vez de un 500.
+        def _uuid(nombre):
+            v = self.request.query_params.get(nombre)
+            if not v:
+                return None
+            try:
+                return uuid.UUID(str(v))
+            except ValueError:
+                return False
 
-        hospital_id = self.request.query_params.get("hospital_id")
-        if hospital_id:
-            qs = qs.filter(work_order__hospital_id=hospital_id)
+        if (wo_id := _uuid("work_order")) is not None:
+            qs = qs.filter(work_order_id=wo_id) if wo_id else qs.none()
 
-        date_from = self.request.query_params.get("date_from")
-        if date_from:
-            qs = qs.filter(generated_at__date__gte=date_from)
+        # Las actas de un hospital (audio3 07:12).
+        if (hospital_id := _uuid("hospital_id")) is not None:
+            qs = qs.filter(work_order__hospital_id=hospital_id) if hospital_id else qs.none()
 
-        date_to = self.request.query_params.get("date_to")
-        if date_to:
-            qs = qs.filter(generated_at__date__lte=date_to)
+        for nombre, lookup in (("date_from", "gte"), ("date_to", "lte")):
+            if v := self.request.query_params.get(nombre):
+                try:
+                    fecha = parse_date(v)
+                except ValueError:
+                    fecha = None
+                qs = qs.filter(**{f"generated_at__date__{lookup}": fecha}) if fecha else qs.none()
 
-        wo_number = self.request.query_params.get("wo_number")
+        wo_number = self.request.query_params.get("wo_number", "").strip()
         if wo_number:
-            qs = qs.filter(work_order__wo_number=wo_number)
+            # Acepta "42" y tambien el codigo completo "OT-2026-00042".
+            digitos = wo_number.rsplit("-", 1)[-1]
+            qs = qs.filter(work_order__wo_number=int(digitos)) if digitos.isdigit() else qs.none()
 
         return qs
 
