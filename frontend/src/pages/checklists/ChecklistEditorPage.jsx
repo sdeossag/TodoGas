@@ -166,21 +166,22 @@ export default function ChecklistEditorPage() {
       </div>
 
       {/* Content */}
-      {tab === 0 && (
-        <>
-          <RepeatableGroups
-            fields={displayFields}
-            value={repeatableGroups}
-            onChange={setRepeatable}
-          />
-          <FormBuilder
-            key={currentVersion?.id ?? 'empty'}
-            initialFields={currentFields}
-            onFieldsChange={handleFieldsChange}
-            readOnly={false}
-          />
-        </>
-      )}
+      {/* El editor se oculta, no se desmonta: al volver de la vista previa se
+          remontaba con la versión publicada y borraba lo no publicado
+          (audio2 25:48, "se recargó, se borró la localización"). */}
+      <div hidden={tab !== 0} className="space-y-4">
+        <RepeatableGroups
+          fields={displayFields}
+          value={repeatableGroups}
+          onChange={setRepeatable}
+        />
+        <FormBuilder
+          key={currentVersion?.id ?? 'empty'}
+          initialFields={currentFields}
+          onFieldsChange={handleFieldsChange}
+          readOnly={false}
+        />
+      </div>
       {tab === 1 && <ChecklistPreview fields={displayFields} repeatableGroups={repeatableGroups} />}
       {tab === 2 && <VersionHistory template={template} />}
 
