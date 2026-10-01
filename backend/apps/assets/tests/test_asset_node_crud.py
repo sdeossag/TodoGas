@@ -268,3 +268,37 @@ def test_parent_is_optional_on_create(hospital, admin_user):
     )
 
     assert resp.status_code == status.HTTP_201_CREATED
+
+
+# Mapa por ubicacion, como la ficha de ubicacion de Fracttal (2026-09-25).
+
+
+def test_ubicacion_con_direccion_y_punto(admin_user, hospital):
+    c = auth_client(admin_user)
+    r = c.post(URL, payload(hospital, address="Cra. 4 # 12-30",
+                            latitude="4.4378870", longitude="-75.2200340"), format="json")
+    assert r.status_code == status.HTTP_201_CREATED, r.json()
+    nodo = AssetNode.objects.get(pk=node_id(r))
+    assert nodo.address == "Cra. 4 # 12-30"
+    assert str(nodo.latitude) == "4.4378870"
+
+    lista = c.get(URL, {"hospital_id": str(hospital.id)}).json()
+    fila = (lista["results"] if isinstance(lista, dict) else lista)[0]
+    assert fila["address"] == "Cra. 4 # 12-30"
+    assert fila["longitude"] == "-75.2200340"
+
+    r = c.patch(f"{URL}{nodo.id}/", {"latitude": None, "longitude": None}, format="json")
+    assert r.status_code == status.HTTP_200_OK, r.json()
+    nodo.refresh_from_db()
+    assert nodo.latitude is None and nodo.longitude is None
+
+
+def test_el_punto_necesita_latitud_y_longitud(admin_user, hospital):
+    c = auth_client(admin_user)
+    r = c.post(URL, payload(hospital, latitude="4.4"), format="json")
+    assert r.status_code == status.HTTP_400_BAD_REQUEST
+    assert "latitude" in r.json()
+
+    r = c.post(URL, payload(hospital, latitude="91", longitude="0"), format="json")
+    assert r.status_code == status.HTTP_400_BAD_REQUEST
+    assert "latitude" in r.json()

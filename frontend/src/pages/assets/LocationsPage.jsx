@@ -7,6 +7,7 @@ import {
   useHospital,
   useUpdateAssetNode,
 } from '../../api/assets'
+import GoogleMap, { enlaceGoogleMaps, mapsDisponible } from '../../components/maps/GoogleMap'
 import Icon from '../../components/ui/Icon'
 import Spinner from '../../components/ui/Spinner'
 import useModalDismiss from '../../hooks/useModalDismiss'
@@ -232,6 +233,7 @@ export default function LocationsPage() {
         <LocationModal
           hospitalId={hospitalId}
           hospitalName={hospital.name}
+          hospital={hospital}
           roots={roots}
           byId={byId}
           initial={modal}
@@ -299,6 +301,13 @@ function LocationRow({
             title={nodeTypeLabel(node.node_type)} />
           <span className="font-medium text-gray-800 truncate">{node.name}</span>
           {node.code && <span className="font-mono text-xs text-gray-400 flex-shrink-0">{node.code}</span>}
+          {tienePunto(node) && (
+            <a href={enlaceGoogleMaps(node.latitude, node.longitude)} target="_blank" rel="noreferrer"
+              title={node.address || 'Ver en Google Maps'} aria-label={`Ver ${node.name} en Google Maps`}
+              className="text-gray-400 hover:text-brand flex-shrink-0">
+              <Icon name="area" className="w-3.5 h-3.5" />
+            </a>
+          )}
           {!node.is_active && (
             <span className="px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500 flex-shrink-0">Inactiva</span>
           )}
@@ -377,7 +386,7 @@ function EmptyState({ onCreate }) {
 
 // ── Crear / editar ────────────────────────────────────────────────────────────
 
-function LocationModal({ hospitalId, hospitalName, roots, byId, initial, onCreated, onClose }) {
+function LocationModal({ hospitalId, hospitalName, hospital, roots, byId, initial, onCreated, onClose }) {
   useModalDismiss(onClose)
   const isEdit = initial.mode === 'edit'
   const editing = isEdit ? initial.node : null
@@ -389,12 +398,18 @@ function LocationModal({ hospitalId, hospitalName, roots, byId, initial, onCreat
     parent: editing.parent?.id ?? '',
     code: editing.code ?? '',
     sort_order: editing.sort_order ?? 0,
+    address: editing.address ?? '',
+    latitude: editing.latitude ?? null,
+    longitude: editing.longitude ?? null,
   } : {
     name: '',
     node_type: suggestedChildType(initial.parent?.node_type),
     parent: initial.parent?.id ?? '',
     code: '',
     sort_order: 0,
+    address: '',
+    latitude: null,
+    longitude: null,
   }))
   const [errors, setErrors] = useState({})
   const [lastCreated, setLastCreated] = useState(null)
@@ -411,6 +426,17 @@ function LocationModal({ hospitalId, hospitalName, roots, byId, initial, onCreat
   }, [roots, byId, editing])
 
   const parentNode = form.parent ? byId.get(form.parent) : null
+
+  // Sin punto propio, el mapa arranca en la ubicación de arriba más cercana que
+  // tenga uno (el bloque de un piso nuevo) o en el hospital.
+  const centroHeredado = useMemo(() => {
+    let actual = parentNode
+    while (actual) {
+      if (tienePunto(actual)) return { lat: actual.latitude, lng: actual.longitude }
+      actual = actual.parent ? byId.get(actual.parent.id) : null
+    }
+    return tienePunto(hospital) ? { lat: hospital.latitude, lng: hospital.longitude } : null
+  }, [parentNode, byId, hospital])
   const preview = [
     hospitalName,
     ...(parentNode ? parentNode.path.split('/') : []),
@@ -433,6 +459,9 @@ function LocationModal({ hospitalId, hospitalName, roots, byId, initial, onCreat
       parent: form.parent || null,
       code: form.code.trim(),
       sort_order: Number(form.sort_order) || 0,
+      address: form.address.trim(),
+      latitude: form.latitude,
+      longitude: form.longitude,
     }
     try {
       if (isEdit) {
@@ -448,7 +477,7 @@ function LocationModal({ hospitalId, hospitalName, roots, byId, initial, onCreat
       }
       // Alta en serie: mismo padre y mismo tipo, campos de texto en blanco.
       setLastCreated(created.name)
-      setForm((f) => ({ ...f, name: '', code: '' }))
+      setForm((f) => ({ ...f, name: '', code: '', address: '', latitude: null, longitude: null }))
       nameRef.current?.focus()
     } catch (err) {
       setErrors(fieldErrors(err))
@@ -517,6 +546,43 @@ function LocationModal({ hospitalId, hospitalName, roots, byId, initial, onCreat
               <input type="number" value={form.sort_order} onChange={(e) => set('sort_order', e.target.value)}
                 className={input(errors.sort_order)} />
             </Field>
+          </div>
+
+          <Field label="Dirección" error={errors.address}
+            hint="Opcional. Para el bloque o sede que queda en otra calle.">
+            <input value={form.address} onChange={(e) => set('address', e.target.value)}
+              className={input(errors.address)} placeholder="Cra. 4 # 12-30" />
+          </Field>
+
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-600">Ubicación en el mapa</p>
+            <GoogleMap editable buscar height={220} centro={centroHeredado}
+              lat={form.latitude} lng={form.longitude}
+              onChange={({ lat, lng, address }) => {
+                // 7 decimales (~1 cm), lo que guarda el servidor.
+                setForm((f) => ({
+                  ...f,
+                  latitude: Number(lat.toFixed(7)),
+                  longitude: Number(lng.toFixed(7)),
+                  ...(address && !f.address.trim() && { address }),
+                }))
+                setErrors((e) => ({ ...e, latitude: undefined }))
+              }} />
+            {!mapsDisponible() && (
+              <p className="text-xs text-gray-500">
+                El mapa aparece cuando se configura la clave de Google Maps.
+              </p>
+            )}
+            {form.latitude !== null && (
+              <p className="text-xs text-gray-500 tabular-nums flex items-center gap-2">
+                Lat: {form.latitude} · Long: {form.longitude}
+                <button type="button" className="text-brand hover:underline"
+                  onClick={() => setForm((f) => ({ ...f, latitude: null, longitude: null }))}>
+                  Quitar punto
+                </button>
+              </p>
+            )}
+            {errors.latitude && <p className="text-xs text-red-500">{errors.latitude}</p>}
           </div>
 
           <p className="text-xs text-gray-500">
@@ -636,6 +702,10 @@ function input(hasError) {
   return `input-field ${hasError ? 'border-red-400' : ''}`
 }
 
+function tienePunto(n) {
+  return n?.latitude !== null && n?.latitude !== undefined && n?.longitude !== null && n?.longitude !== undefined
+}
+
 // Sin tildes ni mayúsculas: "urgencias" encuentra "Urgencias" y "uci" a "UCI".
 function normalize(text) {
   return (text ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
@@ -660,7 +730,7 @@ function fieldErrors(err) {
     out[key] = Array.isArray(value) ? value.join(' ') : String(value)
   }
   // Errores sin campo visible en el formulario (hospital, detail) van abajo.
-  const shown = new Set(['name', 'node_type', 'parent', 'code', 'sort_order', 'non_field_errors'])
+  const shown = new Set(['name', 'node_type', 'parent', 'code', 'sort_order', 'address', 'latitude', 'non_field_errors'])
   const rest = Object.entries(out).filter(([k]) => !shown.has(k)).map(([, v]) => v)
   if (rest.length && !out.non_field_errors) out.non_field_errors = rest.join(' ')
   return out

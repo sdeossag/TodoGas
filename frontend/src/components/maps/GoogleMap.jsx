@@ -49,9 +49,10 @@ export function parseLatLng(texto) {
 /**
  * Mapa con un punto. `editable`: un clic o arrastrar el pin cambia el punto
  * (onChange({lat, lng})), y `buscar` agrega el cuadro "Busca en el mapa".
- * Sin punto se centra en Colombia.
+ * Sin punto se centra en `centro` ({lat, lng}, p. ej. el hospital de un piso
+ * nuevo) o, si tampoco hay, en Colombia.
  */
-export default function GoogleMap({ lat, lng, height = 260, editable = false, buscar = false, onChange, zoom = 17 }) {
+export default function GoogleMap({ lat, lng, height = 260, editable = false, buscar = false, onChange, zoom = 17, centro = null }) {
   const div = useRef(null)
   const mapa = useRef(null)
   const pin = useRef(null)
@@ -66,15 +67,16 @@ export default function GoogleMap({ lat, lng, height = 260, editable = false, bu
     let vivo = true
     cargarGoogleMaps().then((maps) => {
       if (!vivo || !div.current) return
-      const centro = tienePunto ? { lat: Number(lat), lng: Number(lng) } : { lat: 4.6, lng: -74.1 }
+      const inicio = tienePunto ? { lat: Number(lat), lng: Number(lng) }
+        : centro ? { lat: Number(centro.lat), lng: Number(centro.lng) } : { lat: 4.6, lng: -74.1 }
       mapa.current = new maps.Map(div.current, {
-        center: centro,
-        zoom: tienePunto ? zoom : 5,
+        center: inicio,
+        zoom: tienePunto || centro ? zoom : 5,
         mapTypeControl: true,
         streetViewControl: true,
         fullscreenControl: true,
       })
-      pin.current = new maps.Marker({ map: mapa.current, position: tienePunto ? centro : null, draggable: editable })
+      pin.current = new maps.Marker({ map: mapa.current, position: tienePunto ? inicio : null, draggable: editable })
       if (editable) {
         const mover = (pos) => onChange?.({ lat: pos.lat(), lng: pos.lng() })
         mapa.current.addListener('click', (e) => { pin.current.setPosition(e.latLng); mover(e.latLng) })
@@ -88,7 +90,11 @@ export default function GoogleMap({ lat, lng, height = 260, editable = false, bu
   }, [])
 
   useEffect(() => {
-    if (estado !== 'listo' || !tienePunto) return
+    if (estado !== 'listo') return
+    if (!tienePunto) {
+      pin.current.setPosition(null)
+      return
+    }
     const pos = { lat: Number(lat), lng: Number(lng) }
     pin.current.setPosition(pos)
     mapa.current.panTo(pos)

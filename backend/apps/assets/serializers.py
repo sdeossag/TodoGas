@@ -55,6 +55,7 @@ class AssetNodeSerializer(serializers.ModelSerializer):
         fields = [
             "id", "hospital", "parent", "name", "node_type", "code",
             "path", "sort_order", "is_active", "children_count", "asset_count",
+            "address", "latitude", "longitude",
         ]
 
     def get_hospital(self, obj):
@@ -99,7 +100,7 @@ class AssetNodeCreateUpdateSerializer(ScopedFieldsMixin, serializers.ModelSerial
         model = AssetNode
         fields = [
             "id", "hospital", "parent", "name", "node_type", "code",
-            "sort_order", "is_active",
+            "sort_order", "is_active", "address", "latitude", "longitude",
         ]
         read_only_fields = ["id"]
         # Sin el UniqueTogetherValidator que DRF deriva de la restriccion unica:
@@ -115,6 +116,15 @@ class AssetNodeCreateUpdateSerializer(ScopedFieldsMixin, serializers.ModelSerial
         return getattr(self.instance, campo, None)
 
     def validate(self, attrs):
+        lat = attrs.get("latitude", getattr(self.instance, "latitude", None))
+        lng = attrs.get("longitude", getattr(self.instance, "longitude", None))
+        if (lat is None) != (lng is None):
+            raise serializers.ValidationError(
+                {"latitude": "El punto del mapa necesita latitud y longitud."}
+            )
+        if lat is not None and not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            raise serializers.ValidationError({"latitude": "Esas coordenadas no existen."})
+
         hospital = self._hospital_de(attrs, "hospital")
         parent = self._hospital_de(attrs, "parent")
         if parent is None and scope.needs_node(self.context):

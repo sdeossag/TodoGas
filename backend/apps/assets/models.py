@@ -77,6 +77,11 @@ class AssetNode(models.Model):
         help_text="Ruta materializada auto-generada. No editar manualmente."
     )
     sort_order = models.IntegerField(default=0)
+    # Como la ficha de ubicacion de Fracttal: cada bloque o piso puede tener su
+    # direccion y su punto en el mapa (un hospital con sedes en varias calles).
+    address = models.CharField(max_length=255, blank=True, default="")
+    latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
