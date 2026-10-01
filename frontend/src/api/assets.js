@@ -175,6 +175,9 @@ export function useDecommissionAsset(id) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['assets', id] })
       qc.invalidateQueries({ queryKey: ['assets'] })
+      // Sus pendientes quedan anuladas: salen de Tareas pendientes y del calendario.
+      qc.invalidateQueries({ queryKey: ['asset-tasks', id] })
+      qc.invalidateQueries({ queryKey: ['tasks'] })
     },
   })
 }

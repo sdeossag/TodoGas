@@ -361,9 +361,17 @@ class AssetCreateUpdateSerializer(ScopedFieldsMixin, serializers.ModelSerializer
     def update(self, instance, validated_data):
         sentinel = object()
         plan = validated_data.pop("plan", sentinel)
+        antes = instance.status
         asset = super().update(instance, validated_data)
         if plan is not sentinel:
             _set_plan(asset, plan, self.context)
+        # El estado tambien se cambia desde el formulario: dar de baja por ahi
+        # anula sus pendientes igual que el boton, y volver a activo las reabre.
+        if asset.status != antes:
+            from apps.maintenance.services import asset_status_changed
+
+            request = self.context.get("request")
+            asset_status_changed(asset, antes, getattr(request, "user", None))
         return asset
 
     def validate_code(self, value):

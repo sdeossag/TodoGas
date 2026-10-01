@@ -363,10 +363,18 @@ class AssetViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="decommission", permission_classes=[IsAdmin])
     def decommission(self, request, pk=None):
+        """
+        Da de baja el equipo: sus pendientes se anulan con nota y se avisa de
+        las que ya estan en una OT abierta (maintenance.services.asset_status_changed).
+        """
+        from apps.maintenance.services import asset_status_changed
+
         asset = self.get_object()
+        antes = asset.status
         asset.status = Asset.Status.DECOMMISSIONED
-        asset.save(update_fields=["status"])
-        return Response({"id": str(asset.id), "status": asset.status})
+        asset.save(update_fields=["status", "updated_at"])
+        efecto = asset_status_changed(asset, antes, request.user)
+        return Response({"id": str(asset.id), "status": asset.status, **efecto})
 
 
 class AssetCustomFieldViewSet(viewsets.ModelViewSet):

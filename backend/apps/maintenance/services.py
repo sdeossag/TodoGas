@@ -309,6 +309,49 @@ def set_asset_plan(asset, new_plan, created_by=None):
     return heredada
 
 
+BAJA_NOTE = "El activo se dio de baja."
+
+
+@transaction.atomic
+def asset_status_changed(asset, before, created_by=None):
+    """
+    Lo que le pasa a las tareas cuando cambia el estado del equipo (decision del
+    2026-10-01, audio2 11:04).
+
+    - Dado de baja: sus pendientes se anulan con nota, no se borran. Las que ya
+      estan en una OT abierta se dejan (puede que el tecnico este trabajando, o
+      que la visita sea para retirarlo) y se avisan; al cerrarse esa OT no se
+      genera la siguiente, porque can_generate exige el equipo activo.
+    - Fuera de servicio: no se toca nada; puede que lo esten reparando.
+    - De vuelta a activo: se reabren las pendientes de su protocolo, con la
+      fecha que toque por su ultimo cierre.
+
+    Devuelve {"cancelled": n, "reopened": n, "in_work_orders": ["OT-...", ...]}.
+    """
+    from apps.assets.models import Asset
+
+    resultado = {"cancelled": 0, "reopened": 0, "in_work_orders": []}
+    if asset.status == before:
+        return resultado
+
+    if asset.status == Asset.Status.DECOMMISSIONED:
+        for tarea in Task.objects.filter(asset=asset, status=Task.Status.PENDING):
+            _cancel(tarea, BAJA_NOTE)
+            resultado["cancelled"] += 1
+        en_ots = (
+            Task.objects.filter(asset=asset, status=Task.Status.SCHEDULED, work_order__isnull=False)
+            .select_related("work_order")
+            .order_by("work_order__wo_number")
+        )
+        resultado["in_work_orders"] = sorted({t.work_order.wo_code for t in en_ots})
+
+    if asset.status == Asset.Status.ACTIVE and asset.plan_id:
+        for plan_task in asset.plan.tasks.filter(is_active=True, trigger=PlanTask.Trigger.DATE):
+            _, creada = ensure_open_task(plan_task, asset, created_by=created_by)
+            resultado["reopened"] += int(creada)
+    return resultado
+
+
 def assign_plan_to_assets(plan, assets, created_by=None):
     """
     Deja exactamente `assets` con este plan: asigna los nuevos y quita los que

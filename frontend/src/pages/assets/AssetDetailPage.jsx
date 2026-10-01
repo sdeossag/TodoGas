@@ -35,16 +35,26 @@ export default function AssetDetailPage() {
 
   const [tab, setTab] = useState(0)
   const [confirmDecom, setConfirmDecom] = useState(false)
+  // Lo que paso con sus tareas: cuantas se anularon y en que OT quedan otras.
+  const [resultadoBaja, setResultadoBaja] = useState(null)
 
-  const closeDecomModal = useCallback(() => setConfirmDecom(false), [])
+  const closeDecomModal = useCallback(() => { setConfirmDecom(false); setResultadoBaja(null) }, [])
   useModalDismiss(confirmDecom ? closeDecomModal : null)
 
   const { data: asset, isLoading, isError } = useAsset(id)
   const decommissionMut = useDecommissionAsset(id)
 
   async function handleDecommission() {
-    await decommissionMut.mutateAsync()
+    try {
+      setResultadoBaja(await decommissionMut.mutateAsync())
+    } catch {
+      // el error se muestra en el modal
+    }
+  }
+
+  function cerrarBaja() {
     setConfirmDecom(false)
+    setResultadoBaja(null)
   }
 
   if (isLoading) {
@@ -141,23 +151,62 @@ export default function AssetDetailPage() {
       {confirmDecom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-[2px]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
-            <h3 className="text-lg font-semibold text-gray-800">Confirmar baja del activo</h3>
-            <p className="text-sm text-gray-600">
-              Esta acción marca el activo como <strong>dado de baja</strong>. No podrá recibir nuevas
-              órdenes de trabajo. El historial se conserva.
-            </p>
-            <p className="text-sm text-gray-600">¿Confirmar?</p>
-            <div className="flex justify-end gap-3 pt-2">
-              <button onClick={() => setConfirmDecom(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-                Cancelar
-              </button>
-              <button onClick={handleDecommission} disabled={decommissionMut.isPending}
-                className="px-5 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
-                {decommissionMut.isPending && <Spinner />}
-                Dar de baja
-              </button>
-            </div>
+            {resultadoBaja ? (
+              <>
+                <h3 className="text-lg font-semibold text-gray-800">Activo dado de baja</h3>
+                <div className="text-sm text-gray-600 space-y-2">
+                  <p>
+                    {resultadoBaja.cancelled === 1
+                      ? 'Se anuló 1 tarea pendiente. Queda en su historial como cancelada.'
+                      : resultadoBaja.cancelled > 1
+                        ? `Se anularon ${resultadoBaja.cancelled} tareas pendientes. Quedan en su historial como canceladas.`
+                        : 'No tenía tareas pendientes.'}
+                  </p>
+                  {resultadoBaja.in_work_orders?.length > 0 && (
+                    <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      Sigue en {resultadoBaja.in_work_orders.join(', ')}. Esas tareas no se tocaron:
+                      ciérralas o quítalo de la OT si ya no va. Al cerrarse no se programa la siguiente.
+                    </p>
+                  )}
+                </div>
+                <div className="flex justify-end pt-2">
+                  <button onClick={cerrarBaja} className="px-5 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-light">
+                    Entendido
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-gray-800">Confirmar baja del activo</h3>
+                <div className="text-sm text-gray-600 space-y-2">
+                  <p>
+                    El activo queda <strong>dado de baja</strong>: no se le programan más tareas ni
+                    puede entrar en nuevas órdenes de trabajo.
+                  </p>
+                  <p>
+                    Sus tareas pendientes se anulan con la nota «El activo se dio de baja». Nada se
+                    borra: el historial y las actas se conservan. Si vuelve a estar activo, su
+                    protocolo se reprograma.
+                  </p>
+                </div>
+                {decommissionMut.isError && (
+                  <p className="text-sm text-red-600">
+                    {decommissionMut.error?.response?.data?.detail ?? 'No se pudo dar de baja.'}
+                  </p>
+                )}
+                <div className="flex justify-end gap-3 pt-2">
+                  <button onClick={() => setConfirmDecom(false)}
+                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+                    Cancelar
+                  </button>
+                  <button onClick={handleDecommission} disabled={decommissionMut.isPending}
+                    className="px-5 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
+                    {decommissionMut.isPending && <Spinner />}
+                    Dar de baja
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
