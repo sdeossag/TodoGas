@@ -11,6 +11,15 @@ export function useWorkOrderPhotos(workOrderId) {
   })
 }
 
+/** Corregir una foto: su descripción, u ocultarla del acta (no se borra). */
+export function useUpdatePhoto(workOrderId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }) => client.patch(`/api/evidence/photos/${id}/`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['photos', workOrderId] }),
+  })
+}
+
 export function useUploadPhoto() {
   const qc = useQueryClient()
   return useMutation({

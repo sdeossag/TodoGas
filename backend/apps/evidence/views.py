@@ -1,5 +1,6 @@
 import uuid
 
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,6 +14,7 @@ from .models import Photo, Signature
 from .serializers import (
     PhotoCreateSerializer,
     PhotoSerializer,
+    PhotoUpdateSerializer,
     SignatureCreateSerializer,
     SignatureSerializer,
 )
@@ -37,12 +39,28 @@ def _can_read_wo(user, wo):
 
 
 def _can_write_evidence(user, wo):
-    """Solo ADMIN o TEC asignado pueden agregar evidencia."""
+    """
+    Quien puede agregar evidencia: el administrador, el asignado (tecnico o
+    supervisor que ejecuta la OT) y, para corregir una OT en revision, el
+    supervisor que la ve.
+    """
     if user.role == User.Role.ADMIN:
         return True
-    if user.role == User.Role.TEC:
-        return wo.assigned_to_id == user.id
+    if user.role in (User.Role.TEC, User.Role.SUP) and wo.assigned_to_id == user.id:
+        return True
+    if user.role == User.Role.SUP:
+        return wo.status == WorkOrder.Status.IN_REVIEW and scope.can_see_work_order(user, wo)
     return False
+
+
+def _corrige(user, wo):
+    """Administrador o supervisor corrigiendo una OT en revision (2026-10-01)."""
+    return wo.status == WorkOrder.Status.IN_REVIEW and user.role in (User.Role.ADMIN, User.Role.SUP)
+
+
+def _acepta_fotos(user, wo):
+    """En proceso, quien la ejecuta; en revision, quien la corrige."""
+    return wo.status == WorkOrder.Status.IN_PROGRESS or _corrige(user, wo)
 
 
 def _get_wo_or_error(work_order_id):
@@ -77,7 +95,7 @@ def _foto_ya_subida(offline_uuid):
 
 class PhotoViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def list(self, request, *args, **kwargs):
         wo, err = _get_wo_or_error(request.query_params.get("work_order"))
@@ -85,7 +103,12 @@ class PhotoViewSet(viewsets.GenericViewSet):
             return err
         if not _can_read_wo(request.user, wo):
             return Response(status=status.HTTP_403_FORBIDDEN)
-        photos = Photo.objects.filter(work_order=wo).select_related("uploaded_by", "task__asset").order_by("taken_at")
+        photos = Photo.objects.filter(work_order=wo).select_related(
+            "uploaded_by", "task__asset", "hidden_by"
+        ).order_by("taken_at")
+        # El hospital ve lo mismo que el acta: sin las fotos ocultas.
+        if request.user.role == User.Role.CLI:
+            photos = photos.filter(hidden=False)
         return Response(PhotoSerializer(photos, many=True, context={"request": request}).data)
 
     def create(self, request, *args, **kwargs):
@@ -112,9 +135,10 @@ class PhotoViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_200_OK,
             )
 
-        if wo.status != WorkOrder.Status.IN_PROGRESS:
+        if not _acepta_fotos(request.user, wo):
             return Response(
-                {"detail": "Solo se puede agregar evidencia a OTs en estado IN_PROGRESS."},
+                {"detail": "Solo se puede agregar evidencia a una OT en proceso, "
+                           "o en revisión para corregirla."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -122,12 +146,15 @@ class PhotoViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         photo = serializer.save(uploaded_by=request.user)
 
+        cambios = {"work_order": str(wo.id), "caption": photo.caption}
+        if wo.status == WorkOrder.Status.IN_REVIEW:
+            cambios["correccion"] = True
         AuditLog.objects.create(
             user=request.user,
             action=AuditLog.Action.CREATE,
             entity_type="Photo",
             entity_id=photo.id,
-            changes={"work_order": str(wo.id), "caption": photo.caption},
+            changes=cambios,
             ip_address=_get_client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
@@ -136,6 +163,53 @@ class PhotoViewSet(viewsets.GenericViewSet):
             PhotoSerializer(photo, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+    def partial_update(self, request, pk=None):
+        """
+        Corregir una foto: cambiar su descripcion u ocultarla del acta. No hay
+        borrado: la foto sigue en la OT y en la auditoria.
+        """
+        try:
+            photo = Photo.objects.select_related("work_order").get(pk=pk)
+        except (Photo.DoesNotExist, ValueError, Exception):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        wo = photo.work_order
+        if not (_can_read_wo(request.user, wo) and _can_write_evidence(request.user, wo)):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        if not _acepta_fotos(request.user, wo):
+            return Response(
+                {"detail": "La foto ya no se puede cambiar: la OT no está en proceso ni en revisión."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = PhotoUpdateSerializer(photo, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        antes = {"caption": photo.caption, "hidden": photo.hidden}
+        datos = serializer.validated_data
+        if "caption" in datos:
+            photo.caption = datos["caption"]
+        if "hidden" in datos and datos["hidden"] != photo.hidden:
+            photo.hidden = datos["hidden"]
+            photo.hidden_by = request.user if photo.hidden else None
+            photo.hidden_at = timezone.now() if photo.hidden else None
+        photo.save(update_fields=["caption", "hidden", "hidden_by", "hidden_at"])
+
+        despues = {"caption": photo.caption, "hidden": photo.hidden}
+        cambios = {k: {"from": antes[k], "to": despues[k]} for k in antes if antes[k] != despues[k]}
+        if cambios:
+            if wo.status == WorkOrder.Status.IN_REVIEW:
+                cambios["correccion"] = True
+            AuditLog.objects.create(
+                user=request.user,
+                action=AuditLog.Action.UPDATE,
+                entity_type="Photo",
+                entity_id=photo.id,
+                changes=cambios,
+                ip_address=_get_client_ip(request),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            )
+        return Response(PhotoSerializer(photo, context={"request": request}).data)
 
 
 # ── Signatures ─────────────────────────────────────────────────────────────────

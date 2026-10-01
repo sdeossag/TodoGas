@@ -89,20 +89,25 @@ def work_orders(qs, user, prefix=""):
     Una OT se ve si es del hospital y, con un nodo, si alguna de sus tareas es
     sobre un activo de esa parte del arbol: una visita puede cubrir varios
     pisos y el acta es una sola.
+
+    La OT que tiene asignada tambien se ve, aunque sea de fuera de su alcance:
+    un supervisor que ejecuta una visita (2026-10-01) tiene que poder hacerla,
+    igual que el tecnico al que se le asigna.
     """
     if not _limitado(user):
         return qs
-    qs = qs.filter(**{f"{prefix}hospital_id": user.hospital_id})
+    dentro = Q(**{f"{prefix}hospital_id": user.hospital_id})
     nodos = _nodos(user)
-    if nodos is None:
-        return qs
-    from apps.maintenance.models import Task
+    if nodos is not None:
+        from apps.maintenance.models import Task
 
-    tareas = Task.objects.filter(
-        work_order_id=OuterRef(f"{prefix}pk" if prefix else "pk"),
-        asset__node_id__in=nodos,
-    )
-    return qs.filter(Exists(tareas))
+        dentro &= Q(Exists(Task.objects.filter(
+            work_order_id=OuterRef(f"{prefix}pk" if prefix else "pk"),
+            asset__node_id__in=nodos,
+        )))
+    if user.role != User.Role.CLI:
+        dentro |= Q(**{f"{prefix}assigned_to": user})
+    return qs.filter(dentro)
 
 
 @_filtrar

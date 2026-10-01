@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.audit.models import AuditLog
 from apps.users import scope
 from apps.users.models import User
 from apps.users.permissions import IsAdminOrSup, IsAdminOrSupOrTec
@@ -83,6 +84,11 @@ class ChecklistTemplateViewSet(viewsets.ModelViewSet):
         return Response(ChecklistTemplateVersionSerializer(version).data)
 
 
+def _client_ip(request):
+    xff = request.META.get("HTTP_X_FORWARDED_FOR")
+    return xff.split(",")[0].strip() if xff else request.META.get("REMOTE_ADDR")
+
+
 class ChecklistResponseViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         # Leer: todos, cada uno dentro de lo suyo (get_queryset). Escribir
@@ -149,6 +155,63 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
             response.started_at = timezone.now()
             response.save(update_fields=["started_at"])
 
+        return Response(ChecklistFieldResponseSerializer(field_response).data)
+
+    @action(detail=True, methods=["post"], url_path="correct-field")
+    def correct_field(self, request, pk=None):
+        """
+        Un administrador o supervisor corrige una respuesta de una OT en
+        revision, antes de aprobarla (decision del 2026-10-01). Antes solo podia
+        devolverla al tecnico. La respuesta conserva la hora del tecnico, queda
+        marcada "Corregido por" y el valor anterior va a la auditoria; el acta
+        sale con el valor final.
+        """
+        if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        response = self.get_object()
+        if response.task.work_order.status != "IN_REVIEW":
+            return Response(
+                {"detail": "Solo se corrige una OT en revisión. En proceso la llena quien la ejecuta."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ChecklistFieldResponseCreateSerializer(
+            data=request.data,
+            context={"response": response, "request": request, "corrector": request.user},
+        )
+        serializer.is_valid(raise_exception=True)
+        field = serializer.validated_data["field"]
+        value = serializer.validated_data.get("value", "")
+        repeticion = serializer.validated_data.get("repetition", 0)
+        try:
+            extra = validate_field_value(field, value)
+        except ValueError as e:
+            return Response({"value": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        previa = response.field_responses.filter(field=field, repetition=repeticion).first()
+        notas = serializer.validated_data.get("notes", previa.notes if previa else "")
+        if previa is not None and previa.value == value and previa.notes == notas:
+            return Response(ChecklistFieldResponseSerializer(previa).data)
+
+        serializer.validated_data["notes"] = notas
+        field_response = serializer.save()
+        field_response._out_of_range = extra.get("out_of_range", False)
+        AuditLog.objects.create(
+            user=request.user,
+            action=AuditLog.Action.UPDATE,
+            entity_type="ChecklistFieldResponse",
+            entity_id=field_response.id,
+            changes={
+                "correccion": True,
+                "work_order": str(response.task.work_order_id),
+                "field": field.label,
+                "repetition": repeticion,
+                "value": {"from": previa.value if previa else None, "to": value},
+                "notes": {"from": previa.notes if previa else None, "to": notas},
+            },
+            ip_address=_client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
         return Response(ChecklistFieldResponseSerializer(field_response).data)
 
     @action(detail=True, methods=["post"], url_path="block-count")

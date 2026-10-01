@@ -1,4 +1,5 @@
-import { useWorkOrderPhotos } from '../../api/evidence'
+import { useState } from 'react'
+import { useUpdatePhoto, useWorkOrderPhotos } from '../../api/evidence'
 import { mediaUrl } from '../../api/client'
 
 function formatDateCO(iso) {
@@ -16,7 +17,12 @@ function PhotoSkeleton() {
   )
 }
 
-export default function PhotoGallery({ workOrderId }) {
+/**
+ * `editable`: quien ejecuta la OT en proceso, o el admin o supervisor que la
+ * corrige en revisión, cambia la descripción u oculta una foto del acta. No
+ * se borra: queda en la OT y en la auditoría (decisión del 2026-10-01).
+ */
+export default function PhotoGallery({ workOrderId, editable = false }) {
   const { data: photos = [], isLoading, isError } = useWorkOrderPhotos(workOrderId)
 
   if (isLoading) {
@@ -43,10 +49,17 @@ export default function PhotoGallery({ workOrderId }) {
             <img
               src={mediaUrl(photo.file_url)}
               alt={photo.caption || 'Foto de evidencia'}
-              className="w-full aspect-video object-cover rounded-lg border border-gray-200 hover:opacity-90 transition-opacity cursor-pointer"
+              className={`w-full aspect-video object-cover rounded-lg border border-gray-200 hover:opacity-90 transition-opacity cursor-pointer ${photo.hidden ? 'opacity-40 grayscale' : ''}`}
             />
           </a>
-          {photo.caption && (
+          {photo.hidden && (
+            <p className="text-xs text-amber-700">
+              Oculta del acta{photo.hidden_by_name && ` por ${photo.hidden_by_name}`}
+            </p>
+          )}
+          {editable ? (
+            <CorregirFoto workOrderId={workOrderId} photo={photo} />
+          ) : photo.caption && (
             <p className="text-xs text-gray-600">{photo.caption}</p>
           )}
           <p className="text-xs text-gray-500">{formatDateCO(photo.taken_at)}</p>
@@ -64,6 +77,44 @@ export default function PhotoGallery({ workOrderId }) {
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+function CorregirFoto({ workOrderId, photo }) {
+  const updateMut = useUpdatePhoto(workOrderId)
+  const [caption, setCaption] = useState(photo.caption ?? '')
+  const [error, setError] = useState('')
+
+  async function guardar(cambios) {
+    setError('')
+    try {
+      await updateMut.mutateAsync({ id: photo.id, ...cambios })
+    } catch (err) {
+      setError(err?.response?.data?.detail ?? 'No se pudo guardar el cambio.')
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <input
+        value={caption}
+        onChange={(e) => setCaption(e.target.value)}
+        onBlur={() => caption !== (photo.caption ?? '') && guardar({ caption })}
+        maxLength={500}
+        placeholder="Descripción"
+        aria-label="Descripción de la foto"
+        className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand/30"
+      />
+      <button
+        type="button"
+        onClick={() => guardar({ hidden: !photo.hidden })}
+        disabled={updateMut.isPending}
+        className="text-xs text-brand hover:underline disabled:opacity-50"
+      >
+        {photo.hidden ? 'Volver a mostrar en el acta' : 'Ocultar del acta'}
+      </button>
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   )
 }

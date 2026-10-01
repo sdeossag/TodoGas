@@ -3,16 +3,21 @@ from rest_framework.exceptions import ValidationError
 
 from .models import WorkOrder, WorkOrderStatusHistory
 
+# Quien puede quedar como asignado de una OT y ejecutarla. Ademas del tecnico,
+# el administrador y el supervisor (decision del 2026-10-01): hacen reportes de
+# instalaciones a las que no va un tecnico de mantenimiento.
+EXECUTOR_ROLES = ("TEC", "ADMIN", "SUP")
+
 # Each key is (from_status, to_status).
 # "roles" lists which role strings can perform the transition.
-# "require_assignee" means the TEC must be the assigned_to of the OT.
+# "require_assignee" means the user must be the assigned_to of the OT.
 ALLOWED_TRANSITIONS = {
     (WorkOrder.Status.PENDING, WorkOrder.Status.IN_PROGRESS): {
-        "roles": ["TEC"],
+        "roles": list(EXECUTOR_ROLES),
         "require_assignee": True,
     },
     (WorkOrder.Status.IN_PROGRESS, WorkOrder.Status.IN_REVIEW): {
-        "roles": ["TEC"],
+        "roles": list(EXECUTOR_ROLES),
         "require_assignee": True,
     },
     (WorkOrder.Status.IN_REVIEW, WorkOrder.Status.COMPLETED): {
@@ -60,9 +65,12 @@ def validate_transition(work_order, new_status, user, comment=""):
             f"'{from_status}' → '{new_status}'."
         )
 
-    if user.role == "TEC" and rule.get("require_assignee"):
-        if work_order.assigned_to_id != user.id:
+    if rule.get("require_assignee") and work_order.assigned_to_id != user.id:
+        if user.role == "TEC":
             raise ValidationError("Solo el técnico asignado puede realizar esta transición.")
+        raise ValidationError(
+            "La ejecuta quien la tiene asignada. Asígnatela para iniciarla o enviarla a revisión."
+        )
 
     if from_status == WorkOrder.Status.IN_PROGRESS and new_status == WorkOrder.Status.IN_REVIEW:
         # RF-OT-03 pide tres requisitos bloqueantes y, si falta alguno, que el
@@ -93,7 +101,7 @@ def validate_transition(work_order, new_status, user, comment=""):
         # pero RF-EV-01 es explicito en que la falta de senal GPS no bloquea la
         # captura. Se exige entonces la foto, no sus coordenadas: si no, un
         # tecnico en un sotano sin cobertura no podria cerrar la OT.
-        if not work_order.photos.exists():
+        if not work_order.photos.filter(hidden=False).exists():
             faltantes.append("subir al menos una foto de evidencia")
 
         if not work_order.signatures.exists():

@@ -261,6 +261,14 @@ class ChecklistFieldResponse(models.Model):
     # Campo GPS: la direccion de las coordenadas, como el *LOCALIZACION de
     # Fracttal. La pide el servidor a Google al llegar la respuesta.
     geo_address = models.CharField(max_length=300, blank=True, default="")
+    # Corregida en revision por un administrador o supervisor (2026-10-01). La
+    # hora de la respuesta sigue siendo la del tecnico; el valor anterior queda
+    # en la auditoria.
+    corrected_by = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="corrected_field_responses"
+    )
+    corrected_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

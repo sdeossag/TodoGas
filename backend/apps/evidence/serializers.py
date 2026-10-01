@@ -39,6 +39,7 @@ class PhotoSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     uploaded_by = serializers.SerializerMethodField()
     task_asset = serializers.SerializerMethodField()
+    hidden_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Photo
@@ -46,7 +47,14 @@ class PhotoSerializer(serializers.ModelSerializer):
             "id", "work_order", "task", "task_asset", "finding", "file_url", "thumbnail_url",
             "latitude", "longitude", "taken_at", "caption",
             "file_hash", "uploaded_by", "offline_uuid", "created_at",
+            "hidden", "hidden_by_name", "hidden_at",
         ]
+
+    def get_hidden_by_name(self, obj):
+        if not obj.hidden_by_id:
+            return None
+        u = obj.hidden_by
+        return f"{u.first_name} {u.last_name}".strip() or u.email
 
     def get_file_url(self, obj):
         return _storage_url(obj.file_url)
@@ -63,6 +71,15 @@ class PhotoSerializer(serializers.ModelSerializer):
             return None
         u = obj.uploaded_by
         return {"id": str(u.id), "full_name": f"{u.first_name} {u.last_name}".strip()}
+
+
+class PhotoUpdateSerializer(serializers.ModelSerializer):
+    """Corregir una foto: su descripcion, o sacarla del acta sin borrarla."""
+
+    class Meta:
+        model = Photo
+        fields = ["caption", "hidden"]
+        extra_kwargs = {"caption": {"required": False}, "hidden": {"required": False}}
 
 
 class PhotoCreateSerializer(serializers.Serializer):

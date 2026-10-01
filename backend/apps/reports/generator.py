@@ -1,7 +1,7 @@
 import hashlib
 
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.template.loader import render_to_string
@@ -164,7 +164,7 @@ def field_facts(work_order):
     return {
         "field_work": _trabajo_en_campo(
             respuestas,
-            list(Photo.objects.filter(work_order=work_order)),
+            list(Photo.objects.filter(work_order=work_order, hidden=False)),
             list(Signature.objects.filter(work_order=work_order)),
         ),
         "executors": _ejecutores(work_order, respuestas),
@@ -213,7 +213,7 @@ def _render(work_order, opciones):
         ).select_related("version", "completed_by")
     }
 
-    photos_qs = Photo.objects.filter(work_order=work_order).order_by("taken_at")
+    photos_qs = Photo.objects.filter(work_order=work_order, hidden=False).order_by("taken_at")
     signatures_qs = Signature.objects.filter(work_order=work_order)
     stock_movements = StockMovement.objects.filter(
         work_order=work_order
@@ -270,7 +270,7 @@ def _render(work_order, opciones):
         # Lo capturado en campo: la decision posterior del planificador no
         # cambia el acta (va en el portal y en la bandeja).
         "findings": list(
-            work_order.findings.select_related("asset").annotate(n_fotos=Count("photos"))
+            work_order.findings.select_related("asset").annotate(n_fotos=Count("photos", filter=Q(photos__hidden=False)))
             .order_by("asset__code", "reported_at")
         ),
         "visit_photos": fotos_visita,

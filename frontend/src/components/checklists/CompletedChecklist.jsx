@@ -70,6 +70,17 @@ export function FotoDelChecklist({ workOrderId, value }) {
   )
 }
 
+/** La respuesta la corrigió un admin o supervisor en revisión. */
+export function CorregidoPor({ fr }) {
+  return (
+    <p className="text-xs text-amber-700 flex items-center gap-1">
+      <Icon name="edit" className="w-3.5 h-3.5" />
+      Corregido por {fr.corrected_by_name}
+      {fr.corrected_at && ` el ${new Date(fr.corrected_at).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}`}
+    </p>
+  )
+}
+
 export default function CompletedChecklistView({ response }) {
   const allFields = response.version_fields ?? []
   const fieldResponses = response.field_responses ?? []
@@ -144,6 +155,7 @@ export default function CompletedChecklistView({ response }) {
                     fr.value
                   )}
                 </div>
+                {fr?.corrected_by_name && <CorregidoPor fr={fr} />}
               </div>
             )
           })}

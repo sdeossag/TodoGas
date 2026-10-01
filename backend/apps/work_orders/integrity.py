@@ -42,6 +42,9 @@ lavada.
      resuelto en sitio y como, quien y cuando) y el hallazgo de cada foto. La
      decision posterior del planificador (convertir o descartar) no entra:
      llega despues de firmada el acta y no la altera.
+  5  Fotos ocultas. Igual que la 4, mas si cada foto quedo oculta del acta
+     (correccion en revision, 2026-10-01). Sin eso, ocultar o mostrar una foto
+     despues de firmada cambiaria el acta sin cambiar el hash.
 """
 
 import hashlib
@@ -50,8 +53,8 @@ from dataclasses import dataclass
 
 # Version con la que se calculan las actas nuevas. Las anteriores se siguen
 # verificando con la suya (SUPPORTED_VERSIONS).
-INTEGRITY_ALGORITHM_VERSION = "4"
-SUPPORTED_VERSIONS = ("1", "2", "3", "4")
+INTEGRITY_ALGORITHM_VERSION = "5"
+SUPPORTED_VERSIONS = ("1", "2", "3", "4", "5")
 
 
 def _dt(value):
@@ -306,7 +309,23 @@ def _payload_v4(work_order):
     return datos
 
 
-_BUILDERS = {"1": _payload_v1, "2": _payload_v2, "3": _payload_v3, "4": _payload_v4}
+def _payload_v5(work_order):
+    from apps.evidence.models import Photo
+
+    datos = _payload_v4(work_order)
+    datos["algorithm_version"] = "5"
+    ocultas = {
+        _id(foto) for foto in
+        Photo.objects.filter(work_order=work_order, hidden=True).values_list("id", flat=True)
+    }
+    for foto in datos["photos"]:
+        foto["hidden"] = foto["id"] in ocultas
+    return datos
+
+
+_BUILDERS = {
+    "1": _payload_v1, "2": _payload_v2, "3": _payload_v3, "4": _payload_v4, "5": _payload_v5,
+}
 
 
 def build_integrity_payload(work_order, version=INTEGRITY_ALGORITHM_VERSION):

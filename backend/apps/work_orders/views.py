@@ -1,5 +1,6 @@
 import uuid as _uuid_mod
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Case, IntegerField, Q, Value, When
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
@@ -27,7 +28,7 @@ from .serializers import (
     WorkOrderTechnicianUpdateSerializer,
     WorkOrderUpdateSerializer,
 )
-from .transitions import apply_transition
+from .transitions import EXECUTOR_ROLES, apply_transition
 
 _PRIORITY_ORDER = Case(
     When(priority=WorkOrder.Priority.HIGH, then=Value(0)),
@@ -249,10 +250,10 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            tech = User.objects.get(id=assigned_to_id, role=User.Role.TEC)
-        except User.DoesNotExist:
+            tech = User.objects.get(id=assigned_to_id, role__in=EXECUTOR_ROLES, is_active=True)
+        except (User.DoesNotExist, ValueError, DjangoValidationError):
             return Response(
-                {"detail": "Usuario no encontrado o no tiene rol TEC."},
+                {"detail": "Usuario no encontrado, inactivo o sin rol para ejecutar OTs."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         old_assignee_id = str(wo.assigned_to_id) if wo.assigned_to_id else None

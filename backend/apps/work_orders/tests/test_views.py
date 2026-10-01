@@ -267,11 +267,18 @@ class TestWorkOrderActions:
         wo.refresh_from_db()
         assert wo.assigned_to == tec2
 
-    def test_assign_non_tec_returns_400(self, admin, asset, tec, sup):
+    def test_assign_cli_returns_400(self, admin, asset, tec):
+        wo = make_wo(asset, admin, tec)
+        url = reverse("work-orders-assign", kwargs={"pk": str(wo.id)})
+        cli = make_user(User.Role.CLI, hospital=asset.hospital)
+        resp = auth_client(admin).post(url, {"assigned_to": str(cli.id)}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_assign_sup_ok(self, admin, asset, tec, sup):
         wo = make_wo(asset, admin, tec)
         url = reverse("work-orders-assign", kwargs={"pk": str(wo.id)})
         resp = auth_client(admin).post(url, {"assigned_to": str(sup.id)}, format="json")
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.status_code == status.HTTP_200_OK
 
     def test_tec_cannot_assign(self, tec, wo):
         tec2 = make_user(User.Role.TEC)

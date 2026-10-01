@@ -118,11 +118,17 @@ class TestWorkOrderCreateSerializer:
         assert not s.is_valid()
         assert "tasks" in s.errors
 
-    def test_non_tec_assigned_to_is_rejected(self, admin, sup, active_asset):
-        data = self._valid_data(active_asset, sup)
+    def test_cli_assigned_to_is_rejected(self, admin, active_asset):
+        data = self._valid_data(active_asset, make_user(User.Role.CLI))
         s = WorkOrderCreateSerializer(data=data, context=make_create_context(admin))
         assert not s.is_valid()
         assert "assigned_to" in s.errors
+
+    def test_sup_can_be_assigned(self, admin, sup, active_asset):
+        # Admin y supervisor ejecutan OTs ellos mismos (2026-10-01).
+        data = self._valid_data(active_asset, sup)
+        s = WorkOrderCreateSerializer(data=data, context=make_create_context(admin))
+        assert s.is_valid(), s.errors
 
     def test_create_auto_sets_created_by_and_pending_status(self, admin, tec, active_asset):
         data = self._valid_data(active_asset, tec)

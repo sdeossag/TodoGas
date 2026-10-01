@@ -10,6 +10,7 @@ import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
 import { fieldLabel } from '../../constants/labels'
 import Spinner from '../../components/ui/Spinner'
 import { flattenTree, indentedLabel } from '../../utils/locationTree'
+import { ejecutores, etiquetaEjecutor } from '../../utils/ejecutores'
 
 
 function Field({ label, required, children, hint }) {
@@ -42,7 +43,7 @@ export default function CreateWorkOrderPage() {
 
   const { data: hospitals = [] } = useHospitals({ is_active: true })
   // El endpoint /api/users/ no filtra por rol — filtramos client-side
-  const tecUsers = (useUsers({}).data ?? []).filter((u) => u.role === 'TEC' && u.is_active)
+  const tecUsers = ejecutores(useUsers({}).data ?? [])
 
   // Solo sirven las plantillas con una version publicada: la tarea se ata a la
   // version, no a la plantilla.
@@ -375,12 +376,12 @@ export default function CreateWorkOrderPage() {
           </div>
         </Field>
 
-        {/* Técnico asignado */}
-        <Field label="Técnico asignado" hint="Opcional">
+        {/* Quien la ejecuta: un técnico, o un admin o supervisor que va él mismo */}
+        <Field label="Asignado a" hint="Opcional. Un admin o supervisor también puede ejecutarla.">
           <select value={form.assigned_to} onChange={(e) => set('assigned_to', e.target.value)} className={INPUT}>
             <option value="">Sin asignar</option>
             {tecUsers.map((u) => (
-              <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+              <option key={u.id} value={u.id}>{etiquetaEjecutor(u)}</option>
             ))}
           </select>
         </Field>

@@ -21,6 +21,7 @@ import {
   useChecklistTemplates,
   useCreateChecklistResponse,
   useSubmitField,
+  useCorrectField,
   useCompleteChecklist,
   useSetBlockCount,
 } from '../../api/checklists'
@@ -59,12 +60,14 @@ import {
 } from '../../db/repositories'
 import { countFor, isRepeatable, slotKey, slots } from '../../utils/checklistSlots'
 import CompletedChecklistView, {
+  CorregidoPor,
   FOTO,
   FotoDelChecklist,
   SIN_CONEXION,
   groupFields,
 } from '../../components/checklists/CompletedChecklist'
 import GoogleMap, { parseLatLng, UbicacionGps } from '../../components/maps/GoogleMap'
+import { ejecutores, etiquetaEjecutor, laEjecuto } from '../../utils/ejecutores'
 
 // Margen sobre la ventana de sondeo de useWorkOrderReports (24 intentos x 5s).
 const REPORT_POLL_TIMEOUT_MS = REPORT_POLL_ATTEMPTS * 5000
@@ -118,6 +121,22 @@ export default function WorkOrderDetailPage() {
   const [showAssignModal, setShowAssignModal] = useState(false)
 
   const { data: wo, isLoading, isError, error, refetch } = useWorkOrder(id)
+  const asignarMut = useUpdateWorkOrder(id)
+  // En revision el admin o supervisor corrige fotos y respuestas antes de aprobar.
+  const corrigeEnRevision = isAdminOrSup && wo?.status === 'IN_REVIEW'
+  const [asignarError, setAsignarError] = useState('')
+
+  /** El admin o supervisor la toma para ejecutarla él mismo (2026-10-01). */
+  async function asignarmela() {
+    setAsignarError('')
+    try {
+      await asignarMut.mutateAsync({ assigned_to: user.id })
+      refetch()
+    } catch (err) {
+      const data = err?.response?.data
+      setAsignarError(String(data?.assigned_to ?? data?.detail ?? 'No se pudo asignar.'))
+    }
+  }
 
   // Determine back route by role
   const backPath = role === 'TEC' ? '/mis-ordenes' : '/ordenes'
@@ -208,8 +227,8 @@ export default function WorkOrderDetailPage() {
           <h2 className="font-semibold text-gray-800 text-sm">Asignación</h2>
           <dl className="grid grid-cols-2 gap-4">
             <div>
-              <dt className="text-xs font-medium text-gray-500 mb-0.5">Técnico asignado</dt>
-              <dd className="text-sm text-gray-800 flex items-center gap-2">
+              <dt className="text-xs font-medium text-gray-500 mb-0.5">Asignado a</dt>
+              <dd className="text-sm text-gray-800 flex items-center gap-2 flex-wrap">
                 {wo.assigned_to?.full_name ?? '—'}
                 {isAdmin && (
                   <button
@@ -219,7 +238,18 @@ export default function WorkOrderDetailPage() {
                     Reasignar
                   </button>
                 )}
+                {isAdminOrSup && ['PENDING', 'IN_PROGRESS'].includes(wo.status) && wo.assigned_to?.id !== user?.id && (
+                  <button
+                    onClick={asignarmela}
+                    disabled={asignarMut.isPending}
+                    title="Para ejecutarla tú: iniciarla, llenar el checklist, fotos y firma."
+                    className="text-xs text-brand hover:underline disabled:opacity-50"
+                  >
+                    Asignármela
+                  </button>
+                )}
               </dd>
+              {asignarError && <p className="text-xs text-red-600 mt-1">{asignarError}</p>}
             </div>
             <InfoRow label="Creado por" value={wo.created_by?.full_name} />
           </dl>
@@ -328,13 +358,14 @@ export default function WorkOrderDetailPage() {
           )}
           {tab === 2 && (
             <div className="space-y-8">
+              {/* El tecnico ya no la toca en revision; el admin o supervisor si, para corregir. */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                   Firmas
                 </h3>
                 <SignatureList workOrderId={id} />
               </div>
-              {['ADMIN', 'TEC'].includes(role) && (
+              {(isAdmin || laEjecuto(user, wo)) && (
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                     Agregar firma
@@ -346,14 +377,27 @@ export default function WorkOrderDetailPage() {
                 <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                   Fotos
                 </h3>
-                <PhotoGallery workOrderId={id} />
+                {corrigeEnRevision && (
+                  <p className="text-xs text-gray-500 mb-3">
+                    Estás revisando: puedes agregar fotos, cambiar su descripción u ocultar una del acta.
+                    No se borran; queda constancia en la auditoría.
+                  </p>
+                )}
+                <PhotoGallery
+                  workOrderId={id}
+                  editable={corrigeEnRevision || (wo.status === 'IN_PROGRESS' && (isAdmin || laEjecuto(user, wo)))}
+                />
               </div>
-              {['ADMIN', 'TEC'].includes(role) && (
+              {(isAdmin || laEjecuto(user, wo) || corrigeEnRevision) && (
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                     Agregar foto
                   </h3>
-                  <PhotoCapture workOrderId={id} tasks={wo.tasks ?? []} disabled={wo.status !== 'IN_PROGRESS'} />
+                  <PhotoCapture
+                    workOrderId={id}
+                    tasks={wo.tasks ?? []}
+                    disabled={!(wo.status === 'IN_PROGRESS' || corrigeEnRevision)}
+                  />
                 </div>
               )}
             </div>
@@ -427,7 +471,7 @@ function AssignModal({ woId, onClose, onSuccess }) {
   useModalDismiss(onClose)
   const [selectedTec, setSelectedTec] = useState('')
   const { data: _allUsers = [], isLoading } = useUsers({})
-  const tecUsers = _allUsers.filter((u) => u.role === 'TEC' && u.is_active)
+  const tecUsers = ejecutores(_allUsers)
   const assignMut = useAssignWorkOrder(woId)
 
   async function handleAssign() {
@@ -441,7 +485,7 @@ function AssignModal({ woId, onClose, onSuccess }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px]">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
         <div className="flex items-start justify-between gap-4 mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">Reasignar técnico</h3>
+          <h3 className="text-lg font-semibold text-gray-800">Reasignar OT</h3>
           <button
             type="button"
             onClick={onClose}
@@ -459,10 +503,10 @@ function AssignModal({ woId, onClose, onSuccess }) {
             onChange={(e) => setSelectedTec(e.target.value)}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 mb-4"
           >
-            <option value="">Seleccionar técnico...</option>
+            <option value="">Seleccionar...</option>
             {tecUsers.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.first_name} {u.last_name}
+                {etiquetaEjecutor(u)}
               </option>
             ))}
           </select>
@@ -490,7 +534,7 @@ function AssignModal({ woId, onClose, onSuccess }) {
 function EditModal({ wo, onClose, onSuccess }) {
   useModalDismiss(onClose)
   const { data: _editUsers = [] } = useUsers({})
-  const tecUsers = _editUsers.filter((u) => u.role === 'TEC' && u.is_active)
+  const tecUsers = ejecutores(_editUsers)
   const updateMut = useUpdateWorkOrder(wo.id)
   const taskChecklistMut = useSetTaskChecklist(wo.id)
 
@@ -592,11 +636,11 @@ function EditModal({ wo, onClose, onSuccess }) {
               <input value={form.estimated_duration} onChange={(e) => set('estimated_duration', e.target.value)}
                 placeholder="02:30" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30" />
             </Field>
-            <Field label="Técnico asignado">
+            <Field label="Asignado a">
               <select value={form.assigned_to} onChange={(e) => set('assigned_to', e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30">
                 <option value="">Sin asignar</option>
                 {tecUsers.map((u) => (
-                  <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                  <option key={u.id} value={u.id}>{etiquetaEjecutor(u)}</option>
                 ))}
               </select>
             </Field>
@@ -687,10 +731,12 @@ function TasksTab({ wo, user, refetch }) {
   const [quitando, setQuitando] = useState(null)
   const [preguntarRevision, setPreguntarRevision] = useState(false)
 
-  const isTecAssigned = user?.role === 'TEC' && wo.assigned_to?.id === user?.id
+  const isTecAssigned = laEjecuto(user, wo)
   // Misma regla que firmas, fotos y repuestos: solo con la OT en curso.
   const isInProgress = wo.status === 'IN_PROGRESS'
   const canEdit = isTecAssigned && isInProgress
+  // En revision, el admin o supervisor corrige antes de aprobar (2026-10-01).
+  const canCorrect = ['ADMIN', 'SUP'].includes(user?.role) && wo.status === 'IN_REVIEW'
   const puedeAjustar = ['ADMIN', 'SUP'].includes(user?.role) && wo.status === 'PENDING'
   const varias = visibles.length > 1
 
@@ -707,7 +753,7 @@ function TasksTab({ wo, user, refetch }) {
     }
   }
 
-  const aviso = isTecAssigned && !isInProgress && (
+  const aviso = isTecAssigned && !isInProgress && !canCorrect && (
     <div className="mb-4 flex items-start gap-2 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
       <Icon name="warning" className="w-4 h-4 flex-shrink-0 mt-0.5" />
       <span>
@@ -748,7 +794,7 @@ function TasksTab({ wo, user, refetch }) {
               . Revisa el protocolo del activo.
             </p>
           )}
-          <TaskChecklist wo={wo} task={visibles[0]} canEdit={canEdit} onChange={refetch} onComplete={alCerrarChecklist} />
+          <TaskChecklist wo={wo} task={visibles[0]} canEdit={canEdit} canCorrect={canCorrect} onChange={refetch} onComplete={alCerrarChecklist} />
         </>
       ) : (
         <ul className="space-y-2">
@@ -762,7 +808,7 @@ function TasksTab({ wo, user, refetch }) {
               />
               {abierta === t.id && (
                 <div className="border-t border-gray-100 p-4 bg-gray-50/40">
-                  <TaskChecklist wo={wo} task={t} canEdit={canEdit} onChange={refetch} onComplete={alCerrarChecklist} />
+                  <TaskChecklist wo={wo} task={t} canEdit={canEdit} canCorrect={canCorrect} onChange={refetch} onComplete={alCerrarChecklist} />
                 </div>
               )}
             </li>
@@ -849,7 +895,7 @@ function TaskRow({ task, abierta, onToggle, onRemove = null }) {
   )
 }
 
-function TaskChecklist({ wo, task, canEdit, onChange, onComplete }) {
+function TaskChecklist({ wo, task, canEdit, canCorrect, onChange, onComplete }) {
   if (!task.checklist_version) {
     return <p className="text-gray-500 text-sm text-center py-6">Esta tarea no tiene checklist asociado.</p>
   }
@@ -862,6 +908,7 @@ function TaskChecklist({ wo, task, canEdit, onChange, onComplete }) {
       responseId={responseId}
       workOrderId={wo.id}
       canEdit={canEdit}
+      canCorrect={canCorrect}
       onChange={onChange}
       onComplete={onComplete}
     />
@@ -903,8 +950,8 @@ function NoResponseView({ task, assigned, canStart, onStart }) {
       ) : (
         <p className="text-xs text-gray-500">
           {assigned
-            ? 'Solo el técnico asignado puede iniciar el checklist.'
-            : 'Asigna un técnico a esta OT para iniciar el checklist.'}
+            ? 'Solo quien tiene asignada la OT puede iniciar el checklist.'
+            : 'Asigna la OT a alguien para iniciar el checklist.'}
         </p>
       )}
       {startError && <p className="text-sm text-red-600">{startError}</p>}
@@ -912,8 +959,9 @@ function NoResponseView({ task, assigned, canStart, onStart }) {
   )
 }
 
-function ChecklistResponseView({ responseId, workOrderId, canEdit, onChange, onComplete }) {
+function ChecklistResponseView({ responseId, workOrderId, canEdit, canCorrect, onChange, onComplete }) {
   const { data: response, isLoading, isError, error, refetch } = useChecklistResponse(responseId)
+  const [corrigiendo, setCorrigiendo] = useState(false)
 
   if (isLoading) {
     return (
@@ -925,8 +973,37 @@ function ChecklistResponseView({ responseId, workOrderId, canEdit, onChange, onC
   if (isError) return <p className="text-sm text-amber-700 text-center py-6">{error?.message}</p>
   if (!response) return null
 
+  if (response.completed_at && !(canCorrect && corrigiendo)) {
+    return (
+      <div className="space-y-3">
+        {canCorrect && (
+          <div className="flex justify-end">
+            <button onClick={() => setCorrigiendo(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
+              <Icon name="edit" className="w-4 h-4" /> Corregir respuestas
+            </button>
+          </div>
+        )}
+        <CompletedChecklistView response={response} />
+      </div>
+    )
+  }
+
   if (response.completed_at) {
-    return <CompletedChecklistView response={response} />
+    return (
+      <ActiveChecklistForm
+        key={`${response.id}-corregir`}
+        response={response}
+        workOrderId={workOrderId}
+        canEdit
+        corrigiendo
+        onFieldSaved={() => {
+          refetch()
+          onChange?.()
+        }}
+        onComplete={() => setCorrigiendo(false)}
+      />
+    )
   }
 
   return (
@@ -1058,7 +1135,12 @@ function RemoveTaskModal({ wo, task, onClose, onDone }) {
   )
 }
 
-function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onComplete }) {
+/**
+ * `corrigiendo`: un admin o supervisor corrige en revision. Cada cambio va
+ * directo al servidor (correct-field), queda "Corregido por" y no se cierra
+ * el checklist: ya estaba cerrado.
+ */
+function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = false, onFieldSaved, onComplete }) {
   const allFields = response.version_fields ?? []
   const fieldResponses = response.field_responses ?? []
 
@@ -1080,6 +1162,7 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
   })
 
   const submitFieldMut = useSubmitField(response.id)
+  const correctFieldMut = useCorrectField(response.id)
   const completeMut = useCompleteChecklist(response.id)
   const blockCountMut = useSetBlockCount(response.id)
   // Rechazos permanentes (4xx) por campo, para poder avisar al tecnico en vez
@@ -1094,11 +1177,11 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
   useEffect(() => {
     // Lo leido de SQLite ya esta ahi, con las respuestas locales encima: no
     // se vuelve a guardar como si viniera del servidor.
-    if (response._fromOffline) return
+    if (response._fromOffline || corrigiendo) return
     saveChecklistResponse({ ...response, work_order: workOrderId }).catch((error) =>
       console.warn('[Checklist] no se pudo cachear la respuesta:', error?.message ?? error)
     )
-  }, [response, workOrderId])
+  }, [response, workOrderId, corrigiendo])
 
   const esperadas = slots(response)
   const respondida = (x) => !!answeredMap[slotKey(x.field.id, x.repetition)]
@@ -1133,6 +1216,30 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
       ? valorExplicito
       : (localValues[key] ?? '')
     if (answeredMap[key]?.value === value) return
+
+    if (corrigiendo) {
+      try {
+        await correctFieldMut.mutateAsync({ field: fieldId, repetition, value })
+        setFieldErrors((prev) => {
+          if (!prev[key]) return prev
+          const { [key]: _, ...resto } = prev
+          return resto
+        })
+        onFieldSaved()
+      } catch (err) {
+        const data = err?.response?.data
+        const detalle = data?.value ?? data?.repetition ?? data?.detail
+        setFieldErrors((prev) => ({
+          ...prev,
+          [key]: Array.isArray(detalle)
+            ? String(detalle[0])
+            : typeof detalle === 'string'
+              ? detalle
+              : err?.response ? 'No se pudo corregir esta respuesta.' : 'Sin conexión: la corrección necesita red.',
+        }))
+      }
+      return
+    }
 
     // Siempre a SQLite primero: es la unica escritura que no puede fallar.
     await saveFieldResponse({
@@ -1277,6 +1384,7 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
             handleBlur(field.id, repetition, val)
           }}
         />
+        {answeredMap[key]?.corrected_by_name && <div className="mt-1"><CorregidoPor fr={answeredMap[key]} /></div>}
         {fieldErrors[key] && (
           <p className="mt-1 text-xs text-red-600">{fieldErrors[key]}</p>
         )}
@@ -1286,6 +1394,17 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
 
   return (
     <div className="space-y-5">
+      {corrigiendo && (
+        <div className="flex items-start justify-between gap-3 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <span>
+            Estás corrigiendo el checklist en revisión. Cada cambio se guarda al salir del campo y queda
+            como «Corregido por» tu nombre; el valor anterior queda en la auditoría.
+          </span>
+          <button onClick={onComplete} className="flex-shrink-0 px-3 py-1 rounded-lg bg-white border border-amber-300 hover:bg-amber-100">
+            Terminar
+          </button>
+        </div>
+      )}
       {/* Progress */}
       <div>
         <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -1327,7 +1446,7 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
           response={response}
           group={currentGroup}
           answeredMap={answeredMap}
-          canEdit={canEdit}
+          canEdit={canEdit && !corrigiendo}
           renderField={renderField}
           onChangeCount={cambiarCantidad}
           busy={blockCountMut.isPending}
@@ -1362,7 +1481,7 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, onFieldSaved, onC
           )}
         </div>
 
-        {isLastGroup && canEdit && (
+        {isLastGroup && canEdit && !corrigiendo && (
           <div className="flex items-center gap-2">
             {!canComplete && (
               <span className="text-xs text-orange-500">
@@ -1834,9 +1953,8 @@ function ChecklistPhotoField({ workOrderId, taskId, value, disabled, onCommit })
 
 function RepuestosTab({ wo, user }) {
   const role = user?.role
-  const canAdd = ['ADMIN', 'TEC'].includes(role) && wo.status === 'IN_PROGRESS'
-  const isTec = role === 'TEC'
-  const isTecAssigned = isTec && wo.assigned_to?.id === user?.id
+  const canAdd = wo.status === 'IN_PROGRESS'
+  const isTecAssigned = laEjecuto(user, wo)
 
   const { data: movements = [], isLoading } = useStockMovements({ work_order_id: wo.id })
   const [showModal, setShowModal] = useState(false)

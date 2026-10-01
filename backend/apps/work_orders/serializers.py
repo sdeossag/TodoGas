@@ -10,6 +10,7 @@ from apps.users.models import User
 from apps.users.scope import ScopedFieldsMixin
 
 from .models import WorkOrder, WorkOrderStatusHistory
+from .transitions import EXECUTOR_ROLES
 
 # La OT agrupa tareas: no tiene activo, version de checklist ni plan propios.
 # Cada tarea lleva los suyos, y la OT solo el hospital y la ubicacion de la
@@ -307,9 +308,9 @@ class WorkOrderCreateSerializer(serializers.ModelSerializer):
     def validate_assigned_to(self, value):
         if value is None:
             return value
-        if value.role != "TEC":
+        if value.role not in EXECUTOR_ROLES:
             raise serializers.ValidationError(
-                f"El usuario asignado debe tener rol TEC (rol actual: {value.role})."
+                f"La OT se asigna a un técnico, supervisor o administrador (rol actual: {value.role})."
             )
         return value
 
@@ -386,9 +387,9 @@ class WorkOrderFromTasksSerializer(ScopedFieldsMixin, serializers.Serializer):
     )
 
     def validate_assigned_to(self, value):
-        if value is not None and value.role != "TEC":
+        if value is not None and value.role not in EXECUTOR_ROLES:
             raise serializers.ValidationError(
-                f"El usuario asignado debe tener rol TEC (rol actual: {value.role})."
+                f"La OT se asigna a un técnico, supervisor o administrador (rol actual: {value.role})."
             )
         return value
 
@@ -449,9 +450,9 @@ class WorkOrderUpdateSerializer(serializers.ModelSerializer):
     def validate_assigned_to(self, value):
         if value is None:
             return value
-        if value.role != "TEC":
+        if value.role not in EXECUTOR_ROLES:
             raise serializers.ValidationError(
-                f"El usuario asignado debe tener rol TEC (rol actual: {value.role})."
+                f"La OT se asigna a un técnico, supervisor o administrador (rol actual: {value.role})."
             )
         return value
 

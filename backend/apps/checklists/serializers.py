@@ -148,16 +148,24 @@ class ChecklistFieldResponseSerializer(serializers.ModelSerializer):
     field_label = serializers.CharField(source="field.label", read_only=True)
     field_type = serializers.CharField(source="field.field_type", read_only=True)
     out_of_range = serializers.SerializerMethodField()
+    corrected_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ChecklistFieldResponse
         fields = [
             "id", "field", "field_label", "field_type", "repetition",
             "value", "notes", "answered_at", "out_of_range", "geo_address",
+            "corrected_by_name", "corrected_at",
         ]
 
     def get_out_of_range(self, obj):
         return getattr(obj, "_out_of_range", False)
+
+    def get_corrected_by_name(self, obj):
+        if not obj.corrected_by_id:
+            return None
+        u = obj.corrected_by
+        return f"{u.first_name} {u.last_name}".strip() or u.email
 
 
 class ChecklistResponseSerializer(serializers.ModelSerializer):
@@ -305,20 +313,30 @@ class ChecklistFieldResponseCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         response = self.context["response"]
         field = validated_data["field"]
-        anterior = ChecklistFieldResponse.objects.filter(
+        previa = ChecklistFieldResponse.objects.filter(
             response=response, field=field, repetition=validated_data.get("repetition", 0),
-        ).values_list("value", flat=True).first()
+        ).first()
+        anterior = previa.value if previa else None
+        defaults = {
+            "value": validated_data.get("value", ""),
+            "notes": validated_data.get("notes", ""),
+            "answered_at": device_time(
+                validated_data.get("answered_at"), response.task.work_order
+            ),
+        }
+        # Una correccion en revision (ChecklistResponseViewSet.correct_field)
+        # deja la hora en que respondio el tecnico y anota quien corrigio.
+        corrector = self.context.get("corrector")
+        if corrector is not None:
+            if previa is not None:
+                defaults["answered_at"] = previa.answered_at
+            defaults["corrected_by"] = corrector
+            defaults["corrected_at"] = timezone.now()
         obj, _ = ChecklistFieldResponse.objects.update_or_create(
             response=response,
             field=field,
             repetition=validated_data.get("repetition", 0),
-            defaults={
-                "value": validated_data.get("value", ""),
-                "notes": validated_data.get("notes", ""),
-                "answered_at": device_time(
-                    validated_data.get("answered_at"), response.task.work_order
-                ),
-            },
+            defaults=defaults,
         )
         # Un campo "Lectura de medidor" atado a una unidad deja la lectura en
         # el medidor del equipo y puede abrir una tarea por uso o por umbral.

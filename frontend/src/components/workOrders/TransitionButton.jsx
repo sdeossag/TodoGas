@@ -8,6 +8,7 @@ import useReviewRequirements from '../../hooks/useReviewRequirements'
 import Icon from '../ui/Icon'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import Spinner from '../ui/Spinner'
+import { laEjecuto } from '../../utils/ejecutores'
 
 // Cancelar usa otro endpoint que el motor de sincronizacion no reproduce,
 // asi que no se permite sin conexion en vez de encolar algo que fallaria.
@@ -55,7 +56,9 @@ export default function TransitionButton({ workOrder, onSuccess }) {
   // de todas las tareas, una foto y la firma.
   const requisitos = useReviewRequirements(workOrder)
 
-  const isTecAssigned = role === 'TEC' && workOrder?.assigned_to?.id === user?.id
+  // Inicia y envía a revisión quien la tiene asignada: técnico, o admin o
+  // supervisor que la ejecuta él mismo.
+  const isTecAssigned = laEjecuto(user, workOrder)
 
   async function doTransition(new_status, comment = '') {
     setTransitionError('')
@@ -125,7 +128,7 @@ export default function TransitionButton({ workOrder, onSuccess }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2 items-center">
-        {/* TEC: Iniciar */}
+        {/* Asignado: Iniciar */}
         {isTecAssigned && status === 'PENDING' && (
           <button
             onClick={() => doTransition('IN_PROGRESS')}
@@ -137,7 +140,7 @@ export default function TransitionButton({ workOrder, onSuccess }) {
           </button>
         )}
 
-        {/* TEC: Enviar a revision */}
+        {/* Asignado: Enviar a revision */}
         {isTecAssigned && status === 'IN_PROGRESS' && (
           <div className="relative group">
             <button

@@ -86,6 +86,19 @@ export function useSubmitField(responseId) {
   })
 }
 
+/**
+ * Un administrador o supervisor corrige una respuesta de una OT en revisión.
+ * Queda "Corregido por" y el valor anterior en la auditoría.
+ */
+export function useCorrectField(responseId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data) =>
+      client.post(`/api/checklists/responses/${responseId}/correct-field/`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['checklist-responses', responseId] }),
+  })
+}
+
 /** El técnico encontró otra cantidad de tomas que la del plan. */
 export function useSetBlockCount(responseId) {
   const qc = useQueryClient()

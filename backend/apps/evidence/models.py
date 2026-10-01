@@ -39,6 +39,14 @@ class Photo(models.Model):
         related_name="uploaded_photos"
     )
     offline_uuid = models.UUIDField(null=True, blank=True, unique=True)
+    # Una foto mala no se borra (trazabilidad): se oculta del acta y del portal
+    # del hospital, y queda quien la oculto (decision del 2026-10-01).
+    hidden = models.BooleanField(default=False)
+    hidden_by = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="hidden_photos"
+    )
+    hidden_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

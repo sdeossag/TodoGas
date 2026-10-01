@@ -30,6 +30,7 @@ import {
   relativeDue,
   todayIso,
 } from '../../utils/maintenance'
+import { ejecutores, etiquetaEjecutor } from '../../utils/ejecutores'
 
 const btnPrimary = 'px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 flex items-center gap-2'
 const btnGhost = 'px-4 py-2 text-sm text-gray-600 hover:text-gray-800'
@@ -319,7 +320,7 @@ function CreateWorkOrderModal({ tasks: seleccion, onClose }) {
   const navigate = useNavigate()
   const hospital = tasks[0].hospital
   const createMut = useCreateWorkOrderFromTasks()
-  const tecnicos = (useUsers({}).data ?? []).filter((u) => u.role === 'TEC' && u.is_active)
+  const tecnicos = ejecutores(useUsers({}).data ?? [])
   const { data: tree = [] } = useAssetTree(hospital.id)
   const nodos = useMemo(() => flattenTree(tree), [tree])
   const comun = useMemo(
@@ -413,10 +414,10 @@ function CreateWorkOrderModal({ tasks: seleccion, onClose }) {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className="block">
-            <span className="block text-sm font-medium text-gray-700 mb-1">Técnico</span>
+            <span className="block text-sm font-medium text-gray-700 mb-1">Asignado a</span>
             <select value={form.assigned_to} onChange={set('assigned_to')} className={input}>
               <option value="">Sin asignar</option>
-              {tecnicos.map((u) => <option key={u.id} value={u.id}>{`${u.first_name} ${u.last_name}`.trim() || u.email}</option>)}
+              {tecnicos.map((u) => <option key={u.id} value={u.id}>{etiquetaEjecutor(u)}</option>)}
             </select>
           </label>
           <label className="block">

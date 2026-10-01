@@ -20,6 +20,7 @@ import { formatDate, todayIso } from '../../utils/maintenance'
 import PhotoCapture from '../evidence/PhotoCapture'
 import Icon from '../ui/Icon'
 import Modal from '../ui/Modal'
+import { laEjecuto } from '../../utils/ejecutores'
 
 const EDITABLE = ['PENDING', 'IN_PROGRESS']
 const DECIDIBLE = ['IN_REVIEW', 'COMPLETED']
@@ -41,7 +42,7 @@ export default function FindingsPanel({ wo, readOnly = false }) {
   const [editando, setEditando] = useState(null) // null | 'nuevo' | hallazgo
 
   const esInterno = ['ADMIN', 'SUP'].includes(user?.role)
-  const esSuTecnico = user?.role === 'TEC' && wo.assigned_to?.id === user?.id
+  const esSuTecnico = laEjecuto(user, wo)
   const puedeReportar = !readOnly && EDITABLE.includes(wo.status) && (esSuTecnico || esInterno)
   const puedeDecidir = !readOnly && esInterno && DECIDIBLE.includes(wo.status)
   const activos = (wo.tasks ?? []).filter((t) => t.status !== 'CANCELLED').map((t) => t.asset)
