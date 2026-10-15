@@ -143,7 +143,7 @@ def test_pasa_a_revision_con_todos_completos(ot_de_piso, tec):
 
 # ── Cerrar: el acta verifica ─────────────────────────────────────────────────
 
-def test_cerrar_la_ot_deja_un_acta_que_verifica(ot_de_piso, tec, admin):
+def test_cerrar_la_ot_deja_un_acta_que_verifica(ot_de_piso, tec, admin, django_capture_on_commit_callbacks):
     """
     El hash se calcula en el momento en que se genera el acta. Si las tareas se
     cerraran despues, el hash las veria "programadas" y la verificacion (ya
@@ -165,7 +165,7 @@ def test_cerrar_la_ot_deja_un_acta_que_verifica(ot_de_piso, tec, admin):
             content_hash=sellado["hash"], integrity_version=INTEGRITY_ALGORITHM_VERSION,
         )
 
-    with patch("apps.reports.tasks.generate_work_order_pdf.delay", side_effect=generar_acta):
+    with patch("apps.reports.tasks.generate_work_order_pdf.delay", side_effect=generar_acta),             django_capture_on_commit_callbacks(execute=True):
         apply_transition(ot_de_piso, WorkOrder.Status.COMPLETED, admin)
 
     assert set(ot_de_piso.tasks.values_list("status", flat=True)) == {Task.Status.DONE}

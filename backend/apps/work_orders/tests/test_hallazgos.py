@@ -225,7 +225,7 @@ def test_el_hospital_ve_los_hallazgos_de_sus_visitas_finalizadas(mundo):
     assert resumen["recent_findings"][0]["state"] == "OPEN"
 
 
-def test_al_aprobar_con_uno_grave_se_avisa_al_hospital(mundo):
+def test_al_aprobar_con_uno_grave_se_avisa_al_hospital(mundo, django_capture_on_commit_callbacks):
     reportar(mundo, severity="LOW", out_of_service=True)
     urg = baker.make(User, role=User.Role.CLI, is_active=True, hospital=mundo["h"],
                      scope_node=mundo["urg"], email="urg@clinica.co")
@@ -233,7 +233,8 @@ def test_al_aprobar_con_uno_grave_se_avisa_al_hospital(mundo):
     baker.make(User, role=User.Role.CLI, is_active=True, hospital=mundo["h"],
                scope_node=otro_piso, email="cirugia@clinica.co")
     a_estado(mundo["ot"], WorkOrder.Status.IN_REVIEW)
-    with patch("apps.reports.tasks.generate_work_order_pdf.delay"):
+    # El correo sale cuando la aprobacion ya esta guardada.
+    with patch("apps.reports.tasks.generate_work_order_pdf.delay"),             django_capture_on_commit_callbacks(execute=True):
         apply_transition(mundo["ot"], WorkOrder.Status.COMPLETED, mundo["admin"])
     assert len(mail.outbox) == 1
     correo = mail.outbox[0]
@@ -241,10 +242,10 @@ def test_al_aprobar_con_uno_grave_se_avisa_al_hospital(mundo):
     assert "Fuera de servicio" in correo.body
 
 
-def test_sin_hallazgos_graves_no_hay_correo(mundo):
+def test_sin_hallazgos_graves_no_hay_correo(mundo, django_capture_on_commit_callbacks):
     reportar(mundo, severity="HIGH")
     a_estado(mundo["ot"], WorkOrder.Status.IN_REVIEW)
-    with patch("apps.reports.tasks.generate_work_order_pdf.delay"):
+    with patch("apps.reports.tasks.generate_work_order_pdf.delay"),             django_capture_on_commit_callbacks(execute=True):
         apply_transition(mundo["ot"], WorkOrder.Status.COMPLETED, mundo["admin"])
     assert mail.outbox == []
 

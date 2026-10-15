@@ -467,8 +467,11 @@ class WorkOrderStatusHistoryViewSet(
     permission_classes = [IsAdminOrSup]
 
     def get_queryset(self):
+        # Solo el historial de una OT que el usuario puede ver: un supervisor
+        # limitado a una clinica no lee el de otra aunque tenga su id.
         return WorkOrderStatusHistory.objects.filter(
-            work_order_id=self.kwargs["work_order_pk"]
+            work_order__in=scope.work_orders(WorkOrder.objects.all(), self.request.user),
+            work_order_id=self.kwargs["work_order_pk"],
         ).select_related("changed_by")
 
 

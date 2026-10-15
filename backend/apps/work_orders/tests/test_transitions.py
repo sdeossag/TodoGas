@@ -208,3 +208,52 @@ class TestApplyTransition:
         wo = apply_transition(wo_pending, WorkOrder.Status.CANCELLED, admin, comment="Duplicada")
         history = WorkOrderStatusHistory.objects.get(work_order=wo)
         assert history.comment == "Duplicada"
+
+
+@pytest.mark.django_db
+class TestApplyTransitionAtomica:
+    """Revision del 2026-10-15: la transicion es todo o nada y el acta sale despues del commit."""
+
+    def test_si_falla_el_cierre_de_tareas_la_ot_no_queda_aprobada(self, wo_in_review, admin):
+        from unittest.mock import patch
+
+        with patch("apps.maintenance.services.complete_work_order_tasks",
+                   side_effect=RuntimeError("caida a mitad")), \
+                patch("apps.reports.tasks.generate_work_order_pdf.delay") as pdf, \
+                pytest.raises(RuntimeError):
+            apply_transition(wo_in_review, WorkOrder.Status.COMPLETED, admin)
+
+        wo_in_review.refresh_from_db()
+        assert wo_in_review.status == WorkOrder.Status.IN_REVIEW
+        assert wo_in_review.completed_at is None
+        assert not WorkOrderStatusHistory.objects.filter(work_order=wo_in_review).exists()
+        pdf.assert_not_called()
+
+    def test_dos_aprobaciones_de_la_misma_ot_no_pasan_las_dos(self, wo_in_review, admin, sup):
+        from unittest.mock import patch
+
+        # Dos pedidos que leyeron la OT en revision antes de que el otro la aprobara.
+        primera = WorkOrder.objects.get(pk=wo_in_review.pk)
+        segunda = WorkOrder.objects.get(pk=wo_in_review.pk)
+        with patch("apps.reports.tasks.generate_work_order_pdf.delay"):
+            apply_transition(primera, WorkOrder.Status.COMPLETED, admin)
+            with pytest.raises(ValidationError):
+                apply_transition(segunda, WorkOrder.Status.COMPLETED, sup)
+
+        aprobaciones = WorkOrderStatusHistory.objects.filter(
+            work_order=wo_in_review, to_status=WorkOrder.Status.COMPLETED,
+        )
+        assert aprobaciones.count() == 1
+
+    def test_el_acta_se_encola_despues_del_commit(self, wo_in_review, admin,
+                                                  django_capture_on_commit_callbacks):
+        from unittest.mock import patch
+
+        with patch("apps.reports.tasks.generate_work_order_pdf.delay") as pdf:
+            with django_capture_on_commit_callbacks(execute=False) as pendientes:
+                apply_transition(wo_in_review, WorkOrder.Status.COMPLETED, admin)
+            pdf.assert_not_called()
+
+            for callback in pendientes:
+                callback()
+            pdf.assert_called_once_with(str(wo_in_review.id))

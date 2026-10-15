@@ -16,6 +16,7 @@ from datetime import date, timedelta
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -222,9 +223,11 @@ class TestFlujoCompletoDeLaDemo:
         assert resp.status_code == status.HTTP_200_OK, resp.data
 
         # ── 7. El ADMIN aprueba y se genera el acta ─────────────────────────
-        resp = admin_c.post(
-            transicion, {"new_status": WorkOrder.Status.COMPLETED}, format="json"
-        )
+        # El acta se encola al confirmar la aprobacion (on_commit).
+        with TestCase.captureOnCommitCallbacks(execute=True):
+            resp = admin_c.post(
+                transicion, {"new_status": WorkOrder.Status.COMPLETED}, format="json"
+            )
         assert resp.status_code == status.HTTP_200_OK, resp.data
 
         reporte = GeneratedReport.objects.filter(work_order_id=wo_id).first()

@@ -41,12 +41,15 @@ def _error(exc):
     return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-def _plan_tasks_con_conteos():
+def _plan_tasks_con_conteos(user):
+    # Solo cuentan las tareas de activos del alcance del usuario: el plan es
+    # compartido, pero lo de otro hospital no es suyo (apps.users.scope).
+    dentro = scope.asset_q(user, prefix="occurrences__asset__")
     return (
         PlanTask.objects.select_related("plan", "checklist_template")
         .annotate(
-            open_total=Count("occurrences", filter=_ABIERTAS),
-            done_total=Count("occurrences", filter=_HECHAS),
+            open_total=Count("occurrences", filter=_ABIERTAS & dentro),
+            done_total=Count("occurrences", filter=_HECHAS & dentro),
         )
         .order_by("sort_order", "name")
     )
@@ -62,16 +65,20 @@ def _sync_plan(plan, user):
 class MaintenancePlanViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
+        user = self.request.user
         hoy = timezone.localdate()
-        de_tarea_activa = Q(tasks__is_active=True)
         oc = "tasks__occurrences__"
+        # Activos y tareas de otro hospital no cuentan para un usuario limitado.
+        en_alcance = scope.asset_q(user, prefix=f"{oc}asset__")
+        de_tarea_activa = Q(tasks__is_active=True) & en_alcance
         pendiente = Q(**{f"{oc}status": Task.Status.PENDING})
         este_mes = Q(**{f"{oc}scheduled_date__year": hoy.year, f"{oc}scheduled_date__month": hoy.month})
         qs = (
-            MaintenancePlan.objects.select_related("restrict_to_hospital")
-            .prefetch_related(Prefetch("tasks", queryset=_plan_tasks_con_conteos()))
+            scope.plans(MaintenancePlan.objects.all(), user)
+            .select_related("restrict_to_hospital")
+            .prefetch_related(Prefetch("tasks", queryset=_plan_tasks_con_conteos(user)))
             .annotate(
-                assets_total=Count("assets", distinct=True),
+                assets_total=Count("assets", distinct=True, filter=scope.asset_q(user, prefix="assets__")),
                 next_due=Min(
                     f"{oc}scheduled_date",
                     filter=de_tarea_activa & Q(**{f"{oc}status__in": Task.OPEN_STATUSES}),
@@ -83,13 +90,13 @@ class MaintenancePlanViewSet(viewsets.ModelViewSet):
                 ),
                 month_total=Count(
                     "tasks__occurrences", distinct=True,
-                    filter=este_mes & Q(**{f"{oc}status__in": [
+                    filter=en_alcance & este_mes & Q(**{f"{oc}status__in": [
                         Task.Status.PENDING, Task.Status.SCHEDULED, Task.Status.DONE,
                     ]}),
                 ),
                 month_done=Count(
                     "tasks__occurrences", distinct=True,
-                    filter=este_mes & Q(**{f"{oc}status": Task.Status.DONE}),
+                    filter=en_alcance & este_mes & Q(**{f"{oc}status": Task.Status.DONE}),
                 ),
             )
         )
@@ -210,11 +217,11 @@ class MaintenancePlanViewSet(viewsets.ModelViewSet):
             if i > 0:
                 ref = ref - relativedelta(months=i)
             # Por tarea de activo, no por OT: una OT puede llevar varias.
-            qs = Task.objects.filter(
+            qs = scope.assets(Task.objects.filter(
                 plan_task__plan=plan,
                 scheduled_date__year=ref.year,
                 scheduled_date__month=ref.month,
-            ).exclude(status=Task.Status.CANCELLED)
+            ), request.user, prefix="asset__").exclude(status=Task.Status.CANCELLED)
             total = qs.count()
             completed = qs.filter(status=Task.Status.DONE).count()
             monthly.append({
@@ -247,7 +254,10 @@ class PlanTaskViewSet(
     pagination_class = None
 
     def get_queryset(self):
-        qs = _plan_tasks_con_conteos()
+        user = self.request.user
+        qs = _plan_tasks_con_conteos(user).filter(
+            plan__in=scope.plans(MaintenancePlan.objects.all(), user)
+        )
         plan_id = self.request.query_params.get("plan_id")
         if plan_id:
             qs = qs.filter(plan_id=plan_id)

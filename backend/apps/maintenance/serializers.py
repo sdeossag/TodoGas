@@ -4,6 +4,7 @@ from rest_framework.validators import UniqueValidator
 
 from apps.assets.models import Asset
 from apps.checklists.models import ChecklistTemplate
+from apps.users import scope
 from apps.users.scope import ScopedFieldsMixin
 
 from .models import MaintenancePlan, PlanTask, RescheduleCause, Task, TaskReschedule, TaskTypeCatalog
@@ -74,6 +75,9 @@ class MaintenancePlanDetailSerializer(MaintenancePlanListSerializer):
         return None
 
     def get_assets(self, obj):
+        # El plan es compartido; de sus activos, solo los del alcance de quien
+        # lo mira (apps.users.scope).
+        user = self.context["request"].user
         proximas = dict(
             Task.objects.filter(
                 plan_task__plan=obj, plan_task__is_active=True,
@@ -94,7 +98,7 @@ class MaintenancePlanDetailSerializer(MaintenancePlanListSerializer):
                 "node_path": a.node.path if a.node_id else "",
                 "next_due_date": proximas.get(a.id),
             }
-            for a in obj.assets.select_related("hospital", "node").order_by("code")
+            for a in scope.assets(obj.assets.select_related("hospital", "node"), user).order_by("code")
         ]
 
 

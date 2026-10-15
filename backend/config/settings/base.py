@@ -10,7 +10,10 @@ BASE_DIR = __import__("pathlib").Path(__file__).resolve().parents[2]
 os.environ.setdefault("LC_ALL", "C")
 os.environ.setdefault("LANG", "C")
 
-SECRET_KEY = config("SECRET_KEY", default=config("DJANGO_SECRET_KEY", default="unsafe-development-key"))
+# La de desarrollo esta en el codigo: produccion se niega a arrancar con ella.
+DEV_SECRET_KEY = "unsafe-development-key"
+# Una variable vacia cuenta como ausente.
+SECRET_KEY = config("SECRET_KEY", default="") or config("DJANGO_SECRET_KEY", default="") or DEV_SECRET_KEY
 
 INSTALLED_APPS = [
     "django.contrib.admin",

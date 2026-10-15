@@ -23,9 +23,7 @@ S3 = "storages.backends.s3boto3.S3Boto3Storage"
 def cargar(modulo, **entorno):
     """Importa un módulo de ajustes con estas variables y devuelve lo que interesa."""
     codigo = (
-        "import json, os, django\n"
-        f"os.environ['DJANGO_SETTINGS_MODULE'] = {modulo!r}\n"
-        "django.setup()\n"
+        "import json\n"
         "from django.conf import settings\n"
         "from django.core.files.storage import default_storage\n"
         "default_storage._setup()\n"
@@ -35,14 +33,25 @@ def cargar(modulo, **entorno):
         "    'storage_real': type(default_storage._wrapped).__name__,\n"
         "}))\n"
     )
+    salida = importar(modulo, codigo, **entorno)
+    assert salida.returncode == 0, salida.stderr[-2000:]
+    return json.loads(salida.stdout.strip().splitlines()[-1])
+
+
+def importar(modulo, codigo="", **entorno):
+    """Corre `codigo` en un proceso aparte con esos ajustes y variables."""
+    codigo = (
+        "import os, django\n"
+        f"os.environ['DJANGO_SETTINGS_MODULE'] = {modulo!r}\n"
+        "django.setup()\n"
+    ) + codigo
     env = {**os.environ, "DB_NAME": "x", "DB_USER": "x", "DB_PASSWORD": "x",
-           "DB_HOST": "x", "DB_PORT": "5432", **entorno}
-    salida = subprocess.run(
+           "DB_HOST": "x", "DB_PORT": "5432", "SECRET_KEY": "clave-de-prueba-solo-para-tests",
+           **entorno}
+    return subprocess.run(
         [sys.executable, "-c", codigo], cwd=BACKEND, env=env,
         capture_output=True, text=True, timeout=120,
     )
-    assert salida.returncode == 0, salida.stderr[-2000:]
-    return json.loads(salida.stdout.strip().splitlines()[-1])
 
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
@@ -132,3 +141,33 @@ def test_produccion_usa_s3_aunque_no_haya_claves():
     )
 
     assert ajustes["storage"] == S3
+
+
+# ── Clave secreta ─────────────────────────────────────────────────────────────
+
+PRODUCCION = {"FRONTEND_URL": "https://app.todogas.com.co", "BACKEND_URL": "https://api.todogas.com.co"}
+
+
+@pytest.mark.parametrize("clave", ["", "unsafe-development-key"])
+def test_produccion_no_arranca_sin_clave_propia(clave):
+    """Con la clave de desarrollo, que esta en el repositorio, cualquiera firmaria un JWT."""
+    salida = importar("config.settings.production", SECRET_KEY=clave, DJANGO_SECRET_KEY="", **PRODUCCION)
+
+    assert salida.returncode != 0
+    assert "SECRET_KEY" in salida.stderr
+
+
+def test_produccion_arranca_con_su_clave():
+    salida = importar(
+        "config.settings.production", "from django.conf import settings\nprint(settings.SECRET_KEY)\n",
+        SECRET_KEY="", DJANGO_SECRET_KEY="clave-propia-de-produccion", **PRODUCCION,
+    )
+
+    assert salida.returncode == 0, salida.stderr[-2000:]
+    assert salida.stdout.strip().splitlines()[-1] == "clave-propia-de-produccion"
+
+
+def test_desarrollo_sigue_arrancando_sin_clave():
+    salida = importar("config.settings.development", SECRET_KEY="", DJANGO_SECRET_KEY="")
+
+    assert salida.returncode == 0, salida.stderr[-2000:]

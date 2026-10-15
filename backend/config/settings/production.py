@@ -1,10 +1,16 @@
 from decouple import config
+from django.core.exceptions import ImproperlyConfigured
 
 from config.cors import allowed_origins
 
 from .base import *  # noqa: F401,F403
 
 DEBUG = False
+
+# Sin clave propia los JWT se firmarian con la de desarrollo, que cualquiera
+# puede leer en el repositorio: mejor no arrancar que arrancar abierto.
+if SECRET_KEY == DEV_SECRET_KEY:
+    raise ImproperlyConfigured("Falta SECRET_KEY (o DJANGO_SECRET_KEY) para producción.")
 ALLOWED_HOSTS = [host.strip() for host in config("DJANGO_ALLOWED_HOSTS", default="").split(",") if host.strip()]
 
 # Las cookies de sesion y CSRF solo las usa el panel /admin/ (la API va con

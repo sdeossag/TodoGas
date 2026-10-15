@@ -83,6 +83,35 @@ def assets(qs, user, prefix=""):
     return qs.filter(**{f"{prefix}node_id__in": nodos}) if nodos is not None else qs
 
 
+def asset_q(user, prefix=""):
+    """
+    El limite de `assets` como Q, para los conteos que no filtran filas sino
+    lo que se cuenta (Count(filter=...)): un plan es de todos los hospitales,
+    pero sus activos y sus tareas solo cuentan los del alcance del usuario.
+    """
+    try:
+        if not _limitado(user):
+            return Q()
+    except _SinAcceso:
+        return Q(**{f"{prefix}pk__in": []})
+    dentro = Q(**{f"{prefix}hospital_id": user.hospital_id})
+    nodos = _nodos(user)
+    if nodos is not None:
+        dentro &= Q(**{f"{prefix}node_id__in": nodos})
+    return dentro
+
+
+@_filtrar
+def plans(qs, user):
+    """
+    Los protocolos son un catalogo compartido; el que esta restringido a otro
+    hospital no se ve.
+    """
+    if not _limitado(user):
+        return qs
+    return qs.filter(Q(restrict_to_hospital__isnull=True) | Q(restrict_to_hospital_id=user.hospital_id))
+
+
 @_filtrar
 def work_orders(qs, user, prefix=""):
     """

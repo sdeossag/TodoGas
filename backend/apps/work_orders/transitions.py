@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -116,6 +117,36 @@ def validate_transition(work_order, new_status, user, comment=""):
 
 
 def apply_transition(work_order, new_status, user, comment=""):
+    """
+    Todo o nada: la OT, el ciclo de sus tareas y el historial se guardan juntos.
+    La fila de la OT queda bloqueada hasta el final, asi dos aprobaciones a la
+    vez no pasan las dos la validacion. El acta y el correo salen despues del
+    commit: un worker que los tome antes leeria la OT sin aprobar.
+    """
+    with transaction.atomic():
+        # El estado que vale es el de la fila bloqueada, no el que traia el
+        # objeto: otro pedido pudo cambiarlo mientras tanto.
+        work_order.status = (
+            WorkOrder.objects.select_for_update().values_list("status", flat=True).get(pk=work_order.pk)
+        )
+        _aplicar(work_order, new_status, user, comment)
+
+    if new_status == WorkOrder.Status.COMPLETED:
+        from apps.reports.tasks import generate_work_order_pdf, send_serious_findings_email
+
+        def _avisar():
+            generate_work_order_pdf.delay(str(work_order.id))
+            # Hallazgo critico o equipo fuera de servicio: el hospital se
+            # entera al aprobar, sin esperar a leer el acta.
+            if any(f.is_serious for f in work_order.findings.all()):
+                send_serious_findings_email.delay(str(work_order.id))
+
+        transaction.on_commit(_avisar)
+
+    return work_order
+
+
+def _aplicar(work_order, new_status, user, comment):
     validate_transition(work_order, new_status, user, comment)
 
     from_status = work_order.status
@@ -152,13 +183,3 @@ def apply_transition(work_order, new_status, user, comment=""):
         changed_by=user,
         comment=comment,
     )
-
-    if new_status == WorkOrder.Status.COMPLETED:
-        from apps.reports.tasks import generate_work_order_pdf, send_serious_findings_email
-        generate_work_order_pdf.delay(str(work_order.id))
-        # Hallazgo critico o equipo fuera de servicio: el hospital se entera
-        # al aprobar, sin esperar a leer el acta.
-        if any(f.is_serious for f in work_order.findings.all()):
-            send_serious_findings_email.delay(str(work_order.id))
-
-    return work_order

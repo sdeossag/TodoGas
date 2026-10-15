@@ -262,3 +262,66 @@ def test_cambiar_de_hospital_suelta_la_ubicacion_vieja(mundo):
     assert r.status_code == 200, r.data
     u.refresh_from_db()
     assert u.hospital == mundo["b"] and u.scope_node is None
+
+
+# ── Historial de OT y protocolos (revision del 2026-10-15) ───────────────────
+
+def test_el_supervisor_limitado_no_lee_el_historial_de_otra_clinica(mundo, sup_a):
+    from apps.work_orders.models import WorkOrderStatusHistory
+
+    for clave in ("urg", "b"):
+        WorkOrderStatusHistory.objects.create(
+            work_order=mundo["ots"][clave], from_status="IN_REVIEW", to_status="COMPLETED",
+            changed_by=mundo["admin"], comment=f"aprobada {clave}",
+        )
+    c = cliente(sup_a)
+
+    assert ids(c.get(f"/api/work-orders/{mundo['ots']['urg'].id}/history/"))
+    assert ids(c.get(f"/api/work-orders/{mundo['ots']['b'].id}/history/")) == set()
+    fila_b = WorkOrderStatusHistory.objects.get(work_order=mundo["ots"]["b"])
+    assert c.get(f"/api/work-orders/{mundo['ots']['b'].id}/history/{fila_b.id}/").status_code == 404
+    assert ids(cliente(mundo["admin"]).get(f"/api/work-orders/{mundo['ots']['b'].id}/history/"))
+
+
+def test_el_protocolo_de_otra_clinica_no_se_ve(mundo, sup_a):
+    solo_b = make_plan("Solo B", restrict_to_hospital=mundo["b"])
+    solo_a = make_plan("Solo A", restrict_to_hospital=mundo["a"])
+    c = cliente(sup_a)
+
+    planes = ids(c.get("/api/maintenance/plans/"))
+    assert str(solo_b.id) not in planes
+    assert {str(solo_a.id), str(mundo["plan"].id)} <= planes
+    assert c.get(f"/api/maintenance/plans/{solo_b.id}/").status_code == 404
+    tareas = c.get("/api/maintenance/plan-tasks/", {"plan_id": str(solo_b.id)})
+    assert tareas.data == []
+
+
+def test_el_protocolo_compartido_solo_cuenta_lo_de_su_clinica(mundo, sup_a):
+    plan = mundo["plan"]
+    propio = cliente(sup_a).get(f"/api/maintenance/plans/{plan.id}/").data
+    todo = cliente(mundo["admin"]).get(f"/api/maintenance/plans/{plan.id}/").data
+
+    assert {a["code"] for a in propio["assets"]} == {"A-URG", "A-P2"}
+    assert {a["code"] for a in todo["assets"]} == {"A-URG", "A-P2", "B-1"}
+    assert propio["assets_count"] == 2
+    assert todo["assets_count"] == 3
+
+    def abiertas(datos):
+        return sum(t["open_count"] + t["done_count"] for t in datos["tasks"])
+
+    assert abiertas(propio) == 2
+    assert abiertas(todo) == 3
+    lista = cliente(sup_a).get("/api/maintenance/plan-tasks/", {"plan_id": str(plan.id)}).data
+    assert sum(t["open_count"] + t["done_count"] for t in lista) == 2
+
+
+def test_el_cumplimiento_del_protocolo_es_el_de_su_clinica(mundo, sup_a):
+    plan = mundo["plan"]
+
+    def este_mes(user):
+        r = cliente(user).get(f"/api/maintenance/plans/{plan.id}/compliance/")
+        assert r.status_code == 200
+        return r.data["monthly"][-1]["total"]
+
+    assert este_mes(sup_a) == 2
+    assert este_mes(mundo["admin"]) == 3

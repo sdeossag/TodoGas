@@ -15,6 +15,7 @@ from datetime import date, timedelta
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -88,7 +89,9 @@ def crear_ot(d, asignado):
 
 
 def transicion(c, wo_id, estado):
-    return c.post(reverse("work-orders-transition", kwargs={"pk": wo_id}), {"new_status": estado}, format="json")
+    # El acta sale despues del commit de la aprobacion: se corre aqui mismo.
+    with TestCase.captureOnCommitCallbacks(execute=True):
+        return c.post(reverse("work-orders-transition", kwargs={"pk": wo_id}), {"new_status": estado}, format="json")
 
 
 def foto(c, wo_id, caption="Antes"):

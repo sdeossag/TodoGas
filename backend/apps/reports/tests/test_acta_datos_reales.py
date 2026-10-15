@@ -225,8 +225,8 @@ def test_validado_por_es_quien_aprobo_la_ot(ot, tec, admin):
     assert "Pendiente de aprobación" not in texto
 
 
-def test_el_acta_se_genera_con_la_aprobacion_ya_registrada(ot, admin):
-    """En desarrollo el acta se genera en el acto: el historial tiene que ir antes."""
+def test_el_acta_se_genera_con_la_aprobacion_ya_registrada(ot, admin, django_capture_on_commit_callbacks):
+    """El acta sale despues del commit, con el historial de la aprobacion ya guardado."""
     WorkOrder.objects.filter(pk=ot.pk).update(status=WorkOrder.Status.IN_REVIEW)
     ot.refresh_from_db()
     visto = {}
@@ -236,6 +236,6 @@ def test_el_acta_se_genera_con_la_aprobacion_ya_registrada(ot, admin):
             to_status=WorkOrder.Status.COMPLETED
         ).exists()
 
-    with patch("apps.reports.tasks.generate_work_order_pdf.delay", side_effect=al_generar):
+    with patch("apps.reports.tasks.generate_work_order_pdf.delay", side_effect=al_generar),             django_capture_on_commit_callbacks(execute=True):
         apply_transition(ot, WorkOrder.Status.COMPLETED, admin)
     assert visto["aprobacion"] is True
