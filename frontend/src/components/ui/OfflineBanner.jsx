@@ -1,5 +1,6 @@
 import useNetworkStore from '../../store/networkStore'
 import Icon from './Icon'
+import SyncAttentionNotice from './SyncAttentionNotice'
 
 /**
  * Aviso permanente del estado de conectividad.
@@ -8,6 +9,15 @@ import Icon from './Icon'
  * que saberlo en todo momento, porque cambia lo que puede esperar de la app.
  */
 export default function OfflineBanner() {
+  return (
+    <>
+      <ConnectionBanner />
+      <SyncAttentionNotice />
+    </>
+  )
+}
+
+function ConnectionBanner() {
   const isOnline = useNetworkStore((s) => s.isOnline)
   const isSyncing = useNetworkStore((s) => s.isSyncing)
   const pendingSyncCount = useNetworkStore((s) => s.pendingSyncCount)

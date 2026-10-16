@@ -6,7 +6,13 @@
  * una transicion a COMPLETED valida que el checklist este completo.
  *
  * Ningun fallo individual aborta la tanda: cada error se anota en sync_log y
- * el elemento se reintenta en la siguiente pasada.
+ * en sync_state. Segun el error (ver retryPolicy.js) el elemento se reintenta
+ * con espera creciente, o pasa a "requiere atencion" y no se vuelve a mandar
+ * solo: nunca se descarta, es evidencia.
+ *
+ * Dependencias: si un elemento no sube en esta pasada (fallo, espera o
+ * atencion), lo que depende de el se salta sin intentarse y sin anotarle un
+ * fallo: el servidor lo rechazaria por culpa del padre, no por culpa suya.
  */
 
 import client from '../api/client'
@@ -20,6 +26,10 @@ import {
   markFindingSynced,
   getUnsyncedSignatures,
   getWorkOrdersWithLocalStatusChange,
+  getChecklistWorkOrderIds,
+  getSyncStates,
+  clearSyncState,
+  saveSyncFailure,
   logSync,
   markBlockCountsSynced,
   markChecklistCompletionSynced,
@@ -28,6 +38,7 @@ import {
   markSignatureSynced,
   markWorkOrderStatusSynced,
 } from '../db/repositories'
+import { dueNow, isChecklistCompleted, nextState, serverMessage } from './retryPolicy'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -46,45 +57,159 @@ async function dataUrlToFile(dataUrl, filename) {
   return new File([blob], `${filename}.${ext}`, { type: blob.type || 'image/jpeg' })
 }
 
+/**
+ * Intenta un elemento respetando su estado de reintentos y las dependencias.
+ * Devuelve 'ok', 'failed' (fallo nuevo), 'waiting' (en espera o requiere
+ * atencion) o 'blocked' (su padre no subio).
+ *
+ *   ctx      { estados, ahora } de la pasada
+ *   item     { type, key, workOrderId, log: {entityType, entityId, action} }
+ *   bloqueado  true si algo de lo que depende no subio
+ *   alNoSubir  se llama si este elemento no sube, para bloquear a sus dependientes
+ *   fn       la subida; lanza si falla
+ */
+async function intentar(ctx, item, { bloqueado = false, alNoSubir, logOk = true }, fn) {
+  if (bloqueado) {
+    alNoSubir?.()
+    return 'blocked'
+  }
+  const estado = ctx.estados.get(`${item.type}:${item.key}`)
+  if (!dueNow(estado, ctx.ahora)) {
+    alNoSubir?.()
+    return 'waiting'
+  }
+  try {
+    await fn()
+    if (estado) await clearSyncState(item.type, item.key)
+    if (logOk) await logSync({ ...item.log, status: 'ok' })
+    return 'ok'
+  } catch (error) {
+    await logSync({ ...item.log, status: 'error', errorMessage: errorText(error) })
+    await saveSyncFailure({
+      entityType: item.type,
+      entityKey: item.key,
+      workOrderId: item.workOrderId ?? null,
+      state: nextState(estado, error, ctx.ahora),
+      message: serverMessage(error),
+    })
+    alNoSubir?.()
+    return 'failed'
+  }
+}
+
+/** Cuenta el resultado de un elemento en el resumen de la fase. */
+function contar(resumen, resultado) {
+  if (resultado === 'ok') resumen.ok += 1
+  else if (resultado === 'failed') resumen.failed += 1
+  else resumen.waiting += 1
+}
+
+const resumenVacio = (total) => ({ ok: 0, failed: 0, waiting: 0, total })
+
+/** Contexto de una pasada: estados de reintento y lo que quedo sin subir. */
+async function nuevoContexto() {
+  return {
+    estados: await getSyncStates(),
+    ahora: Date.now(),
+    checklistOT: await getChecklistWorkOrderIds(),
+    // Lo que no subio en esta pasada y bloquea a sus dependientes.
+    sinCantidad: new Set(), // checklists con la cantidad de tomas sin subir
+    sinRespuestas: new Set(), // checklists con alguna respuesta sin subir
+    sinHallazgo: new Set(), // hallazgos sin subir (sus fotos esperan)
+    sinSubir: new Set(), // OT con algo sin subir (su cambio de estado espera)
+  }
+}
+
 // ── Fases ────────────────────────────────────────────────────────────────────
 
-export async function syncFieldResponses(onItemDone) {
-  const pending = await getUnsyncedFieldResponses()
-  let ok = 0
-  let failed = 0
+/**
+ * Cantidad de tomas ajustadas sin red. Van antes que las respuestas: el
+ * servidor rechaza la toma 21 mientras siga creyendo que hay 20.
+ */
+export async function syncBlockCounts(ctx, onItemDone) {
+  const pending = await getPendingBlockCounts()
+  const resumen = resumenVacio(pending.length)
 
   for (const row of pending) {
+    const workOrderId = ctx.checklistOT.get(row.id)
+    let cuantas = {}
     try {
-      await client.post(`/api/checklists/responses/${row.response_id}/submit-field/`, {
-        field: row.field_id,
-        repetition: row.repetition ?? 0,
-        value: row.value ?? '',
-        notes: row.notes ?? '',
-        // La hora en que se respondio aqui, no la de sincronizar: es la del acta.
-        answered_at: row.answered_at ?? null,
-      })
-      await markFieldResponseSynced(row.response_id, row.field_id, row.repetition ?? 0)
-      await logSync({
-        entityType: 'field_response',
-        entityId: row.id,
-        action: 'submit-field',
-        status: 'ok',
-      })
-      ok += 1
-    } catch (error) {
-      await logSync({
-        entityType: 'field_response',
-        entityId: row.id,
-        action: 'submit-field',
-        status: 'error',
-        errorMessage: errorText(error),
-      })
-      failed += 1
+      cuantas = JSON.parse(row.local_block_counts ?? '{}')
+    } catch {
+      cuantas = {}
     }
+    const resultado = await intentar(
+      ctx,
+      {
+        type: 'block_count',
+        key: row.id,
+        workOrderId,
+        log: { entityType: 'checklist', entityId: row.id, action: 'block-count' },
+      },
+      {
+        logOk: false,
+        alNoSubir: () => {
+          ctx.sinCantidad.add(row.id)
+          ctx.sinSubir.add(workOrderId)
+        },
+      },
+      async () => {
+        try {
+          for (const [group, count] of Object.entries(cuantas)) {
+            await client.post(`/api/checklists/responses/${row.id}/block-count/`, { group, count })
+          }
+        } catch (error) {
+          // Un checklist que ya se cerro en el servidor no admite cambios: no
+          // hay nada que reintentar.
+          if (!isChecklistCompleted(error)) throw error
+        }
+        await markBlockCountsSynced(row.id)
+      }
+    )
+    contar(resumen, resultado)
+    onItemDone?.()
+  }
+  return resumen
+}
+
+export async function syncFieldResponses(ctx, onItemDone) {
+  const pending = await getUnsyncedFieldResponses()
+  const resumen = resumenVacio(pending.length)
+
+  for (const row of pending) {
+    const workOrderId = ctx.checklistOT.get(row.response_id)
+    const resultado = await intentar(
+      ctx,
+      {
+        type: 'field_response',
+        key: row.id,
+        workOrderId,
+        log: { entityType: 'field_response', entityId: row.id, action: 'submit-field' },
+      },
+      {
+        bloqueado: ctx.sinCantidad.has(row.response_id),
+        alNoSubir: () => {
+          ctx.sinRespuestas.add(row.response_id)
+          ctx.sinSubir.add(workOrderId)
+        },
+      },
+      async () => {
+        await client.post(`/api/checklists/responses/${row.response_id}/submit-field/`, {
+          field: row.field_id,
+          repetition: row.repetition ?? 0,
+          value: row.value ?? '',
+          notes: row.notes ?? '',
+          // La hora en que se respondio aqui, no la de sincronizar: es la del acta.
+          answered_at: row.answered_at ?? null,
+        })
+        await markFieldResponseSynced(row.response_id, row.field_id, row.repetition ?? 0)
+      }
+    )
+    contar(resumen, resultado)
     onItemDone?.()
   }
 
-  return { ok, failed, total: pending.length }
+  return resumen
 }
 
 /**
@@ -92,40 +217,42 @@ export async function syncFieldResponses(onItemDone) {
  * rechaza cerrar uno con obligatorios sin responder) y antes del estado de la
  * OT (pasar a revision exige todos los checklists cerrados).
  */
-export async function syncChecklistCompletions(onItemDone) {
+export async function syncChecklistCompletions(ctx, onItemDone) {
   const pending = await getPendingChecklistCompletions()
-  let ok = 0
-  let failed = 0
+  const resumen = resumenVacio(pending.length)
 
   for (const row of pending) {
-    try {
-      await client.post(`/api/checklists/responses/${row.id}/complete/`, {
-        completed_at: row.local_completed_at ?? null,
-      })
-      await markChecklistCompletionSynced(row.id)
-      await logSync({ entityType: 'checklist', entityId: row.id, action: 'complete', status: 'ok' })
-      ok += 1
-    } catch (error) {
-      // Si ya estaba cerrado en el servidor (se cerro desde otra sesion), el
-      // cierre en cola ya no tiene nada que hacer.
-      if (error?.response?.status === 400 && /ya est. completado/i.test(error.response.data?.detail ?? '')) {
+    const workOrderId = ctx.checklistOT.get(row.id)
+    const resultado = await intentar(
+      ctx,
+      {
+        type: 'checklist_completion',
+        key: row.id,
+        workOrderId,
+        log: { entityType: 'checklist', entityId: row.id, action: 'complete' },
+      },
+      {
+        bloqueado: ctx.sinCantidad.has(row.id) || ctx.sinRespuestas.has(row.id),
+        alNoSubir: () => ctx.sinSubir.add(workOrderId),
+      },
+      async () => {
+        try {
+          await client.post(`/api/checklists/responses/${row.id}/complete/`, {
+            completed_at: row.local_completed_at ?? null,
+          })
+        } catch (error) {
+          // Si ya estaba cerrado en el servidor (se cerro desde otra sesion),
+          // el cierre en cola ya no tiene nada que hacer.
+          if (!isChecklistCompleted(error)) throw error
+        }
         await markChecklistCompletionSynced(row.id)
-        ok += 1
-      } else {
-        await logSync({
-          entityType: 'checklist',
-          entityId: row.id,
-          action: 'complete',
-          status: 'error',
-          errorMessage: errorText(error),
-        })
-        failed += 1
       }
-    }
+    )
+    contar(resumen, resultado)
     onItemDone?.()
   }
 
-  return { ok, failed, total: pending.length }
+  return resumen
 }
 
 /**
@@ -134,23 +261,37 @@ export async function syncChecklistCompletions(onItemDone) {
  * revision ya no se aceptan cambios). El alta manda el id del telefono: si la
  * respuesta se perdio, reenviarla devuelve el mismo hallazgo.
  */
-export async function syncFindings(onItemDone) {
+export async function syncFindings(ctx, onItemDone) {
   const pending = await getPendingFindings()
-  let ok = 0
-  let failed = 0
+  const resumen = resumenVacio(pending.length)
 
   for (const row of pending) {
     const f = JSON.parse(row.data_json)
-    try {
-      if (row.pending_action === 'delete') {
-        try {
-          await client.delete(`/api/findings/${row.id}/`)
-        } catch (error) {
-          // Ya no estaba: lo que se queria, que no este.
-          if (error?.response?.status !== 404) throw error
+    const resultado = await intentar(
+      ctx,
+      {
+        type: 'finding',
+        key: row.id,
+        workOrderId: row.work_order_id,
+        log: { entityType: 'finding', entityId: row.id, action: row.pending_action },
+      },
+      {
+        alNoSubir: () => {
+          ctx.sinHallazgo.add(row.id)
+          ctx.sinSubir.add(row.work_order_id)
+        },
+      },
+      async () => {
+        if (row.pending_action === 'delete') {
+          try {
+            await client.delete(`/api/findings/${row.id}/`)
+          } catch (error) {
+            // Ya no estaba: lo que se queria, que no este.
+            if (error?.response?.status !== 404) throw error
+          }
+          await markFindingSynced(row.id, null)
+          return
         }
-        await markFindingSynced(row.id, null)
-      } else {
         const datos = {
           asset: f.asset,
           description: f.description,
@@ -171,200 +312,133 @@ export async function syncFindings(onItemDone) {
         }
         await markFindingSynced(row.id, respuesta.data)
       }
-      await logSync({ entityType: 'finding', entityId: row.id, action: row.pending_action, status: 'ok' })
-      ok += 1
-    } catch (error) {
-      await logSync({
-        entityType: 'finding',
-        entityId: row.id,
-        action: row.pending_action,
-        status: 'error',
-        errorMessage: errorText(error),
-      })
-      failed += 1
-    }
+    )
+    contar(resumen, resultado)
     onItemDone?.()
   }
 
-  return { ok, failed, total: pending.length }
+  return resumen
 }
 
-export async function syncPhotos(onItemDone) {
+export async function syncPhotos(ctx, onItemDone) {
   const pending = await getUnsyncedPhotos()
-  let ok = 0
-  let failed = 0
+  const resumen = resumenVacio(pending.length)
 
   for (const row of pending) {
-    try {
-      if (!row.file_path?.startsWith('data:')) {
-        // La camara nativa guarda base64 como data URL, igual que el flujo web.
-        // Cualquier otra cosa es una fila corrupta y no se puede subir.
-        throw new Error(`Ruta de foto no soportada: ${row.file_path ?? 'vacia'}`)
-      }
+    const resultado = await intentar(
+      ctx,
+      {
+        type: 'photo',
+        key: row.offline_uuid,
+        workOrderId: row.work_order_id,
+        log: { entityType: 'photo', entityId: row.offline_uuid, action: 'upload' },
+      },
+      {
+        // Foto de un hallazgo que aun no subio: el servidor no lo conoce.
+        bloqueado: !!row.finding_id && ctx.sinHallazgo.has(row.finding_id),
+        alNoSubir: () => ctx.sinSubir.add(row.work_order_id),
+      },
+      async () => {
+        if (!row.file_path?.startsWith('data:')) {
+          // La camara nativa guarda base64 como data URL, igual que el flujo web.
+          // Cualquier otra cosa es una fila corrupta y no se puede subir.
+          throw new Error(`Ruta de foto no soportada: ${row.file_path ?? 'vacia'}`)
+        }
 
-      const file = await dataUrlToFile(row.file_path, `ot-${row.work_order_id}`)
-      const form = new FormData()
-      form.append('work_order', row.work_order_id)
-      if (row.task_id) form.append('task', row.task_id)
-      // Foto de un hallazgo: el hallazgo ya subio (syncFindings va antes).
-      if (row.finding_id) form.append('finding', row.finding_id)
-      form.append('file', file)
-      if (row.latitude != null) form.append('latitude', row.latitude)
-      if (row.longitude != null) form.append('longitude', row.longitude)
-      form.append('taken_at', row.taken_at)
-      if (row.caption) form.append('caption', row.caption)
-      // Con el identificador del telefono un reintento no duplica la foto, y el
-      // campo foto del checklist ('sin-conexion:<uuid>') la encuentra despues.
-      // Sin crypto.randomUUID newId() da 'local-...', que el servidor
-      // rechazaria junto con la foto: ese no se manda.
-      if (UUID.test(row.offline_uuid ?? '')) form.append('offline_uuid', row.offline_uuid)
+        const file = await dataUrlToFile(row.file_path, `ot-${row.work_order_id}`)
+        const form = new FormData()
+        form.append('work_order', row.work_order_id)
+        if (row.task_id) form.append('task', row.task_id)
+        // Foto de un hallazgo: el hallazgo ya subio (syncFindings va antes).
+        if (row.finding_id) form.append('finding', row.finding_id)
+        form.append('file', file)
+        if (row.latitude != null) form.append('latitude', row.latitude)
+        if (row.longitude != null) form.append('longitude', row.longitude)
+        form.append('taken_at', row.taken_at)
+        if (row.caption) form.append('caption', row.caption)
+        // Con el identificador del telefono un reintento no duplica la foto, y el
+        // campo foto del checklist ('sin-conexion:<uuid>') la encuentra despues.
+        // Sin crypto.randomUUID newId() da 'local-...', que el servidor
+        // rechazaria junto con la foto: ese no se manda.
+        if (UUID.test(row.offline_uuid ?? '')) form.append('offline_uuid', row.offline_uuid)
 
-      const { data } = await client.post('/api/evidence/photos/', form, {
-        headers: { 'Content-Type': undefined },
-      })
-
-      await markPhotoSynced(row.offline_uuid, data.id)
-      await logSync({
-        entityType: 'photo',
-        entityId: row.offline_uuid,
-        action: 'upload',
-        status: 'ok',
-      })
-      ok += 1
-    } catch (error) {
-      await logSync({
-        entityType: 'photo',
-        entityId: row.offline_uuid,
-        action: 'upload',
-        status: 'error',
-        errorMessage: errorText(error),
-      })
-      failed += 1
-    }
-    onItemDone?.()
-  }
-
-  return { ok, failed, total: pending.length }
-}
-
-export async function syncSignatures(onItemDone) {
-  const pending = await getUnsyncedSignatures()
-  let ok = 0
-  let failed = 0
-
-  for (const row of pending) {
-    try {
-      const { data } = await client.post('/api/evidence/signatures/', {
-        work_order: row.work_order_id,
-        image_data: (row.image_base64 ?? '').replace(/^data:image\/\w+;base64,/, ''),
-        signer_name: row.signer_name,
-        signer_role: row.signer_role,
-        signed_at: row.signed_at ?? null,
-        // Sin esto el backend cae al default TECHNICIAN y una firma de
-        // cliente capturada sin conexion se subiria con el tipo equivocado.
-        ...(row.signature_type ? { signature_type: row.signature_type } : {}),
-      })
-      await markSignatureSynced(row.id, data.id)
-      await logSync({
-        entityType: 'signature',
-        entityId: row.id,
-        action: 'upload',
-        status: 'ok',
-      })
-      ok += 1
-    } catch (error) {
-      await logSync({
-        entityType: 'signature',
-        entityId: row.id,
-        action: 'upload',
-        status: 'error',
-        errorMessage: errorText(error),
-      })
-      failed += 1
-    }
-    onItemDone?.()
-  }
-
-  return { ok, failed, total: pending.length }
-}
-
-export async function syncWorkOrderStatuses(onItemDone) {
-  const pending = await getWorkOrdersWithLocalStatusChange()
-  let ok = 0
-  let failed = 0
-
-  for (const row of pending) {
-    try {
-      await client.post(`/api/work-orders/${row.id}/transition/`, {
-        new_status: row.status,
-        comment: row.local_status_comment ?? 'Cambio realizado sin conexion',
-      })
-      await markWorkOrderStatusSynced(row.id)
-      await logSync({
-        entityType: 'work_order',
-        entityId: row.id,
-        action: 'transition',
-        status: 'ok',
-      })
-      ok += 1
-    } catch (error) {
-      await logSync({
-        entityType: 'work_order',
-        entityId: row.id,
-        action: 'transition',
-        status: 'error',
-        errorMessage: errorText(error),
-      })
-      failed += 1
-    }
-    onItemDone?.()
-  }
-
-  return { ok, failed, total: pending.length }
-}
-
-/**
- * Cantidades de tomas ajustadas sin red. Van antes que las respuestas: el
- * servidor rechaza la toma 21 mientras siga creyendo que hay 20.
- */
-export async function syncBlockCounts(onItemDone) {
-  const pending = await getPendingBlockCounts()
-  let ok = 0
-  let failed = 0
-
-  for (const row of pending) {
-    let cuantas = {}
-    try {
-      cuantas = JSON.parse(row.local_block_counts ?? '{}')
-    } catch {
-      cuantas = {}
-    }
-    try {
-      for (const [group, count] of Object.entries(cuantas)) {
-        await client.post(`/api/checklists/responses/${row.id}/block-count/`, { group, count })
-      }
-      await markBlockCountsSynced(row.id)
-      ok += 1
-    } catch (error) {
-      // Un checklist que ya se cerro en el servidor no admite cambios: no hay
-      // nada que reintentar.
-      if (error?.response?.status === 400 && /completado/i.test(errorText(error))) {
-        await markBlockCountsSynced(row.id)
-        ok += 1
-      } else {
-        failed += 1
-        await logSync({
-          entityType: 'checklist',
-          entityId: row.id,
-          action: 'block-count',
-          status: 'error',
-          errorMessage: errorText(error),
+        const { data } = await client.post('/api/evidence/photos/', form, {
+          headers: { 'Content-Type': undefined },
         })
+
+        await markPhotoSynced(row.offline_uuid, data.id)
       }
-    }
+    )
+    contar(resumen, resultado)
     onItemDone?.()
   }
-  return { ok, failed, total: pending.length }
+
+  return resumen
+}
+
+export async function syncSignatures(ctx, onItemDone) {
+  const pending = await getUnsyncedSignatures()
+  const resumen = resumenVacio(pending.length)
+
+  for (const row of pending) {
+    const resultado = await intentar(
+      ctx,
+      {
+        type: 'signature',
+        key: row.id,
+        workOrderId: row.work_order_id,
+        log: { entityType: 'signature', entityId: row.id, action: 'upload' },
+      },
+      { alNoSubir: () => ctx.sinSubir.add(row.work_order_id) },
+      async () => {
+        const { data } = await client.post('/api/evidence/signatures/', {
+          work_order: row.work_order_id,
+          image_data: (row.image_base64 ?? '').replace(/^data:image\/\w+;base64,/, ''),
+          signer_name: row.signer_name,
+          signer_role: row.signer_role,
+          signed_at: row.signed_at ?? null,
+          // Sin esto el backend cae al default TECHNICIAN y una firma de
+          // cliente capturada sin conexion se subiria con el tipo equivocado.
+          ...(row.signature_type ? { signature_type: row.signature_type } : {}),
+        })
+        await markSignatureSynced(row.id, data.id)
+      }
+    )
+    contar(resumen, resultado)
+    onItemDone?.()
+  }
+
+  return resumen
+}
+
+export async function syncWorkOrderStatuses(ctx, onItemDone) {
+  const pending = await getWorkOrdersWithLocalStatusChange()
+  const resumen = resumenVacio(pending.length)
+
+  for (const row of pending) {
+    const resultado = await intentar(
+      ctx,
+      {
+        type: 'work_order',
+        key: row.id,
+        workOrderId: row.id,
+        log: { entityType: 'work_order', entityId: row.id, action: 'transition' },
+      },
+      // El servidor valida que todo lo de la OT este arriba antes de moverla.
+      { bloqueado: ctx.sinSubir.has(row.id) },
+      async () => {
+        await client.post(`/api/work-orders/${row.id}/transition/`, {
+          new_status: row.status,
+          comment: row.local_status_comment ?? 'Cambio realizado sin conexion',
+        })
+        await markWorkOrderStatusSynced(row.id)
+      }
+    )
+    contar(resumen, resultado)
+    onItemDone?.()
+  }
+
+  return resumen
 }
 
 // ── Orquestador ──────────────────────────────────────────────────────────────
@@ -386,13 +460,14 @@ export async function syncOfflineData({ onProgress } = {}) {
   // El orden es deliberado: cantidad de tomas, respuestas, cierre de cada
   // checklist, hallazgos (antes que las fotos que los referencian), evidencia
   // y al final el estado de la OT, que valida todo lo anterior.
-  const counts = await syncBlockCounts(tick)
-  const fields = await syncFieldResponses(tick)
-  const checklists = await syncChecklistCompletions(tick)
-  const findings = await syncFindings(tick)
-  const photos = await syncPhotos(tick)
-  const signatures = await syncSignatures(tick)
-  const workOrders = await syncWorkOrderStatuses(tick)
+  const ctx = await nuevoContexto()
+  const counts = await syncBlockCounts(ctx, tick)
+  const fields = await syncFieldResponses(ctx, tick)
+  const checklists = await syncChecklistCompletions(ctx, tick)
+  const findings = await syncFindings(ctx, tick)
+  const photos = await syncPhotos(ctx, tick)
+  const signatures = await syncSignatures(ctx, tick)
+  const workOrders = await syncWorkOrderStatuses(ctx, tick)
 
   const result = { counts, fields, checklists, findings, photos, signatures, workOrders }
   const fases = Object.values(result)

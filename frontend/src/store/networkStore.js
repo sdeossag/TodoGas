@@ -2,7 +2,12 @@ import { create } from 'zustand'
 import { Network } from '@capacitor/network'
 
 import { queryClient } from '../api/queryClient'
-import { countPendingSync } from '../db/repositories'
+import {
+  clearBackoff,
+  countPendingSync,
+  getAttentionItems,
+  requeueAttentionItems,
+} from '../db/repositories'
 import { syncOfflineData } from '../sync/syncEngine'
 
 let listenerHandle = null
@@ -32,6 +37,11 @@ const useNetworkStore = create((set, get) => ({
   pendingSyncCount: 0,
   lastSyncAt: null,
   lastSyncError: null,
+  /**
+   * Elementos que el servidor rechazo y esperan al tecnico (sync_state). Se
+   * guardan en la base: el aviso sigue ahi al cerrar y abrir la app.
+   */
+  attentionItems: [],
   /** Confirmacion de una accion guardada en el dispositivo. */
   offlineNotice: '',
 
@@ -50,9 +60,12 @@ const useNetworkStore = create((set, get) => ({
         const wasOffline = !get().isOnline
         set({ isOnline: next.connected })
 
-        // Solo sincroniza en el flanco de subida, no en cada evento.
+        // Solo sincroniza en el flanco de subida, no en cada evento. Con red
+        // otra vez, lo que esperaba su turno de reintento se intenta ya.
         if (next.connected && wasOffline) {
-          get().triggerSync()
+          clearBackoff()
+            .catch(() => {})
+            .then(() => get().triggerSync())
         }
       })
     } catch (error) {
@@ -103,10 +116,32 @@ const useNetworkStore = create((set, get) => ({
 
   refreshPendingCount: async () => {
     try {
-      set({ pendingSyncCount: await countPendingSync() })
+      set({
+        pendingSyncCount: await countPendingSync(),
+        attentionItems: await getAttentionItems(),
+      })
     } catch (error) {
       console.warn('[network] no se pudo contar lo pendiente:', error?.message ?? error)
     }
+  },
+
+  /**
+   * "Reintentar": devuelve a la cola lo que el servidor rechazo (`items` o
+   * todo) y lo manda ya, si hay red. Nunca descarta nada. Devuelve
+   * { offline, sent, failed }: cuantos subieron y cuantos siguen rechazados.
+   */
+  retryAttention: async (items = null) => {
+    const keys = items ?? get().attentionItems
+    await requeueAttentionItems(items)
+    if (!get().isOnline) {
+      await get().refreshPendingCount()
+      return { offline: true, sent: 0, failed: 0 }
+    }
+    await get().triggerSync()
+    await get().refreshPendingCount()
+    const siguen = new Set(get().attentionItems.map((i) => `${i.entity_type}:${i.entity_key}`))
+    const failed = keys.filter((k) => siguen.has(`${k.entity_type}:${k.entity_key}`)).length
+    return { offline: false, sent: keys.length - failed, failed }
   },
 
   /** Sube todo lo que quedo guardado sin conexion. Nunca corre dos veces a la vez. */
@@ -116,11 +151,13 @@ const useNetworkStore = create((set, get) => ({
 
     set({ isSyncing: true, lastSyncError: null })
     const startedAt = Date.now()
+    let attempted = false
     try {
       const result = await syncOfflineData({
         onProgress: (pending) => set({ pendingSyncCount: pending }),
       })
       set({ lastSyncAt: new Date().toISOString() })
+      attempted = Object.values(result).some((fase) => fase.ok + fase.failed > 0)
       // La pantalla pudo pedirle datos al servidor al volver la red, antes de
       // que esto subiera: sin refrescar, el tecnico veria el checklist vacio
       // durante los 5 minutos que TanStack da por frescos esos datos.
@@ -134,7 +171,9 @@ const useNetworkStore = create((set, get) => ({
       return null
     } finally {
       const elapsed = Date.now() - startedAt
-      if (elapsed < MIN_SYNC_VISIBLE_MS) {
+      // Si todo estaba en espera o rechazado no se intento nada: no hay que
+      // mostrar "Sincronizando" solo por mostrarlo.
+      if (attempted && elapsed < MIN_SYNC_VISIBLE_MS) {
         await new Promise((resolve) => setTimeout(resolve, MIN_SYNC_VISIBLE_MS - elapsed))
       }
       set({ isSyncing: false })

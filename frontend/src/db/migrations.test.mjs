@@ -190,3 +190,42 @@ test('la v4 agrega los hallazgos sin tocar las fotos en cola', async () => {
   )
   assert.equal(n.n, 1)
 })
+
+test('la v5 agrega el estado de reintentos sin tocar lo que esta en cola', async () => {
+  const { d } = await baseV1ConPendientes()
+  const antes = await pendientes(d)
+  await migrate(d)
+  assert.deepEqual(await pendientes(d), antes)
+
+  // Un elemento en espera y otro que requiere atencion, cada uno con su clave.
+  await d.run(
+    `INSERT INTO sync_state (entity_type, entity_key, work_order_id, status, attempts, next_retry_at, http_status)
+     VALUES ('photo', 'ph-1', 'wo-1', 'retry', 2, 1700000000000, 503),
+            ('signature', 'sg-1', 'wo-1', 'attention', 1, NULL, 400)`
+  )
+  const filas = await d.query("SELECT * FROM sync_state WHERE work_order_id = 'wo-1' ORDER BY entity_type")
+  assert.deepEqual(
+    filas.map((f) => [f.status, f.attempts, f.next_retry_at]),
+    [['retry', 2, 1700000000000], ['attention', 1, null]]
+  )
+  // Un elemento tiene un solo estado.
+  await assert.rejects(
+    d.run(`INSERT INTO sync_state (entity_type, entity_key, status) VALUES ('photo', 'ph-1', 'retry')`),
+    /UNIQUE|PRIMARY/
+  )
+  // Y la foto sigue pendiente de subir.
+  const [foto] = await d.query("SELECT synced FROM offline_photos WHERE id = 'ph-1'")
+  assert.equal(foto.synced, 0)
+})
+
+test('desde una v4 con trabajo pendiente se llega a la v5 y se puede repetir', async () => {
+  const { d } = await baseV1ConPendientes()
+  await migrate(d)
+  await d.execute('DROP TABLE sync_state')
+  await d.execute('PRAGMA user_version = 4')
+
+  assert.equal(await migrate(d), LATEST_VERSION)
+  assert.equal(LATEST_VERSION, 5)
+  assert.ok((await columnas(d, 'sync_state')).includes('next_retry_at'))
+  assert.deepEqual(await pendientes(d), { campos: 1, fotos: 1, firmas: 1, estados: 1 })
+})

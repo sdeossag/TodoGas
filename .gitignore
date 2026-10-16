@@ -42,3 +42,6 @@ graphify-out/
 transcripts/
 # Configuracion local de servidores del panel de vista previa
 .claude/launch.json
+
+# Restos de pruebas de render en servidor
+frontend/__*

@@ -6,8 +6,10 @@ import { Geolocation } from '@capacitor/geolocation'
 import { useUploadPhoto } from '../../api/evidence'
 import { savePhotoOffline } from '../../db/repositories'
 import useNetworkStore from '../../store/networkStore'
+import { compressImage } from '../../utils/compressImage'
+import { MAX_PHOTO_BYTES, formatMB, needsCompression } from '../../utils/photoSize'
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024 // 10 MB
+const MAX_FILE_BYTES = MAX_PHOTO_BYTES // 10 MB
 const MAX_CAPTION = 255
 
 // Se evalua una vez: la plataforma no cambia durante la vida de la app.
@@ -77,6 +79,13 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
   const [successVisible, setSuccessVisible] = useState(false)
   const [capturing, setCapturing] = useState(false)
   const [savingOffline, setSavingOffline] = useState(false)
+  // Foto pesada reduciendose en el navegador. No bloquea el resto de la pantalla.
+  const [optimizing, setOptimizing] = useState(false)
+  const [optimizingStep, setOptimizingStep] = useState(0)
+  const [optimizedNote, setOptimizedNote] = useState('')
+  // Cada seleccion lleva un numero: si el tecnico elige otra o cancela mientras
+  // se optimiza, el resultado de la anterior se descarta.
+  const selectionRef = useRef(0)
 
   const isOnline = useNetworkStore((s) => s.isOnline)
   const showOfflineNotice = useNetworkStore((s) => s.showOfflineNotice)
@@ -104,6 +113,7 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
     setApiError('')
     setGeoWarning(false)
     setCoords(null)
+    setOptimizedNote('')
   }
 
   // ── Captura nativa (Android) ───────────────────────────────────────────────
@@ -165,12 +175,14 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
 
   // ── Captura web (sin cambios respecto al flujo existente) ──────────────────
 
-  function handleFileChange(e) {
+  async function handleFileChange(e) {
     const selected = e.target.files?.[0]
     if (!selected) return
 
+    const selection = ++selectionRef.current
     revokePreview()
     resetMessages()
+    setOptimizing(false)
 
     if (!selected.type.startsWith('image/')) {
       setValidationError('Solo se aceptan imagenes (JPEG, PNG, WEBP).')
@@ -178,15 +190,36 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
       return
     }
 
-    if (selected.size > MAX_FILE_BYTES) {
-      setValidationError('El archivo supera el limite de 10 MB.')
-      if (inputRef.current) inputRef.current.value = ''
-      return
+    let accepted = selected
+    // Hasta 10 MB se sube tal cual. Una foto mas pesada se reduce aqui mismo
+    // (lado mayor 3840 px, JPEG): el servidor no la aceptaria y en el campo no
+    // hay tiempo para repetirla.
+    if (needsCompression(selected.size)) {
+      setOptimizing(true)
+      setOptimizingStep(0)
+      try {
+        accepted = await compressImage(selected, {
+          onStep: (n) => selection === selectionRef.current && setOptimizingStep(n),
+        })
+      } catch (err) {
+        if (selection !== selectionRef.current) return
+        setOptimizing(false)
+        setValidationError(
+          err?.message === 'demasiado-pesada'
+            ? 'No se pudo reducir la foto por debajo de 10 MB. Prueba con otra foto.'
+            : 'No se pudo leer la foto. Prueba con otra en formato JPEG o PNG.'
+        )
+        if (inputRef.current) inputRef.current.value = ''
+        return
+      }
+      if (selection !== selectionRef.current) return
+      setOptimizing(false)
+      setOptimizedNote(`Foto optimizada: de ${formatMB(selected.size)} a ${formatMB(accepted.size)}.`)
     }
 
-    const url = URL.createObjectURL(selected)
+    const url = URL.createObjectURL(accepted)
     previewUrlRef.current = url
-    setFile(selected)
+    setFile(accepted)
     setPreviewUrl(url)
     setTakenAt(new Date().toISOString())
 
@@ -202,6 +235,9 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
   }
 
   function handleCancel() {
+    selectionRef.current += 1
+    setOptimizing(false)
+    setOptimizedNote('')
     revokePreview()
     setFile(null)
     setPreviewUrl(null)
@@ -322,7 +358,17 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
           </label>
         ))}
 
-      {validationError && <p className="text-sm text-red-500">{validationError}</p>}
+      {optimizing && (
+        <p role="status" aria-live="polite" className="inline-flex items-center gap-2 text-sm text-blue-800">
+          <svg className="animate-spin h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          Optimizando foto…{optimizingStep > 0 && ' un poco más'}
+        </p>
+      )}
+
+      {validationError && <p role="alert" className="text-sm text-red-500">{validationError}</p>}
 
       {hasPhoto && (
         <div className="space-y-3">
@@ -331,6 +377,8 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
             alt="Vista previa"
             className="w-full max-w-xs rounded-lg border border-gray-200 object-cover"
           />
+
+          {optimizedNote && <p className="text-xs text-green-700">{optimizedNote}</p>}
 
           {geoWarning && (
             <p className="text-xs text-amber-600">

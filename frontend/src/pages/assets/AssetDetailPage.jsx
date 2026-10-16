@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import { useAsset, useUpdateAsset, useDecommissionAsset } from '../../api/assets'
+import client from '../../api/client'
 import { useReportDownload } from '../../api/reports'
 import { useAssetTasks } from '../../api/tasks'
 import { TASK_STATUS, formatDate as fechaCorta, formatFrequency } from '../../utils/maintenance'
@@ -9,8 +10,6 @@ import { CoberturaEquipo } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
 import MetersPanel from '../../components/meters/MetersPanel'
 import useModalDismiss from '../../hooks/useModalDismiss'
-
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 const STATUS_LABELS = {
   ACTIVE: { label: 'Activo', cls: 'bg-green-100 text-green-700' },
@@ -222,7 +221,29 @@ const PM_STATUS_BADGE = {
 }
 
 function InfoTab({ asset }) {
-  const token = localStorage.getItem('access_token')
+  const [etiqueta, setEtiqueta] = useState('idle') // idle | loading | error
+  const urlRef = useRef(null)
+
+  // La etiqueta pide autorizacion: se baja con el cliente (que ya lleva el
+  // token en su cabecera) y no con un enlace, para no poner el token en una URL.
+  async function descargarEtiqueta() {
+    if (etiqueta === 'loading') return
+    setEtiqueta('loading')
+    try {
+      const { data } = await client.get(`/api/assets/${asset.id}/qr-label/`, { responseType: 'blob' })
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+      urlRef.current = URL.createObjectURL(data)
+      const enlace = document.createElement('a')
+      enlace.href = urlRef.current
+      enlace.download = `etiqueta-${asset.code || asset.id}.png`
+      document.body.appendChild(enlace)
+      enlace.click()
+      enlace.remove()
+      setEtiqueta('idle')
+    } catch {
+      setEtiqueta('error')
+    }
+  }
   const pmBadge = PM_STATUS_BADGE[asset.maintenance_status] ?? PM_STATUS_BADGE.no_plan
 
   return (
@@ -301,15 +322,20 @@ function InfoTab({ asset }) {
             <p className="text-xs text-gray-500">
               Imprime y pega esta etiqueta en el equipo para acceso rápido.
             </p>
-            <a
-              href={`${BASE_URL}/api/assets/${asset.id}/qr-label/`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand text-white text-xs rounded-lg hover:bg-brand-light"
+            <button
+              type="button"
+              onClick={descargarEtiqueta}
+              disabled={etiqueta === 'loading'}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand text-white text-xs rounded-lg hover:bg-brand-light active:scale-[0.97] transition-transform disabled:opacity-60"
             >
-              <Icon name="download" className="w-4 h-4" />
-              Descargar etiqueta PNG
-            </a>
+              {etiqueta === 'loading' ? <Spinner className="w-4 h-4" /> : <Icon name="download" className="w-4 h-4" />}
+              {etiqueta === 'loading' ? 'Descargando...' : 'Descargar etiqueta PNG'}
+            </button>
+            {etiqueta === 'error' && (
+              <p role="alert" className="text-xs text-red-600">
+                No se pudo descargar la etiqueta. Revisa tu conexión e intenta de nuevo.
+              </p>
+            )}
           </div>
         </div>
       </div>

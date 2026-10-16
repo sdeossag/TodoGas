@@ -451,6 +451,14 @@ export async function saveFieldResponse(fieldResponse) {
       fieldResponse.repetition ?? 0,
     ]
   )
+  // Si el servidor rechazo la respuesta anterior y el tecnico la corrige, la
+  // nueva empieza sin historial de fallos.
+  await run(
+    `DELETE FROM sync_state WHERE entity_type = 'field_response' AND entity_key = (
+       SELECT id FROM offline_field_responses
+        WHERE response_id = ? AND field_id = ? AND repetition = ?)`,
+    [fieldResponse.response_id, fieldResponse.field_id, fieldResponse.repetition ?? 0]
+  )
 }
 
 export async function getUnsyncedFieldResponses(responseId = null) {
@@ -617,6 +625,98 @@ export async function getSyncLog(limit = 50) {
   return query('SELECT * FROM sync_log ORDER BY id DESC LIMIT ?', [limit])
 }
 
+// ── Reintentos por elemento ──────────────────────────────────────────────────
+//
+// sync_state guarda, por elemento en cola, cuantas veces fallo y que sigue:
+// 'retry' (reintento automatico desde next_retry_at) o 'attention' (el servidor
+// lo rechazo y espera al tecnico). Sin fila = nunca ha fallado. La politica
+// (que es transitorio, cuanto se espera) vive en sync/retryPolicy.js.
+
+const stateKey = (entityType, entityKey) => `${entityType}:${entityKey}`
+
+/** Todos los estados, indexados por "tipo:id". */
+export async function getSyncStates() {
+  if (!(await ready())) return new Map()
+  const rows = await query('SELECT * FROM sync_state')
+  return new Map(rows.map((r) => [stateKey(r.entity_type, r.entity_key), r]))
+}
+
+/** work_order_id de cada checklist, para ubicar sus respuestas y su cierre. */
+export async function getChecklistWorkOrderIds() {
+  if (!(await ready())) return new Map()
+  const rows = await query('SELECT id, work_order_id FROM offline_checklist_responses')
+  return new Map(rows.map((r) => [r.id, r.work_order_id]))
+}
+
+/** Anota un fallo. `state` es lo que devuelve nextState() de retryPolicy. */
+export async function saveSyncFailure({ entityType, entityKey, workOrderId = null, state, message }) {
+  if (!(await ready())) return
+  const now = nowISO()
+  await run(
+    `INSERT INTO sync_state (
+       entity_type, entity_key, work_order_id, status, attempts, next_retry_at,
+       http_status, error_message, first_failed_at, updated_at
+     ) VALUES (?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(entity_type, entity_key) DO UPDATE SET
+       work_order_id = COALESCE(excluded.work_order_id, work_order_id),
+       status = excluded.status,
+       attempts = excluded.attempts,
+       next_retry_at = excluded.next_retry_at,
+       http_status = excluded.http_status,
+       error_message = excluded.error_message,
+       updated_at = excluded.updated_at`,
+    [
+      entityType, entityKey, workOrderId, state.status, state.attempts,
+      state.next_retry_at, state.http_status, message, now, now,
+    ]
+  )
+}
+
+/** El elemento subio (o ya no hace falta): se olvida su historial de fallos. */
+export async function clearSyncState(entityType, entityKey) {
+  if (!(await ready())) return
+  await run('DELETE FROM sync_state WHERE entity_type = ? AND entity_key = ?', [entityType, entityKey])
+}
+
+/** Elementos que el servidor rechazo, con la OT a la que pertenecen. */
+export async function getAttentionItems() {
+  if (!(await ready())) return []
+  return query(
+    `SELECT s.entity_type, s.entity_key, s.work_order_id, s.http_status,
+            s.error_message, s.attempts, s.updated_at,
+            wo.wo_number, wo.title AS wo_title
+       FROM sync_state s
+       LEFT JOIN offline_work_orders wo ON wo.id = s.work_order_id
+      WHERE s.status = 'attention'
+      ORDER BY s.updated_at`
+  )
+}
+
+/**
+ * "Reintentar": el elemento vuelve a la cola como nuevo (sin espera y con los
+ * intentos en cero). Sin `keys` reencola todos los que requieren atencion.
+ * `keys` son pares { entity_type, entity_key }.
+ */
+export async function requeueAttentionItems(keys = null) {
+  if (!(await ready())) return
+  if (!keys) {
+    await run("DELETE FROM sync_state WHERE status = 'attention'")
+    return
+  }
+  for (const k of keys) {
+    await run(
+      "DELETE FROM sync_state WHERE status = 'attention' AND entity_type = ? AND entity_key = ?",
+      [k.entity_type, k.entity_key]
+    )
+  }
+}
+
+/** Volvio la red: lo que esperaba su turno se intenta ya, sin esperar el backoff. */
+export async function clearBackoff() {
+  if (!(await ready())) return
+  await run("UPDATE sync_state SET next_retry_at = NULL WHERE status = 'retry'")
+}
+
 // ── Hallazgos (bloque E) ─────────────────────────────────────────────────────
 //
 // Cada fila guarda el hallazgo con la forma de la API (data_json) y su cola:
@@ -692,6 +792,7 @@ export async function saveFindingOffline(finding) {
      ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, pending_action = 'save'`,
     [datos.id, datos.work_order, JSON.stringify(datos), nowISO()]
   )
+  await clearSyncState('finding', datos.id)
   return datos
 }
 

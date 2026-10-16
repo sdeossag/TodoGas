@@ -109,6 +109,34 @@ export const MIGRATIONS = [
       await addColumn(driver, 'offline_photos', 'finding_id', 'TEXT')
     },
   },
+  {
+    // Tope de reintentos: intentos y estado por elemento en cola. Una tabla
+    // aparte en vez de columnas en cada tabla de evidencia: la clave es
+    // (tipo, id del elemento) y no toca nada de lo que esta sin subir.
+    // status: 'retry' (se reintenta solo, desde next_retry_at, en epoch ms) o
+    // 'attention' (el servidor lo rechazo; espera al tecnico).
+    version: 5,
+    async up(driver) {
+      await driver.execute(
+        `CREATE TABLE IF NOT EXISTS sync_state (
+           entity_type TEXT NOT NULL,
+           entity_key TEXT NOT NULL,
+           work_order_id TEXT,
+           status TEXT NOT NULL,
+           attempts INTEGER DEFAULT 0,
+           next_retry_at INTEGER,
+           http_status INTEGER,
+           error_message TEXT,
+           first_failed_at TEXT,
+           updated_at TEXT,
+           PRIMARY KEY (entity_type, entity_key)
+         )`
+      )
+      await driver.execute(
+        `CREATE INDEX IF NOT EXISTS idx_sync_state_status ON sync_state (status)`
+      )
+    },
+  },
 ]
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version
