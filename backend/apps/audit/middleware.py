@@ -5,6 +5,7 @@ import uuid
 
 from django.utils.deprecation import MiddlewareMixin
 
+from .ip import client_ip
 from .services import AUTH_ENTITY_TYPE
 
 logger = logging.getLogger(__name__)
@@ -137,8 +138,7 @@ class AuditMiddleware(MiddlewareMixin):
             if status_code >= 400:
                 changes['failed'] = True
 
-            x_forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
-            ip = x_forwarded.split(',')[0].strip() if x_forwarded else request.META.get('REMOTE_ADDR')
+            ip = client_ip(request)
 
             AuditLog.objects.create(
                 user=user,

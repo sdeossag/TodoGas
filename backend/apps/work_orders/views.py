@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.audit.ip import client_ip
 from apps.audit.models import AuditLog
 from apps.users import scope
 from apps.users.models import User
@@ -36,13 +37,6 @@ _PRIORITY_ORDER = Case(
     When(priority=WorkOrder.Priority.LOW, then=Value(2)),
     output_field=IntegerField(),
 )
-
-
-def _get_client_ip(request):
-    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-    if x_forwarded_for:
-        return x_forwarded_for.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR")
 
 
 # Estados terminales: la OT ya es un registro con valor probatorio y no admite
@@ -246,7 +240,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             entity_type="WorkOrder",
             entity_id=wo.id,
             changes={"new_status": new_status, "comment": comment},
-            ip_address=_get_client_ip(request),
+            ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
         return Response(
@@ -285,7 +279,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             entity_type="WorkOrder",
             entity_id=wo.id,
             changes={"assigned_to": {"from": old_assignee_id, "to": str(tech.id)}},
-            ip_address=_get_client_ip(request),
+            ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
         from apps.notifications.service import send_assignment_notification
@@ -323,7 +317,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             entity_type="GeneratedReport",
             entity_id=wo.id,
             changes={"action": "regenerate", "work_order": str(wo.id)},
-            ip_address=_get_client_ip(request),
+            ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
         return Response({"status": "queued"})
@@ -346,7 +340,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             entity_type="WorkOrder",
             entity_id=wo.id,
             changes={"new_status": WorkOrder.Status.CANCELLED, "comment": comment},
-            ip_address=_get_client_ip(request),
+            ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
         return Response(

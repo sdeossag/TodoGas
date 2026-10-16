@@ -133,6 +133,11 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 
+# Cuantos proxies propios (ALB, etc.) hay delante de la app. Lo usan la IP de
+# auditoria (apps.audit.ip) y el throttling de DRF (NUM_PROXIES). Con 0 se
+# ignora X-Forwarded-For, que lo escribe el cliente.
+TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=0, cast=int)
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -146,6 +151,7 @@ REST_FRAMEWORK = {
     # paginate_queryset y siguen devolviendo el objeto que ya devolvian.
     "DEFAULT_PAGINATION_CLASS": "config.pagination.DefaultPagination",
     "PAGE_SIZE": 50,
+    "NUM_PROXIES": TRUSTED_PROXY_COUNT,
 }
 
 # ── Email ──────────────────────────────────────────────────────────────────

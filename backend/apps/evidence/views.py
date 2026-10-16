@@ -5,6 +5,7 @@ from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.audit.ip import client_ip
 from apps.audit.models import AuditLog
 from apps.users import scope
 from apps.users.models import User
@@ -18,11 +19,6 @@ from .serializers import (
     SignatureCreateSerializer,
     SignatureSerializer,
 )
-
-
-def _get_client_ip(request):
-    xff = request.META.get("HTTP_X_FORWARDED_FOR")
-    return xff.split(",")[0].strip() if xff else request.META.get("REMOTE_ADDR")
 
 
 def _can_read_wo(user, wo):
@@ -155,7 +151,7 @@ class PhotoViewSet(viewsets.GenericViewSet):
             entity_type="Photo",
             entity_id=photo.id,
             changes=cambios,
-            ip_address=_get_client_ip(request),
+            ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
 
@@ -206,7 +202,7 @@ class PhotoViewSet(viewsets.GenericViewSet):
                 entity_type="Photo",
                 entity_id=photo.id,
                 changes=cambios,
-                ip_address=_get_client_ip(request),
+                ip_address=client_ip(request),
                 user_agent=request.META.get("HTTP_USER_AGENT", ""),
             )
         return Response(PhotoSerializer(photo, context={"request": request}).data)
@@ -253,7 +249,7 @@ class SignatureViewSet(viewsets.GenericViewSet):
                 "signature_type": sig.signature_type,
                 "signer_name": sig.signer_name,
             },
-            ip_address=_get_client_ip(request),
+            ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
 

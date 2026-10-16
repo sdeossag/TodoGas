@@ -3,6 +3,7 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 from django.db import transaction
 from django.db.models import Count, Min, Prefetch, Q
+from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -209,21 +210,30 @@ class MaintenancePlanViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def compliance(self, request, pk=None):
         plan = self.get_object()
-        today = date.today()
-        monthly = []
-
-        for i in range(11, -1, -1):
-            ref = today.replace(day=1)
-            if i > 0:
-                ref = ref - relativedelta(months=i)
-            # Por tarea de activo, no por OT: una OT puede llevar varias.
-            qs = scope.assets(Task.objects.filter(
+        primero = date.today().replace(day=1)
+        meses = [primero - relativedelta(months=i) for i in range(11, -1, -1)]
+        # Por tarea de activo, no por OT: una OT puede llevar varias. Una sola
+        # consulta agrupada por mes en vez de dos count() por cada uno.
+        filas = (
+            scope.assets(Task.objects.filter(
                 plan_task__plan=plan,
-                scheduled_date__year=ref.year,
-                scheduled_date__month=ref.month,
-            ), request.user, prefix="asset__").exclude(status=Task.Status.CANCELLED)
-            total = qs.count()
-            completed = qs.filter(status=Task.Status.DONE).count()
+                scheduled_date__gte=meses[0],
+                scheduled_date__lt=primero + relativedelta(months=1),
+            ), request.user, prefix="asset__")
+            .exclude(status=Task.Status.CANCELLED)
+            .annotate(mes=TruncMonth("scheduled_date"))
+            .values("mes")
+            .annotate(
+                total=Count("id"),
+                completed=Count("id", filter=Q(status=Task.Status.DONE)),
+            )
+            .order_by()
+        )
+        por_mes = {f["mes"]: f for f in filas}
+        monthly = []
+        for ref in meses:
+            f = por_mes.get(ref, {"total": 0, "completed": 0})
+            total, completed = f["total"], f["completed"]
             monthly.append({
                 "year": ref.year,
                 "month": ref.month,

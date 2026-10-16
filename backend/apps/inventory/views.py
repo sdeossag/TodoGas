@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db.models import F, Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -5,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.users import scope
 from apps.users.models import User
 from apps.users.permissions import IsAdmin, IsAdminOrSup, IsAdminOrSupOrTec
 
@@ -79,7 +81,11 @@ class StockMovementViewSet(
             qs = qs.filter(performed_at__date__gte=v)
         if v := p.get('date_to'):
             qs = qs.filter(performed_at__date__lte=v)
-        return qs
+        # El inventario es global (los movimientos sin OT los ve cualquiera),
+        # pero uno ligado a una OT solo lo ve quien ve esa OT.
+        from apps.work_orders.models import WorkOrder
+        visibles = scope.work_orders(WorkOrder.objects.all(), self.request.user)
+        return qs.filter(Q(work_order__isnull=True) | Q(work_order__in=visibles))
 
     def create(self, request, *args, **kwargs):
         user = request.user
@@ -112,6 +118,18 @@ class StockMovementViewSet(
                 return Response(
                     {'detail': 'Solo puedes registrar salidas en tus propias OTs.'},
                     status=status.HTTP_403_FORBIDDEN,
+                )
+
+        if wo_id := request.data.get('work_order'):
+            from apps.work_orders.models import WorkOrder
+            try:
+                wo = WorkOrder.objects.filter(pk=wo_id).first()
+            except (ValueError, ValidationError):
+                wo = None  # un id mal formado lo rechaza el serializer
+            if wo is not None and not scope.can_see_work_order(user, wo):
+                return Response(
+                    {'work_order': ['Esa OT no es de tu alcance.']},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
         serializer = StockMovementCreateSerializer(

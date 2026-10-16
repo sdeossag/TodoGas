@@ -10,6 +10,7 @@ identidad, y la registra con esta funcion.
 import logging
 import uuid
 
+from .ip import client_ip
 from .models import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -29,13 +30,6 @@ class LoginOutcome:
     INACTIVE = "inactive"
     THROTTLED = "throttled"
     INCOMPLETE = "incomplete"
-
-
-def client_ip(request):
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip() or None
-    return request.META.get("REMOTE_ADDR") or None
 
 
 def log_login_attempt(request, *, email, outcome, user=None, target=None):

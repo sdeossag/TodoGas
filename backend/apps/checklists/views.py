@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -6,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.audit.ip import client_ip
 from apps.audit.models import AuditLog
 from apps.users import scope
 from apps.users.models import User
@@ -78,15 +80,11 @@ class ChecklistTemplateViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         version = get_object_or_404(ChecklistTemplateVersion, pk=version_id, template=template)
-        ChecklistTemplateVersion.objects.filter(template=template, is_current=True).update(is_current=False)
-        version.is_current = True
-        version.save()
+        with transaction.atomic():
+            ChecklistTemplateVersion.objects.filter(template=template, is_current=True).update(is_current=False)
+            version.is_current = True
+            version.save()
         return Response(ChecklistTemplateVersionSerializer(version).data)
-
-
-def _client_ip(request):
-    xff = request.META.get("HTTP_X_FORWARDED_FOR")
-    return xff.split(",")[0].strip() if xff else request.META.get("REMOTE_ADDR")
 
 
 class ChecklistResponseViewSet(viewsets.ModelViewSet):
@@ -130,7 +128,7 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         response = self.get_object()
         if response.completed_at:
             return Response(
-                {"detail": "El checklist ya está completado."},
+                {"detail": "El checklist ya está completado.", "code": "checklist_completed"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -209,7 +207,7 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
                 "value": {"from": previa.value if previa else None, "to": value},
                 "notes": {"from": previa.notes if previa else None, "to": notas},
             },
-            ip_address=_client_ip(request),
+            ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
         return Response(ChecklistFieldResponseSerializer(field_response).data)
@@ -223,7 +221,7 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         response = self.get_object()
         if response.completed_at:
             return Response(
-                {"detail": "El checklist ya está completado."},
+                {"detail": "El checklist ya está completado.", "code": "checklist_completed"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         grupo = request.data.get("group", "")
@@ -259,7 +257,7 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         response = self.get_object()
         if response.completed_at:
             return Response(
-                {"detail": "El checklist ya está completado."},
+                {"detail": "El checklist ya está completado.", "code": "checklist_completed"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
