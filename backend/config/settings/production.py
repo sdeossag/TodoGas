@@ -36,3 +36,20 @@ STORAGES = {**STORAGES, "default": {"BACKEND": S3_STORAGE}}  # noqa: F405
 CORS_ALLOWED_ORIGINS = allowed_origins(
     FRONTEND_URL, config("DJANGO_CORS_ALLOWED_ORIGINS", default="")
 )
+
+# ── Cabeceras de seguridad ────────────────────────────────────────────────────
+# Detrás del ALB de AWS el TLS termina en el balanceador y Django ve HTTP: se
+# confía en X-Forwarded-Proto para saber que la petición original era https.
+# Por la misma razón hay que poner TRUSTED_PROXY_COUNT=1 en el entorno.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# No hay endpoint de health check en la app. El health check del ALB llega por
+# HTTP y recibiría la redirección (301): al crear uno, eximirlo con
+# SECURE_REDIRECT_EXEMPT, o aceptar 301 en el health check del target group.
+SECURE_SSL_REDIRECT = config("DJANGO_SECURE_SSL_REDIRECT", default=True, cast=bool)
+SECURE_HSTS_SECONDS = config("DJANGO_SECURE_HSTS_SECONDS", default=31536000, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+
+# Destino de collectstatic (se ejecuta en el build de la imagen).
+STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405

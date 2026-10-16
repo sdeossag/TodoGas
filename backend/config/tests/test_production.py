@@ -171,3 +171,51 @@ def test_desarrollo_sigue_arrancando_sin_clave():
     salida = importar("config.settings.development", SECRET_KEY="", DJANGO_SECRET_KEY="")
 
     assert salida.returncode == 0, salida.stderr[-2000:]
+
+
+# ── Cabeceras de seguridad ────────────────────────────────────────────────────
+
+SEGURIDAD = (
+    "import json\n"
+    "from django.conf import settings as s\n"
+    "print(json.dumps({\n"
+    "    'proxy': s.SECURE_PROXY_SSL_HEADER, 'redirect': s.SECURE_SSL_REDIRECT,\n"
+    "    'hsts': s.SECURE_HSTS_SECONDS, 'subdominios': s.SECURE_HSTS_INCLUDE_SUBDOMAINS,\n"
+    "    'nosniff': s.SECURE_CONTENT_TYPE_NOSNIFF, 'frame': s.X_FRAME_OPTIONS,\n"
+    "}))\n"
+)
+
+
+def seguridad(modulo, **entorno):
+    salida = importar(modulo, SEGURIDAD, **entorno)
+    assert salida.returncode == 0, salida.stderr[-2000:]
+    return json.loads(salida.stdout.strip().splitlines()[-1])
+
+
+def test_produccion_trae_las_cabeceras_de_seguridad():
+    a = seguridad("config.settings.production", **PRODUCCION)
+
+    assert a["proxy"] == ["HTTP_X_FORWARDED_PROTO", "https"]
+    assert a["redirect"] is True
+    assert a["hsts"] == 31536000
+    assert a["subdominios"] is True
+    assert a["nosniff"] is True
+    assert a["frame"] == "DENY"
+
+
+def test_produccion_permite_ajustar_hsts_y_redireccion_por_entorno():
+    a = seguridad(
+        "config.settings.production", DJANGO_SECURE_HSTS_SECONDS="60",
+        DJANGO_SECURE_SSL_REDIRECT="False", **PRODUCCION,
+    )
+
+    assert a["hsts"] == 60
+    assert a["redirect"] is False
+
+
+def test_desarrollo_no_fuerza_ssl():
+    a = seguridad("config.settings.development")
+
+    assert a["redirect"] is False
+    assert a["proxy"] is None
+    assert a["hsts"] == 0

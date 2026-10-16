@@ -1,0 +1,12 @@
+# Lo que no debe entrar en la imagen: entorno local, datos y secretos.
+.venv/
+media/
+staticfiles/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
+.env.*

@@ -7,6 +7,9 @@
 
 -r requirements.txt
 
+# Barra de depuracion: solo desarrollo (no la usa ningun ajuste todavia).
+django-debug-toolbar==6.3.0
+
 pytest>=8.0,<10
 pytest-django>=4.9,<5
 pytest-mock>=3.14,<4
