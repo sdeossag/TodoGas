@@ -40,16 +40,22 @@ entonces con un `IOException` sobre el nombre de archivo, sin decir por que.
 `frontend/.env.production` define contra que backend habla el APK:
 
 ```
-VITE_API_BASE_URL=https://api.todogas.com.co
+VITE_API_BASE_URL=https://api.cmms.todogas.com.co
 ```
 
-Tiene que coincidir con los dominios de
-`frontend/android/app/src/main/res/xml/network_security_config.xml`, que
-bloquea trafico en claro hacia la API y hacia el bucket de evidencia. Si el
-dominio real cambia hay que tocar los dos archivos.
+Es el dominio de la API que crea `infra/terraform` (`api.<dominio>`). Tiene que
+coincidir con `frontend/android/app/src/main/res/xml/network_security_config.xml`,
+que bloquea trafico en claro hacia la API y hacia el bucket de evidencia
+(`todogas-prod-evidencia`, us-east-1). Si el dominio o el bucket cambian hay
+que tocar los dos archivos.
 
 Sin este archivo el bundle sale apuntando a `http://localhost:8000` y el APK
-no conecta con nada.
+no conecta con nada. **El APK de produccion no funciona hasta que la API este
+desplegada y el subdominio delegado en GoDaddy** (ver `infra/README.md`).
+
+La clave de Google Maps del navegador no se versiona: se pasa al compilar como
+variable de entorno, `VITE_GOOGLE_MAPS_API_KEY=... npm run android:prod`. Sin
+ella, el mapa sale como coordenadas con enlace a Google Maps.
 
 ### 2. google-services.json
 
@@ -89,33 +95,58 @@ keytool -genkeypair -v -keystore todogas-release.keystore \
   -dname "CN=TodoGas CMMS, OU=Desarrollo, O=TodoGas, L=Medellin, ST=Antioquia, C=CO"
 ```
 
+## Version
+
+Antes de cada entrega sube los dos valores en `frontend/android/app/build.gradle`:
+`versionCode` (entero, siempre mayor que el anterior: Android no instala encima
+uno menor) y `versionName` (el que ve el usuario). La 1.1.0 es `versionCode 2`.
+
 ## Compilar
 
 ```bash
 cd frontend
-npm run build
-npx cap sync android
+npm run android:prod          # vite build --mode production + cap sync android
 
 cd android
 export ANDROID_KEYSTORE_PASSWORD=... ANDROID_KEY_ALIAS=todogas ANDROID_KEY_PASSWORD=...
-./gradlew assembleRelease
+./gradlew assembleRelease bundleRelease
 ```
 
 En Windows (cmd) las variables se ponen con `set NOMBRE=valor` antes de
-`gradlew.bat assembleRelease`.
-
-El APK queda en `frontend/android/app/build/outputs/apk/release/app-release.apk`.
-
-```bash
-cp app/build/outputs/apk/release/app-release.apk TodoGas-v1.0.0.apk
-```
-
-### Verificar la firma
+`gradlew.bat assembleRelease bundleRelease`. En Git Bash se pueden cargar del
+`.env` sin escribirlas en pantalla:
 
 ```bash
-# Debe listar el certificado CN=TodoGas CMMS
-apksigner verify --print-certs TodoGas-v1.0.0.apk
+eval "$(grep -E '^(ANDROID_KEYSTORE_PASSWORD|ANDROID_KEY_ALIAS|ANDROID_KEY_PASSWORD)=' ../../.env | sed 's/\r$//; s/^/export /')"
 ```
+
+Salen dos archivos:
+
+- `frontend/android/app/build/outputs/apk/release/app-release.apk`: para
+  instalar directo en los telefonos.
+- `frontend/android/app/build/outputs/bundle/release/app-release.aab`: para
+  Google Play, si se publica en la tienda.
+
+```bash
+cp app/build/outputs/apk/release/app-release.apk TodoGas-v1.1.0.apk
+```
+
+### Verificar antes de entregar
+
+```bash
+# Firma: debe listar el certificado CN=TodoGas CMMS
+apksigner verify --print-certs TodoGas-v1.1.0.apk
+# Version y que no sea depurable (no debe aparecer application-debuggable)
+aapt dump badging TodoGas-v1.1.0.apk | grep -E "^package|debuggable"
+```
+
+### Instalar en un telefono que ya tiene la app de depuracion
+
+La app de depuracion y la de produccion tienen el mismo paquete
+(`com.todogas.cmms`) pero distinta firma, asi que Android no instala una
+encima de la otra: hay que desinstalar la de depuracion primero
+(`adb uninstall com.todogas.cmms`). Eso borra lo que tenga guardado sin red;
+sincroniza antes.
 
 Un APK sin firmar se llama `app-release-unsigned.apk`: si aparece ese nombre,
 las variables de entorno no llegaron a Gradle.
@@ -124,7 +155,7 @@ las variables de entorno no llegaron a Gradle.
 
 ```bash
 cd backend
-python manage.py upload_apk ../frontend/android/TodoGas-v1.0.0.apk --apk-version 1.0.0
+python manage.py upload_apk ../frontend/android/TodoGas-v1.1.0.apk --apk-version 1.1.0
 ```
 
 El flag es `--apk-version` y no `--version`: `BaseCommand` ya registra

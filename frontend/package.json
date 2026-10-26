@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "android:local": "vite build --mode movil && cap sync android",
+    "android:prod": "vite build --mode production && cap sync android",
     "test": "node --test \"src/**/*.test.mjs\""
   },
   "dependencies": {
