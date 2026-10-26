@@ -48,6 +48,9 @@ def importar(modulo, codigo="", **entorno):
     env = {**os.environ, "DB_NAME": "x", "DB_USER": "x", "DB_PASSWORD": "x",
            "DB_HOST": "x", "DB_PORT": "5432", "SECRET_KEY": "clave-de-prueba-solo-para-tests",
            **entorno}
+    # Un valor None borra la variable del entorno del subproceso (distinto de "",
+    # que la deja definida y vacia): sirve para probar la variable sin definir.
+    env = {k: v for k, v in env.items() if v is not None}
     return subprocess.run(
         [sys.executable, "-c", codigo], cwd=BACKEND, env=env,
         capture_output=True, text=True, timeout=120,

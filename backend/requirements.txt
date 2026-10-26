@@ -10,5 +10,14 @@ WeasyPrint==69.0
 Pillow==12.3.0
 qrcode[pil]==8.2
 django-storages[s3]==1.14.6
+django-ses==4.4.0
 boto3==1.43.87
 gunicorn==26.2.0
+whitenoise==6.12.0
+sentry-sdk==2.72.0
+kombu==5.6.2
+urllib3==2.7.0
+# Cliente asincrono de SQS para el worker de Celery (kombu). Sin wheels en
+# Linux: el Dockerfile instala libcurl y libssl para compilarlo. En Windows
+# (desarrollo) no hace falta: alli Celery corre eager.
+pycurl==7.45.7; sys_platform != "win32"

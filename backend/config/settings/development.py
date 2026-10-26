@@ -19,6 +19,8 @@ CORS_ALLOWED_ORIGINS = [
     # App Android (Capacitor sirve la web desde https://localhost). Con
     # `adb reverse tcp:8000 tcp:8000` el emulador llega a este runserver.
     "https://localhost",
+    # Otros puertos de Vite (por ejemplo la web contra la base de demo).
+    *[o.strip() for o in config("DJANGO_CORS_ALLOWED_ORIGINS", default="").split(",") if o.strip()],
 ]
 CORS_ALLOW_CREDENTIALS = True
 

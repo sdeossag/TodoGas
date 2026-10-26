@@ -1,30 +1,178 @@
 name: Deploy
 
+# Despliega a AWS (ECS Fargate + S3/CloudFront). Variables del environment de
+# GitHub y pasos previos: infra/README.md. El environment `production` lleva la
+# aprobacion manual y limita el despliegue a la rama main.
+
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      entorno:
+        description: "Environment de GitHub al que se despliega"
+        type: choice
+        options:
+          - production
+          - staging
+        default: production
+
+concurrency:
+  group: deploy-${{ inputs.entorno || 'production' }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # OIDC hacia AWS
+  contents: read
 
 jobs:
   deploy:
-    name: Deploy a produccion
+    name: Deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.entorno || 'production' }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
 
     steps:
       - name: Checkout codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
-      # ─────────────────────────────────────────────────────────
-      # Deploy a AWS se configura en Sprint 9 (diciembre 2026)
-      # antes del MVP Web.
-      #
-      # Lo que va aqui:
-      #   - Build de imagen Docker
-      #   - Push a AWS ECR
-      #   - Deploy a ECS (rolling update)
-      #   - Correr migraciones en produccion
-      #   - Notificar al equipo
-      # ─────────────────────────────────────────────────────────
+      - name: Credenciales de AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4.0.2
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Placeholder deploy
-        run: echo "Deploy a AWS pendiente de configurar en Sprint 9"
+      - name: Login en ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2.0.1
+
+      # ── Imagen arm64 (Graviton) ─────────────────────────────────────────
+      - name: QEMU
+        uses: docker/setup-qemu-action@v3.2.0
+        with:
+          platforms: arm64
+
+      - name: Buildx
+        uses: docker/setup-buildx-action@v3.7.1
+
+      - name: Build y push a ECR
+        uses: docker/build-push-action@v6.9.0
+        with:
+          context: backend
+          platforms: linux/arm64
+          push: true
+          provenance: false # una sola imagen, sin manifiesto extra: ECS la lee igual
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Definiciones de tarea con la imagen nueva ───────────────────────
+      # Se toma la ultima revision de cada familia (la que dejo Terraform o el
+      # deploy anterior), se cambia la imagen y se registra una revision nueva.
+      - name: Registrar definiciones de tarea
+        id: defs
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for par in "api:${{ vars.TASK_FAMILY_API }}" "worker:${{ vars.TASK_FAMILY_WORKER }}" "migrate:${{ vars.TASK_FAMILY_MIGRATE }}"; do
+            nombre="${par%%:*}"
+            familia="${par#*:}"
+            aws ecs describe-task-definition --task-definition "$familia" --query taskDefinition > "$nombre.json"
+            jq --arg image "$IMAGE" '
+              del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy)
+              | .containerDefinitions |= map(.image = $image)
+            ' "$nombre.json" > "$nombre.nuevo.json"
+            arn=$(aws ecs register-task-definition --cli-input-json "file://$nombre.nuevo.json" \
+              --query taskDefinition.taskDefinitionArn --output text)
+            echo "$nombre -> $arn"
+            echo "${nombre}_arn=$arn" >> "$GITHUB_OUTPUT"
+          done
+
+      # ── Migraciones ─────────────────────────────────────────────────────
+      - name: Correr migrate y esperar
+        run: |
+          set -euo pipefail
+          tarea=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition "${{ steps.defs.outputs.migrate_arn }}" \
+            --launch-type FARGATE \
+            --count 1 \
+            --started-by "github-${{ github.run_id }}" \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.MIGRATE_SUBNETS }}],securityGroups=[${{ vars.MIGRATE_SECURITY_GROUP }}],assignPublicIp=ENABLED}" \
+            --query 'tasks[0].taskArn' --output text)
+          if [ -z "$tarea" ] || [ "$tarea" = "None" ]; then
+            echo "::error::ECS no pudo lanzar la tarea migrate"
+            exit 1
+          fi
+          echo "Tarea migrate: $tarea"
+          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$tarea"
+
+          codigo=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$tarea" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          motivo=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$tarea" \
+            --query 'tasks[0].stoppedReason' --output text)
+          echo "Codigo de salida: $codigo. Motivo: $motivo"
+
+          # Los logs de la tarea quedan en el job aunque falle.
+          id_tarea="${tarea##*/}"
+          grupo=$(aws ecs describe-task-definition --task-definition "${{ steps.defs.outputs.migrate_arn }}" \
+            --query 'taskDefinition.containerDefinitions[0].logConfiguration.options."awslogs-group"' --output text)
+          aws logs get-log-events --log-group-name "$grupo" --log-stream-name "migrate/migrate/$id_tarea" \
+            --query 'events[].message' --output text || true
+
+          if [ "$codigo" != "0" ]; then
+            echo "::error::migrate termino con codigo $codigo ($motivo)"
+            exit 1
+          fi
+
+      # ── Servicios ───────────────────────────────────────────────────────
+      - name: Actualizar servicios api y worker
+        run: |
+          set -euo pipefail
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "${{ vars.ECS_SERVICE_API }}" \
+            --task-definition "${{ steps.defs.outputs.api_arn }}" > /dev/null
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "${{ vars.ECS_SERVICE_WORKER }}" \
+            --task-definition "${{ steps.defs.outputs.worker_arn }}" > /dev/null
+
+      - name: Esperar que los servicios queden estables
+        run: |
+          set -euo pipefail
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" \
+            --services "${{ vars.ECS_SERVICE_API }}" "${{ vars.ECS_SERVICE_WORKER }}"
+
+      # ── Web ─────────────────────────────────────────────────────────────
+      - name: Node
+        uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build de la web
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.API_URL || 'https://api.cmms.todogas.com.co' }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
+        run: |
+          npm ci
+          npm run build
+
+      # assets/ lleva nombres con hash (se cachea para siempre); el resto,
+      # incluido index.html, se revalida para que el navegador vea la version nueva.
+      - name: Subir la web a S3
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          aws s3 sync dist/assets "s3://${{ vars.WEB_BUCKET }}/assets" --delete             --cache-control "public,max-age=31536000,immutable"
+          aws s3 sync dist "s3://${{ vars.WEB_BUCKET }}" --delete --exclude "assets/*"             --cache-control "no-cache"
+
+      - name: Invalidar CloudFront
+        run: |
+          aws cloudfront create-invalidation --distribution-id "${{ vars.CLOUDFRONT_ID }}" --paths "/*" > /dev/null

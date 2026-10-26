@@ -23,6 +23,12 @@ CSRF_COOKIE_SECURE = True
 FRONTEND_URL = config("FRONTEND_URL")
 BACKEND_URL = config("BACKEND_URL")
 
+# Broker de Celery: aquí sí se exige lo que cada uno necesita (REDIS_URL con
+# redis; la URL de la cola y la región con sqs). Desarrollo no lo exige.
+from config import broker as _broker
+
+_broker.validar(CELERY_BROKER, REDIS_URL, CELERY_SQS_QUEUE_URL, AWS_REGION)
+
 # La evidencia siempre a S3. El disco del contenedor se pierde en cada
 # despliegue, y sin DEBUG Django no sirve /media/: con almacenamiento local las
 # fotos, firmas y actas desaparecerían y ni siquiera se verían. Las credenciales
@@ -42,9 +48,10 @@ CORS_ALLOWED_ORIGINS = allowed_origins(
 # confía en X-Forwarded-Proto para saber que la petición original era https.
 # Por la misma razón hay que poner TRUSTED_PROXY_COUNT=1 en el entorno.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-# No hay endpoint de health check en la app. El health check del ALB llega por
-# HTTP y recibiría la redirección (301): al crear uno, eximirlo con
-# SECURE_REDIRECT_EXEMPT, o aceptar 301 en el health check del target group.
+# El health check del ALB llega por HTTP y con la IP privada como Host, y
+# recibiría la redirección (301) o un 400 por ALLOWED_HOSTS. /health/ lo
+# responde HealthCheckMiddleware (config/health.py), que va primero en
+# MIDDLEWARE y por eso nunca llega a SecurityMiddleware ni a get_host().
 SECURE_SSL_REDIRECT = config("DJANGO_SECURE_SSL_REDIRECT", default=True, cast=bool)
 SECURE_HSTS_SECONDS = config("DJANGO_SECURE_HSTS_SECONDS", default=31536000, cast=int)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
@@ -53,3 +60,61 @@ X_FRAME_OPTIONS = "DENY"
 
 # Destino de collectstatic (se ejecuta en el build de la imagen).
 STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
+
+# ── Archivos estáticos (panel /admin/) ────────────────────────────────────────
+# Gunicorn no sirve /static/: WhiteNoise lo hace desde STATIC_ROOT, justo
+# después de SecurityMiddleware. El manifest pone hash en el nombre (caché
+# eterna) y exige collectstatic, que el Dockerfile ya corre en el build. Solo
+# aquí: desarrollo y pruebas no deben requerir collectstatic.
+MIDDLEWARE = list(MIDDLEWARE)  # noqa: F405
+MIDDLEWARE.insert(
+    MIDDLEWARE.index("django.middleware.security.SecurityMiddleware") + 1,
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+)
+STORAGES = {
+    **STORAGES,
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+
+# ── Base de datos ─────────────────────────────────────────────────────────────
+# Una variable vacía cuenta como no definida (ECS entrega "" si el parámetro
+# no existe).
+#
+# Conexiones en el peor caso: cada hilo de gunicorn guarda su conexión abierta
+# durante CONN_MAX_AGE, así que una tarea de la API abre hasta
+#   GUNICORN_WORKERS x GUNICORN_THREADS = 2 x 4 = 8
+# En régimen, con 2 tareas de API + 1 worker de Celery (--concurrency 2) +
+# 1 beat + la tarea de migrate de un despliegue:
+#   2 x 8 + 2 + 1 + 1 = 20  (19 sin el migrate, que dura segundos)
+# Una RDS db.t4g.micro (1 GB) trae max_connections ~ 112, de las que quedan
+# ~80 útiles tras las reservadas y las de mantenimiento. Hay holgura, pero
+# cada tarea de API más suma 8: con más de ~8 tareas hay que bajar los hilos,
+# acortar DB_CONN_MAX_AGE o poner RDS Proxy.
+# CONN_HEALTH_CHECKS descarta una conexión muerta (reinicio de la RDS, corte de
+# red) antes de usarla, en vez de fallar la primera petición.
+DATABASES = {
+    "default": {
+        **DATABASES["default"],  # noqa: F405
+        "CONN_MAX_AGE": int(config("DB_CONN_MAX_AGE", default="") or 60),
+        "CONN_HEALTH_CHECKS": True,
+        "OPTIONS": {"sslmode": config("DB_SSLMODE", default="") or "require"},
+    }
+}
+
+# ── Sentry ────────────────────────────────────────────────────────────────────
+# Solo con SENTRY_DSN: vacía o ausente = apagado, y producción arranca igual.
+# send_default_pii=False porque hay datos de hospitales (usuarios, IP, cookies
+# y cabeceras no deben salir hacia Sentry).
+SENTRY_DSN = config_opcional("SENTRY_DSN")  # noqa: F405
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=config("SENTRY_ENVIRONMENT", default="") or "production",
+        traces_sample_rate=float(config("SENTRY_TRACES_SAMPLE_RATE", default="") or 0),
+        send_default_pii=False,
+        integrations=[DjangoIntegration(), CeleryIntegration()],
+    )

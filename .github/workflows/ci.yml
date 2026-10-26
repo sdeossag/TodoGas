@@ -74,7 +74,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: backend/requirements.txt
 
-      - name: Instalar dependencias del sistema (WeasyPrint)
+      - name: Instalar dependencias del sistema (WeasyPrint y pycurl)
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -82,10 +82,12 @@ jobs:
             libpangoft2-1.0-0 \
             libffi-dev \
             libcairo2 \
-            libgdk-pixbuf-2.0-0
+            libgdk-pixbuf-2.0-0 \
+            libcurl4-openssl-dev \
+            libssl-dev
 
       - name: Instalar dependencias Python
-        run: pip install -r backend/requirements-dev.txt
+        run: PYCURL_SSL_LIBRARY=openssl pip install -r backend/requirements-dev.txt
 
       - name: Verificar que manage.py check pasa
         working-directory: backend

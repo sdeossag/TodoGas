@@ -39,6 +39,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Primero: el ALB consulta /health/ por HTTP y con la IP privada como Host,
+    # y todo lo que viene despues (redireccion a HTTPS, CommonMiddleware) la
+    # rechazaria. Ver config/health.py.
+    "config.health.HealthCheckMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -120,15 +124,21 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "apps.users.validators.StrongPasswordValidator"},
 ]
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": config("REDIS_URL"),
-    }
-}
+# Broker de Celery y caché (ver config/broker.py). CELERY_BROKER es "redis"
+# (default) o "sqs". REDIS_URL ya no es obligatoria aquí: solo la pide
+# production.py cuando el broker es redis. Si existe, el caché usa Redis; si
+# no, la tabla django_cache (la crea `createcachetable` al desplegar).
+from config import broker as _broker
 
-CELERY_BROKER_URL = config("REDIS_URL")
-CELERY_RESULT_BACKEND = config("REDIS_URL")
+CELERY_BROKER = _broker.elegir(config("CELERY_BROKER", default="redis"))
+REDIS_URL = config("REDIS_URL", default="")
+CELERY_SQS_QUEUE_URL = config("CELERY_SQS_QUEUE_URL", default="")
+AWS_REGION = config("AWS_REGION", default="")
+
+CACHES = _broker.cache(REDIS_URL)
+globals().update(
+    _broker.ajustes_de_celery(CELERY_BROKER, REDIS_URL, CELERY_SQS_QUEUE_URL, AWS_REGION)
+)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
@@ -170,10 +180,34 @@ DEFAULT_FROM_EMAIL = config(
 )
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
 
+# Amazon SES (django_ses.SESBackend). En ECS las credenciales salen del rol de
+# la tarea: django-ses lee AWS_ACCESS_KEY_ID de arriba (vacío por defecto, por
+# S3) y se lo pasaría a boto3. Con '' boto3 hoy cae a la cadena normal, pero
+# dependería de un detalle de boto3; por eso las claves propias de SES van en
+# None cuando no hay claves, y el rol queda como única fuente.
+AWS_SES_REGION_NAME = config("AWS_SES_REGION_NAME", default="") or "us-east-1"
+AWS_SES_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID or None
+AWS_SES_SECRET_ACCESS_KEY = AWS_SECRET_ACCESS_KEY or None
+# El limitador de django-ses (0.5 por defecto) pide ses:GetSendQuota al enviar;
+# con ~3.000 correos al mes no hace falta y así el rol necesita solo SendRawEmail.
+AWS_SES_AUTO_THROTTLE = None
+# Opcional: conjunto de configuración de SES (métricas de rebotes y quejas).
+AWS_SES_CONFIGURATION_SET = config("AWS_SES_CONFIGURATION_SET", default="") or None
+
 # Google Maps (decision del 2026-09-24): el servidor convierte el GPS del
 # checklist en direccion (Geocoding API) y pone un mapa pequeno en el acta
 # (Maps Static API). Sin clave, el acta sale con las coordenadas y nada falla.
-GOOGLE_MAPS_API_KEY = config("GOOGLE_MAPS_API_KEY", default="")
+def config_opcional(nombre):
+    """
+    Vacía o "sin-configurar" cuenta como ausente. Parameter Store no admite
+    valores vacíos, así que Terraform deja ese relleno hasta que alguien pegue
+    la clave real (infra/terraform/ssm.tf).
+    """
+    valor = config(nombre, default="")
+    return "" if valor.strip().lower() == "sin-configurar" else valor
+
+
+GOOGLE_MAPS_API_KEY = config_opcional("GOOGLE_MAPS_API_KEY")
 BACKEND_URL = config("BACKEND_URL", default="http://localhost:8000")
 
 SIMPLE_JWT = {
