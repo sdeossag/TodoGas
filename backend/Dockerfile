@@ -19,14 +19,9 @@ COPY . .
 
 ENV DJANGO_SETTINGS_MODULE=config.settings.production
 
-# collectstatic no toca la base, S3 ni el broker, pero los settings exigen estas
-# variables al importarse (la imagen no lleva .env): valores falsos solo para
-# este paso, no quedan en la imagen.
-RUN DJANGO_SECRET_KEY=build-only-not-a-secret \
-    FRONTEND_URL=http://build.invalid BACKEND_URL=http://build.invalid \
-    DB_NAME=build DB_USER=build DB_PASSWORD=build DB_HOST=build.invalid DB_PORT=5432 \
-    CELERY_BROKER=redis REDIS_URL=redis://build.invalid:6379/0 \
-    python manage.py collectstatic --noinput
+# collectstatic usa config.settings.build: no necesita variables de entorno, no
+# conecta a la base ni a S3/broker, y sirve los mismos estaticos que produccion.
+RUN DJANGO_SETTINGS_MODULE=config.settings.build python manage.py collectstatic --noinput
 
 RUN useradd --system --create-home --uid 10001 app && chown -R app:app /app
 USER app
