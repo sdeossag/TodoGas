@@ -140,7 +140,7 @@ def test_el_admin_se_la_asigna_la_ejecuta_y_la_aprueba(d):
     r = transicion(c, wo_id, WorkOrder.Status.COMPLETED)
     assert r.status_code == 200, r.data
     reporte = GeneratedReport.objects.get(work_order_id=wo_id)
-    assert reporte.integrity_version == "5"
+    assert reporte.integrity_version == "7"
     hechos = field_facts(WorkOrder.objects.get(pk=wo_id))
     assert hechos["executors"] == ["Zz Admin"], "el acta dice quien la ejecuto"
 

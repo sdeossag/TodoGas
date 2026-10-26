@@ -253,6 +253,10 @@ def create_event_task(plan_task, asset, fecha, created_by):
         raise TaskStateError("Solo las tareas con activador por evento se crean a mano.")
     if asset.plan_id != plan_task.plan_id:
         raise TaskStateError("El activo no tiene asignado el protocolo de esta tarea.")
+    from apps.assets.models import Asset
+
+    if asset.status == Asset.Status.DECOMMISSIONED:
+        raise TaskStateError("El activo esta dado de baja: no se le crean tareas.")
     if _open_task(plan_task, asset) is not None:
         raise TaskStateError("Ese activo ya tiene esta tarea abierta.")
     return _new_pending(plan_task, asset, fecha, created_by)
@@ -310,6 +314,25 @@ def set_asset_plan(asset, new_plan, created_by=None):
 
 
 BAJA_NOTE = "El activo se dio de baja."
+
+
+def decommission_preview(asset):
+    """
+    Lo que pasaria al dar de baja el equipo, sin tocar nada: cuantas pendientes
+    se anularian y que OTs abiertas conservan tareas suyas.
+    """
+    pendientes = Task.objects.filter(asset=asset, status=Task.Status.PENDING).count()
+    en_ots = (
+        Task.objects.filter(asset=asset, status=Task.Status.SCHEDULED, work_order__isnull=False)
+        .select_related("work_order")
+    )
+    ots = sorted({t.work_order.wo_code for t in en_ots})
+    return {
+        "will_cancel": pendientes,
+        "in_work_orders": ots,
+        "tasks_in_work_orders": en_ots.count(),
+        "already_decommissioned": asset.status == asset.Status.DECOMMISSIONED,
+    }
 
 
 @transaction.atomic
@@ -658,12 +681,20 @@ def cancel_work_order_tasks(work_order):
     reemiten como pendientes con la misma fecha, listas para reagruparse. Es lo
     que hizo el cliente con la 19453: cancelada y 49 segundos despues las mismas
     tres tareas estaban en la 19454.
+
+    Si el equipo se dio de baja mientras la OT seguia abierta, sus tareas
+    quedan anuladas y no se reemiten, ni las del protocolo ni las manuales:
+    un equipo de baja no tiene pendientes (hasta que se reactive).
     """
+    from apps.assets.models import Asset
+
     reemitidas = []
     for tarea in work_order.tasks.filter(status=Task.Status.SCHEDULED).select_related(
         "plan_task__plan", "asset"
     ):
         _cancel(tarea, f"OT {work_order.wo_code} cancelada.")
+        if tarea.asset.status == Asset.Status.DECOMMISSIONED:
+            continue
         if tarea.plan_task_id and not can_generate(tarea.plan_task, tarea.asset):
             continue
         reemitidas.append(

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { useHospitals } from '../../api/assets'
 import { SEVERITIES, useFindings, useFindingsSummary } from '../../api/findings'
@@ -21,9 +21,14 @@ const VISTAS = [
  * motivo. Lo más grave primero; cada uno dentro del alcance del usuario.
  */
 export default function FindingsInboxPage() {
-  const [vista, setVista] = useState('PENDING')
-  const [hospital, setHospital] = useState('')
-  const [severidad, setSeveridad] = useState('')
+  // El tablero enlaza con ?status=PENDING&severity=CRITICAL&hospital_id=...
+  const [urlParams] = useSearchParams()
+  const vistaUrl = urlParams.get('status')
+  const [vista, setVista] = useState(VISTAS.some((v) => v.value === vistaUrl) ? vistaUrl : 'PENDING')
+  const [hospital, setHospital] = useState(urlParams.get('hospital_id') ?? '')
+  const [severidad, setSeveridad] = useState(
+    SEVERITIES.some((s) => s.value === urlParams.get('severity')) ? urlParams.get('severity') : ''
+  )
   const [decidiendo, setDecidiendo] = useState(null) // { hallazgo, accion }
 
   const { data: hospitales = [] } = useHospitals({ is_active: true })

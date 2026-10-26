@@ -57,6 +57,29 @@ def _valor(fr, corto=False):
     return fr.value
 
 
+_ORDEN_ETAPA = {"BEFORE": 0, "AFTER": 1}
+
+
+def _por_etapa(fotos):
+    """Antes, luego Despues y al final las sin etiqueta; dentro de cada grupo, por hora."""
+    return sorted(fotos, key=lambda p: (_ORDEN_ETAPA.get(p.stage, 2), p.taken_at))
+
+
+def _grupos_de_fotos(fotos, limite):
+    """
+    Las primeras `limite` fotos en grupos con subtitulo Antes / Despues. Las sin
+    etiqueta van al final sin subtitulo; si ninguna tiene etiqueta, un solo
+    grupo sin subtitulo (el acta de siempre).
+    """
+    grupos = []
+    for p in _por_etapa(fotos)[:limite]:
+        titulo = p.get_stage_display() if p.stage else ""
+        if not grupos or grupos[-1]["label"] != titulo:
+            grupos.append({"label": titulo, "photos": []})
+        grupos[-1]["photos"].append(p)
+    return grupos
+
+
 def _mapa(fr, opciones):
     """El mapa pequeno de un campo GPS para el acta, si esta encendido."""
     if fr.field.field_type != "GPS" or not (opciones or {}).get("checklist_mapa", True):
@@ -65,6 +88,42 @@ def _mapa(fr, opciones):
 
     punto = parse_latlng(fr.value)
     return static_map_data_uri(*punto) if punto else ""
+
+
+def _ubicacion_del_activo(tarea, secciones, resolvedores, mapas, opciones):
+    """
+    La sububicacion del equipo con su direccion y, si el interruptor de mapa
+    esta encendido y el tecnico no tomo GPS, un mapa pequeno con su punto.
+
+    Es dato del arbol, no de campo: no entra en el hash de integridad (el acta
+    la imprime con lo que diga el arbol al generarse, y las ya generadas no
+    cambian).
+    """
+    from apps.assets.ubicacion import ResolvedorUbicaciones
+
+    activo = tarea.asset
+    if not activo.node_id:
+        return None
+    if activo.hospital_id not in resolvedores:
+        resolvedores[activo.hospital_id] = ResolvedorUbicaciones(activo.hospital)
+    sub = resolvedores[activo.hospital_id].resolver(activo.node_id)
+    if sub is None:
+        return None
+    sub = dict(sub, map="")
+    con_gps_del_tecnico = any(f["map"] for sec in secciones for f in sec["rows"] if "map" in f)
+    if (
+        sub["latitude"] is not None
+        and not con_gps_del_tecnico
+        and (opciones or {}).get("checklist_mapa", True)
+        and (opciones or {}).get("activo_ubicacion", True)
+    ):
+        from apps.assets.geo import static_map_data_uri
+
+        punto = (sub["latitude"], sub["longitude"])
+        if punto not in mapas:
+            mapas[punto] = static_map_data_uri(*punto)
+        sub["map"] = mapas[punto]
+    return sub
 
 
 def _sections(respuesta, opciones=None):
@@ -138,6 +197,18 @@ def _trabajo_en_campo(respuestas, photos, signatures):
     return {"start": inicio, "end": fin, "duration": _duration_label(fin - inicio)}
 
 
+def _con_correccion(work_order, calculado):
+    """
+    La fecha de intervencion corregida en revision (WorkOrder.intervention_*)
+    manda sobre la calculada, sin marca en el acta. Lo calculado no se toca.
+    """
+    inicio = work_order.intervention_start_override
+    fin = work_order.intervention_end_override
+    if inicio is None or fin is None:
+        return calculado
+    return {"start": inicio, "end": fin, "duration": _duration_label(fin - inicio)}
+
+
 def _ejecutores(work_order, respuestas):
     """
     Quien hizo el trabajo: quienes cerraron los checklists. El asignado puede
@@ -162,11 +233,11 @@ def field_facts(work_order):
         .prefetch_related("field_responses")
     )
     return {
-        "field_work": _trabajo_en_campo(
+        "field_work": _con_correccion(work_order, _trabajo_en_campo(
             respuestas,
             list(Photo.objects.filter(work_order=work_order, hidden=False)),
             list(Signature.objects.filter(work_order=work_order)),
-        ),
+        )),
         "executors": _ejecutores(work_order, respuestas),
     }
 
@@ -230,13 +301,17 @@ def _render(work_order, opciones):
             fotos_por_tarea.setdefault(p.task_id, []).append(p)
         else:
             fotos_visita.append(p)
+    resolvedores, mapas = {}, {}
+    secciones_por_tarea = {t.id: _sections(respuestas.get(t.id), opciones) for t in tareas}
     bloques = [
         {
             "task": t,
             "asset": t.asset,
             "checklist_response": respuestas.get(t.id),
-            "sections": _sections(respuestas.get(t.id), opciones),
+            "sections": secciones_por_tarea[t.id],
+            "sublocation": _ubicacion_del_activo(t, secciones_por_tarea[t.id], resolvedores, mapas, opciones),
             "photos": fotos_por_tarea.get(t.id, []),
+            "photo_groups": _grupos_de_fotos(fotos_por_tarea.get(t.id, []), 6),
             "field_work": _trabajo_en_campo(
                 [respuestas[t.id]] if t.id in respuestas else [], [], []
             ),
@@ -257,7 +332,9 @@ def _render(work_order, opciones):
     context = {
         "work_order": work_order,
         "technician": technician,
-        "field_work": _trabajo_en_campo(list(respuestas.values()), photos, signatures),
+        "field_work": _con_correccion(
+            work_order, _trabajo_en_campo(list(respuestas.values()), photos, signatures)
+        ),
         "executors": _ejecutores(work_order, list(respuestas.values())),
         "validation": _validacion(work_order),
         "technician_signature": next(
@@ -274,6 +351,7 @@ def _render(work_order, opciones):
             .order_by("asset__code", "reported_at")
         ),
         "visit_photos": fotos_visita,
+        "visit_photo_groups": _grupos_de_fotos(fotos_visita, 10),
         "photos": photos,
         "signatures": signatures,
         "stock_movements": stock_movements,

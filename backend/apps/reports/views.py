@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from apps.users import scope
 from apps.users.models import User
+from apps.users import permisos
 from apps.users.permissions import IsAdmin
 
 from .models import GeneratedReport, ReportSettings
@@ -32,7 +33,7 @@ class GeneratedReportViewSet(
         ).prefetch_related("send_logs")
 
         # Hospital o parte del arbol del usuario (apps.users.scope).
-        if user.role in (User.Role.ADMIN, User.Role.SUP):
+        if permisos.puede(user, "reportes.ver"):
             qs = scope.work_orders(qs, user, prefix="work_order__")
         elif user.role == User.Role.CLI:
             qs = scope.work_orders(

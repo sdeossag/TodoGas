@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
+  useCatalogoDePermisos,
   useCreateUser,
   useDeactivateUser,
   useResetPassword,
@@ -14,6 +15,7 @@ import useAuthStore from '../../store/authStore'
 import Icon from '../../components/ui/Icon'
 import { entityTypeLabel } from '../../constants/labels'
 import useModalDismiss from '../../hooks/useModalDismiss'
+import { agruparPorArea, cuantosExtra } from '../../utils/permisos'
 
 export const ROLE_LABELS = {
   ADMIN: 'Administrador',
@@ -199,6 +201,7 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
     scope_node: '',
     employee_code: '',
     phone: '',
+    permisos_extra: [],
   })
   const [errors, setErrors] = useState({})
   const [apiError, setApiError] = useState('')
@@ -238,6 +241,8 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
       hospital: form.role !== 'ADMIN' ? form.hospital || null : null,
       scope_node: form.role !== 'ADMIN' ? form.scope_node || null : null,
       password: generateTempPassword(),
+      // Solo supervisor y tecnico los llevan; el servidor rechaza los de un hospital.
+      permisos_extra: ['SUP', 'TEC'].includes(form.role) ? form.permisos_extra : [],
     }
 
     create.mutate(payload, {
@@ -318,6 +323,12 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
           }}
         />
 
+        <PermisosAdicionales
+          role={form.role}
+          seleccion={form.permisos_extra}
+          onChange={(permisos_extra) => setForm((f) => ({ ...f, permisos_extra }))}
+        />
+
         {form.role === 'TEC' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -364,6 +375,83 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
         </div>
       </form>
     </Modal>
+  )
+}
+
+// ── Permisos adicionales ─────────────────────────────────────────────────────
+
+/**
+ * Casillas que le suman al rol (apps/users/permisos.py). Solo suman: lo que el
+ * rol ya trae sale marcado y apagado, para que se vea de un vistazo que ya lo
+ * tiene. No cambian a que hospital llega el usuario (eso es "Alcance"). La
+ * cuenta de un hospital y el administrador no las llevan.
+ */
+function PermisosAdicionales({ role, seleccion, onChange }) {
+  const { data: catalogo = [], isLoading, isError } = useCatalogoDePermisos()
+  if (role !== 'SUP' && role !== 'TEC') return null
+
+  const grupos = agruparPorArea(catalogo)
+  const alternar = (codigo) =>
+    onChange(
+      seleccion.includes(codigo) ? seleccion.filter((c) => c !== codigo) : [...seleccion, codigo]
+    )
+
+  return (
+    <section aria-labelledby="permisos-adicionales">
+      <h3 id="permisos-adicionales" className="text-sm font-semibold text-gray-800">
+        Permisos adicionales
+      </h3>
+      <p className="text-xs text-gray-500 mt-0.5 mb-3">
+        Marca lo que esta persona puede hacer además de lo que ya trae su rol. Sigue viendo solo
+        los hospitales y ubicaciones de su alcance.
+      </p>
+
+      {isLoading && <p className="text-xs text-gray-500">Cargando…</p>}
+      {isError && <p className="text-xs text-red-600">No se pudieron cargar los permisos.</p>}
+
+      <div className="space-y-4">
+        {grupos.map((g) => (
+          <fieldset key={g.area} className="min-w-0">
+            <legend className="text-xs font-medium text-gray-500 mb-1.5">{g.area}</legend>
+            <ul className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+              {g.permisos.map((p) => {
+                const delRol = p.roles.includes(role)
+                const marcado = delRol || seleccion.includes(p.codigo)
+                const id = `permiso-${p.codigo}`
+                return (
+                  <li key={p.codigo}>
+                    <label
+                      htmlFor={id}
+                      className={`flex items-start gap-3 px-3 py-2.5 ${
+                        delRol ? 'bg-gray-50 cursor-default' : 'cursor-pointer hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        id={id}
+                        type="checkbox"
+                        checked={marcado}
+                        disabled={delRol}
+                        onChange={() => alternar(p.codigo)}
+                        className="mt-0.5 rounded border-gray-300 text-brand focus:ring-brand/30 disabled:opacity-60"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="text-sm text-gray-800">{p.nombre}</span>
+                          {delRol && (
+                            <span className="text-xs text-gray-500">Incluido en el rol</span>
+                          )}
+                        </span>
+                        <span className="block text-xs text-gray-500 mt-0.5">{p.descripcion}</span>
+                      </span>
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          </fieldset>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -471,6 +559,7 @@ function EditUserModal({ user, hospitals, currentUserId, onClose, onSaved }) {
     hospital: user.hospital ?? '',
     scope_node: user.scope_node ?? '',
     is_active: user.is_active,
+    permisos_extra: user.permisos_extra ?? [],
   })
   const [apiError, setApiError] = useState('')
 
@@ -490,6 +579,7 @@ function EditUserModal({ user, hospitals, currentUserId, onClose, onSaved }) {
         hospital: user.role !== 'ADMIN' ? form.hospital || null : null,
         scope_node: user.role !== 'ADMIN' ? form.scope_node || null : null,
         is_active: form.is_active,
+        ...(['SUP', 'TEC'].includes(user.role) ? { permisos_extra: form.permisos_extra } : {}),
       },
       {
         onSuccess: () => onSaved(),
@@ -552,6 +642,12 @@ function EditUserModal({ user, hospitals, currentUserId, onClose, onSaved }) {
               scopeNode={form.scope_node}
               error={fieldError(update.error, 'hospital') || fieldError(update.error, 'scope_node')}
               onChange={(cambios) => setForm((f) => ({ ...f, ...cambios }))}
+            />
+
+            <PermisosAdicionales
+              role={user.role}
+              seleccion={form.permisos_extra}
+              onChange={(permisos_extra) => setForm((f) => ({ ...f, permisos_extra }))}
             />
 
             <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -782,6 +878,7 @@ export default function UsersPage() {
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Rol</th>
                   <th className="px-4 py-3">Alcance</th>
+                  <th className="px-4 py-3">Permisos adicionales</th>
                   <th className="px-4 py-3">Estado</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
@@ -810,6 +907,13 @@ export default function UsersPage() {
                               <span className="block text-gray-400">{u.scope_node_path}</span>
                             )}
                           </>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600">
+                        {cuantosExtra(u) > 0 ? (
+                          `${cuantosExtra(u)} ${cuantosExtra(u) === 1 ? 'adicional' : 'adicionales'}`
+                        ) : (
+                          <span className="text-gray-400">Ninguno</span>
                         )}
                       </td>
                       <td className="px-4 py-3">

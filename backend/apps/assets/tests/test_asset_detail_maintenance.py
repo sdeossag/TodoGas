@@ -69,7 +69,7 @@ def test_detail_exposes_maintenance_fields(asset, admin_user):
 
 
 def test_detail_reports_plan_due_date(asset, admin_user):
-    due = date.today() + timedelta(days=30)
+    due = date.today() + timedelta(days=31)
     plan = make_plan(
         f"Plan {uuid.uuid4()}",
         next_due_date=due,

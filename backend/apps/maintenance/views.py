@@ -12,13 +12,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.assets.models import Asset, AssetNode
-from apps.users.permissions import IsAdmin, IsAdminOrSup
+from apps.users.permissions import IsAdmin, IsGestor, TienePermiso
 from apps.users import scope
 
 from . import services
 from .models import MaintenancePlan, PlanTask, RescheduleCause, Task, TaskTypeCatalog
 from .serializers import (
     AssetIdsSerializer,
+    NodeIdsSerializer,
     BulkCancelInputSerializer,
     BulkRescheduleInputSerializer,
     CancelInputSerializer,
@@ -62,6 +63,38 @@ def _sync_plan(plan, user):
 
 
 # ── Planes de tareas ──────────────────────────────────────────────────────────
+
+def _solo_del_hospital(plan, objetos, campo, etiqueta):
+    """Un protocolo limitado a un hospital no se asigna fuera de el."""
+    if not plan.restrict_to_hospital_id:
+        return
+    ajenos = [etiqueta(o) for o in objetos if o.hospital_id != plan.restrict_to_hospital_id]
+    if ajenos:
+        raise ValidationError({campo: (
+            f"El protocolo es solo para {plan.restrict_to_hospital.name}. "
+            f"No son de ese hospital: {', '.join(ajenos[:10])}."
+        )})
+
+
+def _asignar(plan, activos, user):
+    """
+    Asigna el plan a los activos (D7). Un activo que tenia otro plan se cambia a
+    este y su nueva pendiente hereda la fecha de la que se anula.
+    """
+    asignados, cambiados, sin_generar = 0, [], []
+    with transaction.atomic():
+        for asset in activos:
+            if asset.plan_id == plan.id:
+                continue
+            anterior = asset.plan.name if asset.plan_id else None
+            heredada = services.set_asset_plan(asset, plan, user)
+            if anterior:
+                cambiados.append({"code": asset.code, "from_plan": anterior, "kept_date": heredada})
+            asignados += 1
+            if asset.status != Asset.Status.ACTIVE:
+                sin_generar.append(asset.code)
+    return {"assigned": asignados, "moved": cambiados, "inactive": sin_generar}
+
 
 class MaintenancePlanViewSet(viewsets.ModelViewSet):
 
@@ -113,12 +146,12 @@ class MaintenancePlanViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ("list", "retrieve", "compliance"):
-            return [IsAdminOrSup()]
+            return [IsGestor()]
         if self.action in (
             "create", "update", "partial_update", "pause", "resume",
             "assign_assets", "remove_assets",
         ):
-            return [IsAdmin()]
+            return [TienePermiso("protocolos.gestionar")()]
         return [IsAuthenticated()]
 
     def get_serializer_class(self):
@@ -166,32 +199,27 @@ class MaintenancePlanViewSet(viewsets.ModelViewSet):
         entrada = AssetIdsSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
         activos = entrada.validated_data["asset_ids"]
+        _solo_del_hospital(plan, activos, "asset_ids", lambda a: a.code)
+        return Response(_asignar(plan, activos, request.user))
 
-        if plan.restrict_to_hospital_id:
-            ajenos = [a.code for a in activos if a.hospital_id != plan.restrict_to_hospital_id]
-            if ajenos:
-                raise ValidationError({"asset_ids": (
-                    f"El protocolo es solo para {plan.restrict_to_hospital.name}. "
-                    f"No son de ese hospital: {', '.join(ajenos[:10])}."
-                )})
+    @action(detail=True, methods=["post"], url_path="assign-locations")
+    def assign_locations(self, request, pk=None):
+        """
+        Asigna el protocolo a ubicaciones enteras (entregas de obra de
+        instalaciones). Cada ubicacion recibe su activo de ubicacion y desde
+        ahi funciona igual que un equipo. Para quitarlo se usa remove-assets
+        con el id de ese activo.
+        """
+        from apps.assets.activo_ubicacion import activo_de_ubicacion
 
-        asignados, cambiados, sin_generar = 0, [], []
+        plan = self.get_object()
+        entrada = NodeIdsSerializer(data=request.data, context={"request": request})
+        entrada.is_valid(raise_exception=True)
+        nodos = entrada.validated_data["node_ids"]
+        _solo_del_hospital(plan, nodos, "node_ids", lambda n: n.path or n.name)
         with transaction.atomic():
-            for asset in activos:
-                if asset.plan_id == plan.id:
-                    continue
-                anterior = asset.plan.name if asset.plan_id else None
-                heredada = services.set_asset_plan(asset, plan, request.user)
-                if anterior:
-                    cambiados.append({"code": asset.code, "from_plan": anterior, "kept_date": heredada})
-                asignados += 1
-                if asset.status != Asset.Status.ACTIVE:
-                    sin_generar.append(asset.code)
-        return Response({
-            "assigned": asignados,
-            "moved": cambiados,
-            "inactive": sin_generar,
-        })
+            activos = [activo_de_ubicacion(n) for n in nodos]
+            return Response(_asignar(plan, activos, request.user))
 
     @action(detail=True, methods=["post"], url_path="remove-assets")
     def remove_assets(self, request, pk=None):
@@ -275,8 +303,8 @@ class PlanTaskViewSet(
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
-            return [IsAdminOrSup()]
-        return [IsAdmin()]
+            return [IsGestor()]
+        return [TienePermiso("protocolos.gestionar")()]
 
     def destroy(self, request, *args, **kwargs):
         tarea = self.get_object()
@@ -328,7 +356,13 @@ class TaskViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = TaskSerializer
-    permission_classes = [IsAdminOrSup]
+
+    def get_permissions(self):
+        # Las pendientes las ve quien planifica y tambien quien las agrupa en
+        # una OT; cambiarlas (fecha, anular) es solo de quien planifica.
+        if self.action in ("list", "retrieve", "reschedules"):
+            return [TienePermiso("tareas.planificar", "ot.crear_desde_pendientes")()]
+        return [TienePermiso("tareas.planificar")()]
 
     def get_queryset(self):
         qs = Task.objects.select_related(
@@ -445,7 +479,7 @@ class RescheduleCauseViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     """Catalogo de causas de reprogramacion (las 10 del cliente en Fracttal)."""
 
     serializer_class = RescheduleCauseSerializer
-    permission_classes = [IsAdminOrSup]
+    permission_classes = [TienePermiso("tareas.planificar")]
     pagination_class = None
     queryset = RescheduleCause.objects.filter(is_active=True).order_by("sort_order", "name")
 

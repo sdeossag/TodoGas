@@ -41,6 +41,7 @@ import UiSpinner from '../components/ui/Spinner'
 import AdminLayout from '../layouts/AdminLayout'
 import TechnicianLayout from '../layouts/TechnicianLayout'
 import ClientLayout from '../layouts/ClientLayout'
+import { esGestor } from '../utils/permisos'
 
 const ROLE_HOME = {
   ADMIN: '/dashboard',
@@ -57,14 +58,17 @@ function Spinner() {
   )
 }
 
-function ProtectedRoute({ allowedRoles, redirectTo }) {
+function ProtectedRoute({ allowedRoles, gestion = false, redirectTo }) {
   const { isAuthenticated, isLoading, user } = useAuthStore()
 
   if (isLoading) return <Spinner />
 
   if (!isAuthenticated) return <Navigate to="/login" replace />
 
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+  // `gestion`: tambien entra un tecnico al que el administrador le sumo permisos
+  // (apps.users.permisos); cada pantalla y cada boton siguen su permiso.
+  const entra = !allowedRoles || !user || allowedRoles.includes(user.role) || (gestion && esGestor(user))
+  if (!entra) {
     const home = ROLE_HOME[user.role] ?? '/login'
     return <Navigate to={home} replace />
   }
@@ -80,7 +84,7 @@ export const router = createBrowserRouter(
 
     // Rutas para ADMIN y SUP
     {
-      element: <ProtectedRoute allowedRoles={['ADMIN', 'SUP']} />,
+      element: <ProtectedRoute allowedRoles={['ADMIN', 'SUP']} gestion />,
       children: [
         {
           element: <AdminLayout />,

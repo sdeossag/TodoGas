@@ -1,3 +1,4 @@
+import StageToggle from './StageToggle'
 import { useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
@@ -66,6 +67,8 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [caption, setCaption] = useState('')
+  // Antes o despues del trabajo; vacio = sin etiqueta.
+  const [stage, setStage] = useState('')
   // De que activo es la foto. Con un solo activo va con el; con varios lo
   // elige el tecnico, y sin elegir queda como foto de la visita. Se conserva
   // entre fotos: lo normal es tomar varias del mismo activo seguidas.
@@ -242,6 +245,7 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
     setFile(null)
     setPreviewUrl(null)
     setCaption('')
+    setStage('')
     setTakenAt(null)
     setCoords(null)
     setGeoWarning(false)
@@ -267,6 +271,7 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
         longitude: coords?.longitude ?? null,
         taken_at: takenAt,
         caption: caption.trim(),
+        stage,
         task_id: findingId ? null : taskId || null,
         finding_id: findingId,
       })
@@ -313,6 +318,7 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
         longitude: coords?.longitude ?? null,
         taken_at: takenAt,
         caption: caption.trim(),
+        stage,
       },
       {
         onSuccess: () => {
@@ -403,6 +409,9 @@ export default function PhotoCapture({ workOrderId, tasks = [], disabled = false
               </select>
             </label>
           )}
+
+          {/* Las fotos de un hallazgo no son un antes y despues. */}
+          {!findingId && <StageToggle value={stage} onChange={setStage} />}
 
           <div>
             <input

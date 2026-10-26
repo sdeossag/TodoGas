@@ -64,12 +64,13 @@ export function useCreateStockMovement() {
   })
 }
 
-export function useStockAlerts() {
+export function useStockAlerts(options = {}) {
   return useQuery({
     queryKey: ['inventory-alerts'],
     queryFn: () => client.get('/api/inventory/alerts/').then((r) => r.data),
     staleTime: 60000,
     refetchInterval: 60000,
     retry: false,
+    ...options,
   })
 }

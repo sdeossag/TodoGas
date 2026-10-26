@@ -489,8 +489,8 @@ export async function savePhotoOffline(photo) {
   await run(
     `INSERT OR REPLACE INTO offline_photos (
       id, work_order_id, file_path, latitude, longitude,
-      taken_at, caption, file_hash, synced, offline_uuid, task_id, finding_id
-    ) VALUES (?,?,?,?,?,?,?,?,0,?,?,?)`,
+      taken_at, caption, file_hash, synced, offline_uuid, task_id, finding_id, stage
+    ) VALUES (?,?,?,?,?,?,?,?,0,?,?,?,?)`,
     [
       photo.id ?? offlineUuid,
       photo.work_order_id,
@@ -503,6 +503,7 @@ export async function savePhotoOffline(photo) {
       offlineUuid,
       photo.task_id ?? null,
       photo.finding_id ?? null,
+      photo.stage ?? '',
     ]
   )
   return offlineUuid

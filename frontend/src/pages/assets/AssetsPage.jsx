@@ -4,6 +4,7 @@ import useAuthStore from '../../store/authStore'
 import { useHospitals, useAssetTree, useAssetsPage } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
 import { compareNodes } from '../../utils/locationTree'
+import { puede } from '../../utils/permisos'
 
 const STATUS_LABELS = {
   ACTIVE: { label: 'Activo', cls: 'bg-green-100 text-green-700' },
@@ -19,7 +20,7 @@ const PRIORITY_LABELS = {
 
 const PM_DOT = {
   on_time:  { cls: 'bg-green-500',  title: 'Mantenimiento al día' },
-  due_soon: { cls: 'bg-yellow-400', title: 'Próximo mantenimiento en ≤15 días' },
+  due_soon: { cls: 'bg-yellow-400', title: 'Próximo mantenimiento en ≤30 días' },
   overdue:  { cls: 'bg-red-500',    title: 'Mantenimiento vencido' },
   no_plan:  { cls: 'bg-gray-300',   title: 'Sin protocolo' },
 }
@@ -36,7 +37,7 @@ function PmDot({ status }) {
 
 export default function AssetsPage() {
   const { user } = useAuthStore()
-  const isAdminOrSup = ['ADMIN', 'SUP'].includes(user?.role)
+  const puedeGestionar = puede(user, 'activos.gestionar')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
@@ -99,7 +100,7 @@ export default function AssetsPage() {
           <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Activos</h1>
           <p className="text-sm text-gray-500 mt-0.5">Equipos médicos registrados</p>
         </div>
-        {isAdminOrSup && (
+        {puedeGestionar && (
           <button onClick={() => navigate('/activos/nuevo')}
             className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors">
             + Nuevo activo
@@ -203,7 +204,7 @@ export default function AssetsPage() {
               <div className="text-center py-16 text-gray-500">
                 <Icon name="asset" className="w-10 h-10 mx-auto mb-3 text-gray-400" />
                 <p className="font-medium">No hay activos en esta ubicación</p>
-                {isAdminOrSup && (
+                {puedeGestionar && (
                   <button onClick={() => navigate('/activos/nuevo')}
                     className="mt-3 text-sm text-brand hover:underline">
                     + Crear el primer activo
@@ -255,7 +256,7 @@ export default function AssetsPage() {
                             className="text-xs px-2 py-1 rounded bg-brand/10 text-brand hover:bg-brand/20">
                             Ver ficha
                           </button>
-                          {isAdminOrSup && (
+                          {puedeGestionar && (
                             <button
                               onClick={(e) => { e.stopPropagation(); navigate(`/activos/${a.id}/editar`) }}
                               className="ml-1 text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200">

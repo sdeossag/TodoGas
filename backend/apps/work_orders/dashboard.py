@@ -11,7 +11,7 @@ from .models import WorkOrder
 
 
 def calculate_compliance_percentage(month=None, year=None, hospital_id=None):
-    today = timezone.now().date()
+    today = timezone.localdate()
     if month is None:
         month = today.month
     if year is None:
@@ -76,7 +76,7 @@ def calculate_mttr(hospital_id=None, days=30):
 
 
 def calculate_overdue_count(hospital_id=None):
-    today = timezone.now().date()
+    today = timezone.localdate()
     qs = WorkOrder.objects.filter(scheduled_date__lt=today).exclude(
         status__in=[WorkOrder.Status.COMPLETED, WorkOrder.Status.CANCELLED]
     )
@@ -101,31 +101,43 @@ def calculate_ots_by_status(hospital_id=None, days=30):
 
 def calculate_ots_by_technician(days=30):
     since = timezone.now() - timedelta(days=days)
-    today = timezone.now().date()
+    today = timezone.localdate()
+    abiertas = ~Q(assigned_work_orders__status__in=[
+        WorkOrder.Status.COMPLETED, WorkOrder.Status.CANCELLED,
+    ])
 
-    techs = User.objects.filter(role=User.Role.TEC, is_active=True)
-    result = []
-    for tech in techs:
-        assigned = WorkOrder.objects.filter(assigned_to=tech, created_at__gte=since).count()
-        completed = WorkOrder.objects.filter(
-            assigned_to=tech,
-            status=WorkOrder.Status.COMPLETED,
-            completed_at__gte=since,
-        ).count()
-        overdue = (
-            WorkOrder.objects.filter(assigned_to=tech, scheduled_date__lt=today)
-            .exclude(status__in=[WorkOrder.Status.COMPLETED, WorkOrder.Status.CANCELLED])
-            .count()
-        )
-        result.append(
-            {
-                "technician_id": str(tech.id),
-                "technician_name": f"{tech.first_name} {tech.last_name}",
-                "assigned": assigned,
-                "completed": completed,
-                "overdue": overdue,
-            }
-        )
+    # Una sola consulta: con tres conteos por tecnico el costo crecia con la
+    # plantilla. distinct porque los tres conteos recorren el mismo join.
+    techs = User.objects.filter(role=User.Role.TEC, is_active=True).annotate(
+        assigned=Count(
+            "assigned_work_orders",
+            filter=Q(assigned_work_orders__created_at__gte=since),
+            distinct=True,
+        ),
+        completed=Count(
+            "assigned_work_orders",
+            filter=Q(
+                assigned_work_orders__status=WorkOrder.Status.COMPLETED,
+                assigned_work_orders__completed_at__gte=since,
+            ),
+            distinct=True,
+        ),
+        overdue=Count(
+            "assigned_work_orders",
+            filter=Q(assigned_work_orders__scheduled_date__lt=today) & abiertas,
+            distinct=True,
+        ),
+    )
+    result = [
+        {
+            "technician_id": str(tech.id),
+            "technician_name": f"{tech.first_name} {tech.last_name}",
+            "assigned": tech.assigned,
+            "completed": tech.completed,
+            "overdue": tech.overdue,
+        }
+        for tech in techs
+    ]
     result.sort(key=lambda x: x["overdue"], reverse=True)
     return result
 
@@ -134,11 +146,11 @@ def calculate_assets_without_maintenance(days=90, hospital_id=None):
     from apps.assets.models import Asset
 
     since = timezone.now() - timedelta(days=days)
-    today = timezone.now().date()
+    today = timezone.localdate()
 
     from apps.maintenance.models import Task
 
-    assets_with_plans = Asset.objects.filter(
+    assets_with_plans = Asset.objects.equipment().filter(
         plan__is_active=True, status=Asset.Status.ACTIVE
     )
     if hospital_id:
@@ -179,3 +191,112 @@ def calculate_assets_without_maintenance(days=90, hospital_id=None):
             }
         )
     return result
+
+
+def calculate_assets_status(hospital_id=None):
+    """
+    Estado de los activos en servicio segun la tarea abierta mas proxima de su
+    plan: al dia, por vencer (hasta 30 dias), vencido y sin protocolo (sin plan
+    activo). Las mismas fronteras que el listado de activos al que lleva el clic.
+    """
+    from apps.assets.models import Asset
+    from apps.maintenance.models import Task
+
+    today = timezone.localdate()
+    soon = today + timedelta(days=30)
+
+    proxima = (
+        Task.objects.filter(Task.next_maintenance_q(), asset=OuterRef("pk"))
+        .order_by("scheduled_date")
+        .values("scheduled_date")[:1]
+    )
+    assets = Asset.objects.equipment().filter(status=Asset.Status.ACTIVE)
+    if hospital_id:
+        assets = assets.filter(hospital_id=hospital_id)
+
+    con_plan = Q(plan__isnull=False, plan__is_active=True)
+    return assets.annotate(_next_due=Subquery(proxima)).aggregate(
+        total=Count("id"),
+        no_plan=Count("id", filter=~con_plan),
+        overdue=Count("id", filter=con_plan & Q(_next_due__lt=today)),
+        due_soon=Count("id", filter=con_plan & Q(_next_due__gte=today, _next_due__lte=soon)),
+        on_time=Count(
+            "id", filter=con_plan & (Q(_next_due__gt=soon) | Q(_next_due__isnull=True))
+        ),
+    )
+
+
+def calculate_pending_by_month(hospital_id=None, months=6):
+    """
+    Tareas abiertas (pendientes y programadas) por mes, desde el actual, mas las
+    vencidas aparte. Como la planificacion de Fracttal. Las pendientes de un plan
+    en pausa no son trabajo por planificar (igual que Tareas pendientes).
+    """
+    from django.db.models.functions import TruncMonth
+
+    from apps.maintenance.models import Task
+
+    today = timezone.localdate()
+    first = today.replace(day=1)
+    limit = first + relativedelta(months=months)
+
+    qs = Task.objects.filter(status__in=Task.OPEN_STATUSES).exclude(
+        Q(status=Task.Status.PENDING)
+        & (Q(plan_task__is_active=False) | Q(plan_task__plan__is_active=False))
+    )
+    if hospital_id:
+        qs = qs.filter(asset__hospital_id=hospital_id)
+
+    overdue = qs.filter(scheduled_date__lt=today).count()
+    counts = {
+        row["m"]: row["n"]
+        for row in qs.filter(scheduled_date__gte=today, scheduled_date__lt=limit)
+        .annotate(m=TruncMonth("scheduled_date"))
+        .values("m")
+        .annotate(n=Count("id"))
+    }
+    result = []
+    for i in range(months):
+        ref = first + relativedelta(months=i)
+        result.append({"month": ref.strftime("%Y-%m"), "count": counts.get(ref, 0)})
+    return {"overdue": overdue, "months": result}
+
+
+def calculate_ots_by_kind(hospital_id=None, days=30):
+    """
+    OTs del periodo por lo que el catalogo de tipos dice que cuentan:
+    preventivo, correctivo u otro. Las canceladas no son trabajo hecho ni por hacer.
+    """
+    from apps.maintenance.models import TaskTypeCatalog
+
+    since = timezone.now() - timedelta(days=days)
+    qs = WorkOrder.objects.filter(created_at__gte=since).exclude(
+        status=WorkOrder.Status.CANCELLED
+    )
+    if hospital_id:
+        qs = qs.filter(hospital_id=hospital_id)
+
+    como = dict(TaskTypeCatalog.objects.values_list("code", "counts_as"))
+    result = {"PREVENTIVE": 0, "CORRECTIVE": 0, "OTHER": 0}
+    for row in qs.values("task_type").annotate(n=Count("id")):
+        kind = como.get(row["task_type"], "OTHER")
+        result[kind if kind in result else "OTHER"] += row["n"]
+    return result
+
+
+def calculate_open_findings(hospital_id=None):
+    """Hallazgos pendientes de decision del planificador, por severidad."""
+    from .models import Finding
+
+    qs = Finding.objects.filter(status=Finding.Status.PENDING)
+    if hospital_id:
+        qs = qs.filter(work_order__hospital_id=hospital_id)
+
+    by_severity = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    for row in qs.values("severity").annotate(n=Count("id")):
+        by_severity[row["severity"]] = row["n"]
+    return {
+        "total": sum(by_severity.values()),
+        "by_severity": by_severity,
+        "out_of_service": qs.filter(out_of_service=True).count(),
+    }

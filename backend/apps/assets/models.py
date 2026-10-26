@@ -102,6 +102,8 @@ class AssetNode(models.Model):
         else:
             self.path = self.name
         super().save(*args, **kwargs)
+        # El activo que representa la ubicacion lleva su nombre en OT y actas.
+        Asset.objects.filter(represents_node=self).exclude(name=self.name).update(name=self.name)
 
     def __str__(self):
         return f"{self.hospital.code}/{self.path or self.name}"
@@ -131,11 +133,29 @@ class AssetNode(models.Model):
         return ids
 
 
+class AssetQuerySet(models.QuerySet):
+    def equipment(self):
+        """Solo equipos: sin los activos que representan una ubicacion."""
+        return self.filter(represents_node__isnull=True)
+
+    def locations(self):
+        return self.filter(represents_node__isnull=False)
+
+
 class Asset(models.Model):
     """
     Equipo específico con ficha técnica. Hoja del árbol.
     Fracttal: nodo tipo Equipo en nivel 3 del árbol de activos.
+
+    Tambien puede representar una ubicacion entera (`represents_node`): asi se
+    le asigna un protocolo a "Bloque A / Piso 3" para las entregas de obra de
+    instalaciones (revision del 2026-10-23). Como en Fracttal, donde la
+    ubicacion es un nodo mas del arbol de activos, todo lo demas (tareas, OT,
+    checklist, acta, app sin red) funciona igual que con un equipo. Estos
+    activos no salen en la lista de equipos ni en sus conteos.
     """
+
+    LOCATION_TYPE = "Ubicación"
 
     class Priority(models.TextChoices):
         HIGH = "HIGH", "Alta"
@@ -188,8 +208,21 @@ class Asset(models.Model):
     photo_url = models.CharField(max_length=500, blank=True, default="")
     installation_date = models.DateField(null=True, blank=True)
     warranty_expiry = models.DateField(null=True, blank=True)
+    represents_node = models.OneToOneField(
+        AssetNode, on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="location_asset",
+        help_text="Si esta lleno, este activo es la ubicacion misma (para "
+                  "asignarle protocolos), no un equipo.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = AssetQuerySet.as_manager()
+
+    @property
+    def is_location(self):
+        return self.represents_node_id is not None
 
     class Meta:
         db_table = "assets_asset"

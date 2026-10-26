@@ -124,15 +124,38 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
     # a revision las exige, y sin red no puede preguntarlo.
     photos_count = serializers.SerializerMethodField()
     signatures_count = serializers.SerializerMethodField()
+    location_detail = serializers.SerializerMethodField()
+    intervention_corrected_by_name = serializers.SerializerMethodField()
+
+    # La correccion de la fecha de intervencion es dato interno: la cuenta de
+    # hospital ve el acta, no quien la corrigio.
+    _INTERNOS = (
+        "intervention_start_override", "intervention_end_override",
+        "intervention_corrected_by_name", "intervention_corrected_at",
+    )
+
+    def to_representation(self, instance):
+        datos = super().to_representation(instance)
+        request = self.context.get("request")
+        if request is not None and request.user.role == User.Role.CLI:
+            for campo in self._INTERNOS:
+                datos.pop(campo, None)
+        return datos
+
+    def get_intervention_corrected_by_name(self, obj):
+        u = obj.intervention_corrected_by
+        return f"{u.first_name} {u.last_name}".strip() or u.email if u else None
 
     class Meta:
         model = WorkOrder
         fields = WorkOrderListSerializer.Meta.fields + [
-            "photos_count", "signatures_count",
+            "photos_count", "signatures_count", "location_detail",
             "description", "classification_1", "classification_2",
             "progress", "progress_measure", "request_number",
             "started_at", "completed_at", "estimated_duration",
-            "actual_duration", "downtime", "total_cost", "rating", "notes",
+            "actual_duration", "downtime", "rating", "notes",
+            "intervention_start_override", "intervention_end_override",
+            "intervention_corrected_by_name", "intervention_corrected_at",
             "created_by", "report_status", "status_history",
             "tasks",
             "synced_at", "offline_uuid",
@@ -175,7 +198,21 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
         u = obj.created_by
         return {"id": str(u.id), "full_name": f"{u.first_name} {u.last_name}".strip()}
 
+    def _resolvedor(self, obj):
+        """Un resolvedor por hospital y por serializacion: el arbol se lee una vez."""
+        from apps.assets.ubicacion import ResolvedorUbicaciones
+
+        cache = self.__dict__.setdefault("_resolvedores", {})
+        if obj.hospital_id not in cache:
+            cache[obj.hospital_id] = ResolvedorUbicaciones(obj.hospital)
+        return cache[obj.hospital_id]
+
+    def get_location_detail(self, obj):
+        """La ubicacion de la visita con su direccion y su punto efectivos."""
+        return self._resolvedor(obj).resolver(obj.location_id)
+
     def get_tasks(self, obj):
+        resolvedor = self._resolvedor(obj)
         return [
             {
                 "id": str(t.id),
@@ -186,7 +223,9 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
                     "id": str(t.asset_id),
                     "code": t.asset.code,
                     "name": t.asset.name,
+                    "is_location": t.asset.represents_node_id is not None,
                     "location": t.asset.node.path if t.asset.node_id else None,
+                    "sublocation": resolvedor.resolver(t.asset.node_id),
                 },
                 "plan": (
                     {"id": str(t.plan_task.plan_id), "name": t.plan_task.plan.name}
@@ -487,4 +526,4 @@ class TaskChecklistSerializer(serializers.Serializer):
 class WorkOrderTechnicianUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkOrder
-        fields = ["description", "notes", "progress", "actual_duration", "total_cost", "rating"]
+        fields = ["description", "notes", "progress", "actual_duration", "rating"]

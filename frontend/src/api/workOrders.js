@@ -143,6 +143,16 @@ export function useAssignWorkOrder(id) {
   })
 }
 
+/** Admin o supervisor fijan inicio y fin de la intervención en revisión. null/null la quita. */
+export function useCorrectIntervention(id) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ start, end }) =>
+      client.post(`/api/work-orders/${id}/correct-intervention/`, { start, end }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['work-orders', id] }),
+  })
+}
+
 export function useCancelWorkOrder(id) {
   const qc = useQueryClient()
   return useMutation({

@@ -21,6 +21,7 @@ import PhotoCapture from '../evidence/PhotoCapture'
 import Icon from '../ui/Icon'
 import Modal from '../ui/Modal'
 import { laEjecuto } from '../../utils/ejecutores'
+import { puede } from '../../utils/permisos'
 
 const EDITABLE = ['PENDING', 'IN_PROGRESS']
 const DECIDIBLE = ['IN_REVIEW', 'COMPLETED']
@@ -44,7 +45,7 @@ export default function FindingsPanel({ wo, readOnly = false }) {
   const esInterno = ['ADMIN', 'SUP'].includes(user?.role)
   const esSuTecnico = laEjecuto(user, wo)
   const puedeReportar = !readOnly && EDITABLE.includes(wo.status) && (esSuTecnico || esInterno)
-  const puedeDecidir = !readOnly && esInterno && DECIDIBLE.includes(wo.status)
+  const puedeDecidir = !readOnly && puede(user, 'hallazgos.decidir') && DECIDIBLE.includes(wo.status)
   const activos = (wo.tasks ?? []).filter((t) => t.status !== 'CANCELLED').map((t) => t.asset)
 
   if (isLoading) return <p className="text-sm text-gray-500">Cargando hallazgos…</p>

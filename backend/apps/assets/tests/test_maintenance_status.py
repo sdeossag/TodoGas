@@ -45,9 +45,10 @@ def test_maintenance_status_no_plan(asset, admin_user):
 
 
 def test_maintenance_status_on_time(asset, admin_user):
+    # Mas alla de 30 dias (la frontera de "por vencer" que comparte con el tablero).
     p = make_plan(
         f"Plan {uuid.uuid4()}",
-        next_due_date=date.today() + timedelta(days=30),
+        next_due_date=date.today() + timedelta(days=31),
         assets=[asset],
     )
     client = auth_client(admin_user)

@@ -225,7 +225,40 @@ test('desde una v4 con trabajo pendiente se llega a la v5 y se puede repetir', a
   await d.execute('PRAGMA user_version = 4')
 
   assert.equal(await migrate(d), LATEST_VERSION)
-  assert.equal(LATEST_VERSION, 5)
+  assert.ok(LATEST_VERSION >= 5)
   assert.ok((await columnas(d, 'sync_state')).includes('next_retry_at'))
   assert.deepEqual(await pendientes(d), { campos: 1, fotos: 1, firmas: 1, estados: 1 })
+})
+
+test('la v6 agrega la etiqueta de la foto sin tocar las que esperan subir', async () => {
+  const { d } = await baseV1ConPendientes()
+  await d.execute('PRAGMA user_version = 5')
+  const antes = await pendientes(d)
+
+  assert.equal(await migrate(d), LATEST_VERSION)
+  assert.equal(LATEST_VERSION, 6)
+  assert.ok((await columnas(d, 'offline_photos')).includes('stage'))
+  assert.deepEqual(await pendientes(d), antes)
+
+  // La foto que ya estaba en cola queda sin etiqueta y sigue pendiente.
+  const [vieja] = await d.query("SELECT stage, synced FROM offline_photos WHERE id = 'ph-1'")
+  assert.equal(vieja.synced, 0)
+  assert.ok(!vieja.stage, 'sin etiqueta')
+
+  // Una foto nueva guarda su etiqueta.
+  await d.run(
+    `INSERT INTO offline_photos (id, work_order_id, file_path, synced, offline_uuid, stage)
+     VALUES ('ph-9', 'wo-1', 'data:image/jpeg;base64,DDDD', 0, 'ph-9', 'BEFORE')`
+  )
+  const [nueva] = await d.query("SELECT stage FROM offline_photos WHERE id = 'ph-9'")
+  assert.equal(nueva.stage, 'BEFORE')
+})
+
+test('la v6 se puede repetir sobre una base que ya la tiene', async () => {
+  const { d } = await baseV1ConPendientes()
+  await migrate(d)
+  await d.execute('PRAGMA user_version = 5')
+  assert.equal(await migrate(d), LATEST_VERSION)
+  const cols = (await columnas(d, 'offline_photos')).filter((c) => c === 'stage')
+  assert.equal(cols.length, 1)
 })

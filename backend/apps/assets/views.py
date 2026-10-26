@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from apps.users import scope
 from apps.users.models import User
-from apps.users.permissions import IsAdmin, IsAdminOrSup, IsAdminOrSupOrClient, IsClient
+from apps.users.permissions import IsAdmin, IsClient, IsGestor, IsGestorOrClient, TienePermiso
 
 from .models import Asset, AssetCustomField, AssetNode, Hospital
 from .serializers import (
@@ -31,7 +31,7 @@ class HospitalViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "toggle_active"):
             return [IsAdmin()]
-        return [IsAdminOrSup()]
+        return [IsGestor()]
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -61,9 +61,10 @@ class HospitalViewSet(viewsets.ModelViewSet):
 
 
 def _conteo_por_nodo(modelo, campo):
-    """Cuantas filas de `modelo` apuntan al nodo por `campo`, como subconsulta."""
+    """Cuantas filas de `modelo` (o queryset) apuntan al nodo por `campo`, como subconsulta."""
+    base = modelo if hasattr(modelo, "query") else modelo.objects.all()
     filas = (
-        modelo.objects.filter(**{campo: OuterRef("pk")})
+        base.filter(**{campo: OuterRef("pk")})
         .order_by()
         .values(campo)
         .annotate(n=Count("pk"))
@@ -77,7 +78,9 @@ class AssetNodeViewSet(viewsets.ModelViewSet):
     serializer_class = AssetNodeSerializer
 
     def get_permissions(self):
-        return [IsAdminOrSup()]
+        if self.action in ("list", "retrieve", "tree"):
+            return [IsGestor()]
+        return [TienePermiso("activos.gestionar")()]
 
     def get_serializer_class(self):
         # Escribir con AssetNodeSerializer era imposible: sus campos `hospital`
@@ -108,6 +111,12 @@ class AssetNodeViewSet(viewsets.ModelViewSet):
                            "sububicaciones. Elimínalas o muévelas primero."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if hasattr(nodo, "location_asset"):
+            return Response(
+                {"detail": "No se puede eliminar: la ubicación tiene protocolo "
+                           "o historial de mantenimiento. Desactívala en su lugar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if nodo.assets.exists():
             return Response(
                 {"detail": "No se puede eliminar: hay activos en esta ubicación. "
@@ -122,7 +131,7 @@ class AssetNodeViewSet(viewsets.ModelViewSet):
         # Antes children_count lanzaba ademas una consulta por cada nodo.
         qs = AssetNode.objects.select_related("hospital", "parent").annotate(
             children_total=_conteo_por_nodo(AssetNode, "parent"),
-            asset_total=_conteo_por_nodo(Asset, "node"),
+            asset_total=_conteo_por_nodo(Asset.objects.equipment(), "node"),
         )
         qs = scope.asset_nodes(qs, self.request.user)
         hospital_id = self.request.query_params.get("hospital_id")
@@ -192,10 +201,11 @@ class AssetViewSet(viewsets.ModelViewSet):
         if self.action == "tasks":
             # El historial del equipo tambien lo ve la cuenta de hospital
             # (dentro de su alcance, por get_queryset).
-            return [IsAdminOrSupOrClient()]
-        if self.action == "decommission":
-            return [IsAdmin()]
-        return [IsAdminOrSup()]
+            return [IsGestorOrClient()]
+        # Dar de baja y cambiar el protocolo van con el resto de la edicion: el
+        # servidor ya le dejaba al supervisor hacerlo por el formulario, y un
+        # permiso que se saltara con un PATCH no protege nada.
+        return [TienePermiso("activos.gestionar")()]
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -244,6 +254,17 @@ class AssetViewSet(viewsets.ModelViewSet):
         # Hospital o parte del arbol del usuario (apps.users.scope).
         qs = scope.assets(qs, user)
 
+        # Los activos que representan una ubicacion no son equipos: no salen
+        # en la lista salvo que se pidan. Con plan_id salen todos, porque el
+        # protocolo puede estar asignado a ubicaciones.
+        kind = self.request.query_params.get("kind")
+        if kind is None and self.action == "list" and not self.request.query_params.get("plan_id"):
+            kind = "equipment"
+        if kind == "equipment":
+            qs = qs.equipment()
+        elif kind == "location":
+            qs = qs.locations()
+
         hospital_id = self.request.query_params.get("hospital_id")
         if hospital_id:
             qs = qs.filter(hospital_id=hospital_id)
@@ -272,21 +293,24 @@ class AssetViewSet(viewsets.ModelViewSet):
             qs = qs.filter(plan_id=plan_id)
 
         # RF-AC-07: filtro por estado de mantenimiento (el "color" del activo).
-        # Mismas fronteras que AssetListSerializer.get_maintenance_status para
-        # que el filtro y lo que se pinta no puedan divergir: ambos derivan de
-        # `_next_due`.
+        # Mismas fronteras que AssetListSerializer.get_maintenance_status y que
+        # el tablero (30 dias, sin protocolo = sin plan activo): la tarjeta del
+        # tablero y la lista a la que lleva el clic deben cuadrar.
         maintenance_status = self.request.query_params.get("maintenance_status")
         if maintenance_status:
             today = timezone.localdate()
-            soon = today + timedelta(days=15)
+            soon = today + timedelta(days=30)
+            sin_plan = Q(plan__isnull=True) | Q(plan__is_active=False)
             if maintenance_status == "no_plan":
-                qs = qs.filter(_next_due__isnull=True)
-            elif maintenance_status == "overdue":
-                qs = qs.filter(_next_due__lt=today)
-            elif maintenance_status == "due_soon":
-                qs = qs.filter(_next_due__gte=today, _next_due__lte=soon)
-            elif maintenance_status == "on_time":
-                qs = qs.filter(_next_due__gt=soon)
+                qs = qs.filter(sin_plan)
+            else:
+                qs = qs.exclude(sin_plan)
+                if maintenance_status == "overdue":
+                    qs = qs.filter(_next_due__lt=today)
+                elif maintenance_status == "due_soon":
+                    qs = qs.filter(_next_due__gte=today, _next_due__lte=soon)
+                elif maintenance_status == "on_time":
+                    qs = qs.filter(Q(_next_due__gt=soon) | Q(_next_due__isnull=True))
 
         search = self.request.query_params.get("search")
         if search:
@@ -354,14 +378,21 @@ class AssetViewSet(viewsets.ModelViewSet):
             "history": TaskSerializer(historial, many=True, context=contexto).data,
         })
 
-    @action(detail=True, methods=["get"], url_path="qr-label", permission_classes=[IsAdminOrSup])
+    @action(detail=True, methods=["get"], url_path="qr-label", permission_classes=[TienePermiso("activos.gestionar")])
     def qr_label(self, request, pk=None):
         asset = self.get_object()
         png_bytes = generate_asset_qr(asset)
         from django.http import HttpResponse
         return HttpResponse(png_bytes, content_type="image/png")
 
-    @action(detail=True, methods=["post"], url_path="decommission", permission_classes=[IsAdmin])
+    @action(detail=True, methods=["get"], url_path="decommission-preview", permission_classes=[TienePermiso("activos.gestionar")])
+    def decommission_preview(self, request, pk=None):
+        """Que pasaria al dar de baja el equipo. No cambia nada."""
+        from apps.maintenance.services import decommission_preview
+
+        return Response(decommission_preview(self.get_object()))
+
+    @action(detail=True, methods=["post"], url_path="decommission", permission_classes=[TienePermiso("activos.gestionar")])
     def decommission(self, request, pk=None):
         """
         Da de baja el equipo: sus pendientes se anulan con nota y se avisa de
@@ -409,7 +440,7 @@ class ClientPortalView(APIView):
             )
 
         # Todo por apps.users.scope: la cuenta puede estar limitada a un piso.
-        assets = scope.assets(Asset.objects.all(), user)
+        assets = scope.assets(Asset.objects.equipment(), user)
         total_assets = assets.count()
 
         status_counts = {}

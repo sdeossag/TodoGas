@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { FIELD_TYPES, getFieldType } from '../../constants/checklistFields'
+import { FIELD_TYPES, NEW_FIELD_TYPES, getFieldType } from '../../constants/checklistFields'
 import Icon from '../ui/Icon'
 import { useMeterUnits } from '../../api/meters'
 
@@ -137,7 +137,7 @@ export default function FormBuilder({
             Tipos de campo
           </p>
           <div className="space-y-0.5">
-            {FIELD_TYPES.map((ft) => (
+            {NEW_FIELD_TYPES.map((ft) => (
               <button
                 key={ft.value}
                 onClick={() => addField(ft)}

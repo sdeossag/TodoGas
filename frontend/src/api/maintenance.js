@@ -83,6 +83,16 @@ export function useAssignPlanAssets(planId) {
   })
 }
 
+/** Asigna el plan a ubicaciones enteras (entregas de obra de instalaciones). */
+export function useAssignPlanLocations(planId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (nodeIds) =>
+      client.post(`${BASE}/${planId}/assign-locations/`, { node_ids: nodeIds }).then((r) => r.data),
+    onSuccess: () => invalidatePlanning(qc),
+  })
+}
+
 export function useRemovePlanAssets(planId) {
   const qc = useQueryClient()
   return useMutation({

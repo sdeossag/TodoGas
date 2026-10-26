@@ -23,7 +23,7 @@ export function useUpdatePhoto(workOrderId) {
 export function useUploadPhoto() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ work_order, task, finding, file, latitude, longitude, taken_at, caption }) => {
+    mutationFn: ({ work_order, task, finding, file, latitude, longitude, taken_at, caption, stage }) => {
       const form = new FormData()
       form.append('work_order', work_order)
       // De que activo es la foto; sin tarea va como foto de la visita.
@@ -35,6 +35,7 @@ export function useUploadPhoto() {
       if (longitude != null) form.append('longitude', longitude)
       form.append('taken_at', taken_at)
       if (caption) form.append('caption', caption)
+      if (stage) form.append('stage', stage)
       return client
         .post('/api/evidence/photos/', form, { headers: { 'Content-Type': undefined } })
         .then((r) => r.data)

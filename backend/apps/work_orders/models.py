@@ -96,7 +96,18 @@ class WorkOrder(models.Model):
     estimated_duration = models.DurationField(null=True, blank=True)
     actual_duration = models.DurationField(null=True, blank=True)
     downtime = models.DurationField(null=True, blank=True)
+    # Ya no se muestra ni se escribe (el cliente no quiere costo en la OT,
+    # 2026-10). La columna se queda: hay datos y no se borra.
     total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Correccion de la fecha de intervencion en revision. No pisa lo calculado
+    # (apps.reports.generator._trabajo_en_campo): el acta usa esta si existe.
+    intervention_start_override = models.DateTimeField(null=True, blank=True)
+    intervention_end_override = models.DateTimeField(null=True, blank=True)
+    intervention_corrected_by = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="+",
+    )
+    intervention_corrected_at = models.DateTimeField(null=True, blank=True)
     rating = models.IntegerField(
         null=True, blank=True,
         validators=[MinValueValidator(1), MaxValueValidator(5)]

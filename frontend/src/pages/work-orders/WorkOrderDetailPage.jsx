@@ -28,6 +28,7 @@ import {
 import { booleanLabel, booleanOptions, getFieldType } from '../../constants/checklistFields'
 import StatusBadge from '../../components/workOrders/StatusBadge'
 import PriorityBadge from '../../components/workOrders/PriorityBadge'
+import CorreccionIntervencion from '../../components/workOrders/CorreccionIntervencion'
 import TransitionButton from '../../components/workOrders/TransitionButton'
 import SignatureList from '../../components/evidence/SignatureList'
 import SignaturePad from '../../components/evidence/SignaturePad'
@@ -67,7 +68,11 @@ import CompletedChecklistView, {
   groupFields,
 } from '../../components/checklists/CompletedChecklist'
 import GoogleMap, { parseLatLng, UbicacionGps } from '../../components/maps/GoogleMap'
+import { UbicacionReferencia } from '../../components/maps/ubicacionReferencia'
+import UbicacionDelEquipo from '../../components/workOrders/UbicacionDelEquipo'
 import { ejecutores, etiquetaEjecutor, laEjecuto } from '../../utils/ejecutores'
+import { editaOrden, puede, veOrdenes } from '../../utils/permisos'
+import UbicacionBadge from '../../components/UbicacionBadge'
 
 // Margen sobre la ventana de sondeo de useWorkOrderReports (24 intentos x 5s).
 const REPORT_POLL_TIMEOUT_MS = REPORT_POLL_ATTEMPTS * 5000
@@ -114,7 +119,11 @@ export default function WorkOrderDetailPage() {
   const { user } = useAuthStore()
   const role = user?.role
   const isAdmin = role === 'ADMIN'
-  const isAdminOrSup = ['ADMIN', 'SUP'].includes(role)
+  // Cada boton sigue a su permiso (rol + los que sumo el administrador).
+  const puedeEditar = editaOrden(user)
+  const puedeAsignar = puede(user, 'ot.asignar')
+  const puedeRevisar = puede(user, 'ot.revisar')
+  const veHistorial = veOrdenes(user)
 
   const [tab, setTab] = useState(role === 'TEC' ? 1 : 0)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -123,7 +132,7 @@ export default function WorkOrderDetailPage() {
   const { data: wo, isLoading, isError, error, refetch } = useWorkOrder(id)
   const asignarMut = useUpdateWorkOrder(id)
   // En revision el admin o supervisor corrige fotos y respuestas antes de aprobar.
-  const corrigeEnRevision = isAdminOrSup && wo?.status === 'IN_REVIEW'
+  const corrigeEnRevision = puedeRevisar && wo?.status === 'IN_REVIEW'
   const [asignarError, setAsignarError] = useState('')
 
   /** El admin o supervisor la toma para ejecutarla él mismo (2026-10-01). */
@@ -139,7 +148,9 @@ export default function WorkOrderDetailPage() {
   }
 
   // Determine back route by role
-  const backPath = role === 'TEC' ? '/mis-ordenes' : '/ordenes'
+  // Un tecnico con permisos de gestion que abrio la orden desde la lista general vuelve a ella.
+  const deMisOrdenes = role === 'TEC' && !(veOrdenes(user) && window.location.pathname.startsWith('/ordenes'))
+  const backPath = deMisOrdenes ? '/mis-ordenes' : '/ordenes'
 
   if (isLoading) return <div className="flex justify-center py-20"><Spinner /></div>
   if (isError || !wo) {
@@ -159,7 +170,7 @@ export default function WorkOrderDetailPage() {
       {/* Breadcrumb */}
       <nav className="text-sm text-gray-500 flex gap-1">
         <button onClick={() => navigate(backPath)} className="hover:text-brand">
-          {role === 'TEC' ? 'Mis órdenes' : 'Órdenes de trabajo'}
+          {deMisOrdenes ? 'Mis órdenes' : 'Órdenes de trabajo'}
         </button>
         <span>/</span>
         <span className="text-gray-600">{formatWoCode(wo)}</span>
@@ -180,7 +191,7 @@ export default function WorkOrderDetailPage() {
             <h1 className="text-xl font-bold text-gray-800">{wo.title}</h1>
           </div>
           <div className="flex gap-2 flex-wrap">
-            {isAdminOrSup && (
+            {puedeEditar && (
               <button
                 onClick={() => setShowEditModal(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
@@ -220,6 +231,10 @@ export default function WorkOrderDetailPage() {
               </dl>
             </>
           )}
+          {wo.location_detail && (
+            <UbicacionDelEquipo sub={wo.location_detail} hospitalName={wo.hospital?.name}
+              titulo="Ubicación de la visita" abierto={false} />
+          )}
         </div>
 
         {/* Asignación */}
@@ -230,7 +245,7 @@ export default function WorkOrderDetailPage() {
               <dt className="text-xs font-medium text-gray-500 mb-0.5">Asignado a</dt>
               <dd className="text-sm text-gray-800 flex items-center gap-2 flex-wrap">
                 {wo.assigned_to?.full_name ?? '—'}
-                {isAdmin && (
+                {puedeAsignar && (
                   <button
                     onClick={() => setShowAssignModal(true)}
                     className="text-xs text-brand hover:underline"
@@ -238,7 +253,7 @@ export default function WorkOrderDetailPage() {
                     Reasignar
                   </button>
                 )}
-                {isAdminOrSup && ['PENDING', 'IN_PROGRESS'].includes(wo.status) && wo.assigned_to?.id !== user?.id && (
+                {puedeAsignar && ['PENDING', 'IN_PROGRESS'].includes(wo.status) && wo.assigned_to?.id !== user?.id && (
                   <button
                     onClick={asignarmela}
                     disabled={asignarMut.isPending}
@@ -264,10 +279,13 @@ export default function WorkOrderDetailPage() {
             <InfoRow label="Cierre" value={wo.completed_at ? new Date(wo.completed_at).toLocaleString('es-CO') : null} />
             <InfoRow label="Dur. estimada" value={formatDuration(wo.estimated_duration)} />
             <InfoRow label="Dur. real" value={formatDuration(wo.actual_duration)} />
+            {puedeRevisar && wo.status !== 'PENDING' && (
+              <CorreccionIntervencion wo={wo} puedeCorregir={corrigeEnRevision} />
+            )}
           </dl>
         </div>
 
-        {/* Progreso y costos */}
+        {/* Progreso */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-card p-5 space-y-4">
           <h2 className="font-semibold text-gray-800 text-sm">Progreso</h2>
           <div>
@@ -283,7 +301,6 @@ export default function WorkOrderDetailPage() {
             </div>
           </div>
           <dl className="grid grid-cols-2 gap-4 pt-2">
-            <InfoRow label="Costo total" value={wo.total_cost ? `$${parseFloat(wo.total_cost).toLocaleString('es-CO')}` : null} />
             <InfoRow
               label="Calificación"
               value={
@@ -344,7 +361,7 @@ export default function WorkOrderDetailPage() {
         </div>
 
         <div className="p-6">
-          {tab === 0 && <HistoryTab id={id} isAdminOrSup={isAdminOrSup} />}
+          {tab === 0 && <HistoryTab id={id} isAdminOrSup={veHistorial} />}
           {tab === 1 && <TasksTab wo={wo} user={user} refetch={refetch} />}
           {tab === 3 && <RepuestosTab wo={wo} user={user} />}
           {tab === 5 && <FindingsPanel wo={wo} />}
@@ -370,7 +387,29 @@ export default function WorkOrderDetailPage() {
                   <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                     Agregar firma
                   </h3>
-                  <SignaturePad workOrderId={id} disabled={wo.status !== 'IN_PROGRESS'} />
+                  {/* Dos firmas: el acta imprime "Realizado por" (técnico) y
+                      "Aceptado por" (quien recibe en el hospital). Sin la
+                      segunda, el acta decía "No registrada". */}
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-2">Firma del técnico</p>
+                      <SignaturePad
+                        workOrderId={id}
+                        signatureType="TECHNICIAN"
+                        disabled={wo.status !== 'IN_PROGRESS'}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-2">
+                        Firma de quien recibe en el hospital
+                      </p>
+                      <SignaturePad
+                        workOrderId={id}
+                        signatureType="CLIENT"
+                        disabled={wo.status !== 'IN_PROGRESS'}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
               <div>
@@ -736,8 +775,8 @@ function TasksTab({ wo, user, refetch }) {
   const isInProgress = wo.status === 'IN_PROGRESS'
   const canEdit = isTecAssigned && isInProgress
   // En revision, el admin o supervisor corrige antes de aprobar (2026-10-01).
-  const canCorrect = ['ADMIN', 'SUP'].includes(user?.role) && wo.status === 'IN_REVIEW'
-  const puedeAjustar = ['ADMIN', 'SUP'].includes(user?.role) && wo.status === 'PENDING'
+  const canCorrect = puede(user, 'ot.revisar') && wo.status === 'IN_REVIEW'
+  const puedeAjustar = puede(user, 'tareas.planificar') && wo.status === 'PENDING'
   const varias = visibles.length > 1
 
   /**
@@ -857,6 +896,7 @@ function TaskRow({ task, abierta, onToggle, onRemove = null }) {
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-800 truncate">
               <span className="font-mono text-xs text-gray-500">{task.asset.code}</span> {task.asset.name}
+              <UbicacionBadge asset={task.asset} />
             </p>
             <p className="text-xs text-gray-500 truncate">
               {task.title}{task.plan && ` · ${task.plan.name}`}
@@ -895,7 +935,28 @@ function TaskRow({ task, abierta, onToggle, onRemove = null }) {
   )
 }
 
-function TaskChecklist({ wo, task, canEdit, canCorrect, onChange, onComplete }) {
+/**
+ * El checklist de la tarea precedido de dónde está el equipo. El punto de su
+ * sububicación queda disponible para los campos GPS, que dicen a qué distancia
+ * se tomó la ubicación del técnico.
+ */
+function TaskChecklist(props) {
+  const { wo, task } = props
+  const sub = task.asset?.sublocation
+  const punto = sub && sub.latitude != null && sub.longitude != null
+    ? { lat: sub.latitude, lng: sub.longitude } : null
+  return (
+    <UbicacionReferencia.Provider value={punto}>
+      <div className="space-y-4">
+        <UbicacionDelEquipo sub={sub} hospitalName={wo.hospital?.name}
+          abierto={(wo.tasks?.length ?? 0) <= 1} />
+        <TaskChecklistBody {...props} />
+      </div>
+    </UbicacionReferencia.Provider>
+  )
+}
+
+function TaskChecklistBody({ wo, task, canEdit, canCorrect, onChange, onComplete }) {
   if (!task.checklist_version) {
     return <p className="text-gray-500 text-sm text-center py-6">Esta tarea no tiene checklist asociado.</p>
   }

@@ -16,7 +16,7 @@ def send_welcome_email(user, temp_password: str) -> None:
     send_mail(
         subject=subject,
         message=body,
-        from_email=settings.DEFAULT_FROM_EMAIL if hasattr(settings, "DEFAULT_FROM_EMAIL") else "noreply@todogas.com",
+        from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[user.email],
         fail_silently=False,
     )
@@ -36,7 +36,7 @@ def send_password_reset_email(user, new_password: str) -> None:
     send_mail(
         subject=subject,
         message=body,
-        from_email=settings.DEFAULT_FROM_EMAIL if hasattr(settings, "DEFAULT_FROM_EMAIL") else "noreply@todogas.com",
+        from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[user.email],
         fail_silently=False,
     )

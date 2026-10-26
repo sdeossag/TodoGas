@@ -18,9 +18,16 @@ import { useHospitals } from '../../api/assets'
 import { useContractsSummary } from '../../api/contracts'
 import { EstadoDocumento } from '../../components/contracts/ContractStatus'
 import KpiCard from '../../components/dashboard/KpiCard'
+import AssetStatusPanel from '../../components/dashboard/AssetStatusPanel'
+import AttentionRow from '../../components/dashboard/AttentionRow'
+import OpenFindingsPanel from '../../components/dashboard/OpenFindingsPanel'
+import OtsByKindPanel from '../../components/dashboard/OtsByKindPanel'
+import Panel from '../../components/dashboard/Panel'
+import PlanningPanel from '../../components/dashboard/PlanningPanel'
 import Table from '../../components/ui/Table'
 import EmptyState from '../../components/ui/EmptyState'
 import { CHART, STATUS_COLORS, complianceColor } from '../../constants/palette'
+import { assetsLink } from '../../utils/dashboardView'
 
 const STATUS_LABELS = {
   PENDING: 'Pendiente',
@@ -41,13 +48,6 @@ const PERIODS = [
   { value: 90, label: '90 dias' },
 ]
 
-const ASSET_STATUS_CARDS = [
-  { key: 'on_time', label: 'Al dia', filter: 'on_time', color: 'text-green-700', dot: 'bg-green-600' },
-  { key: 'due_soon', label: 'Proximo vencimiento', filter: 'due_soon', color: 'text-amber-700', dot: 'bg-amber-500' },
-  { key: 'overdue', label: 'Vencido', filter: 'overdue', color: 'text-red-700', dot: 'bg-red-500' },
-  { key: 'no_plan', label: 'Sin protocolo', filter: 'no_plan', color: 'text-gray-700', dot: 'bg-gray-400' },
-]
-
 function CardSkeleton() {
   return (
     <div className="card p-5">
@@ -64,18 +64,6 @@ function ChartSkeleton({ title }) {
       <div className="h-4 w-40 bg-gray-100 rounded-full animate-pulse" />
       <div className="mt-5 h-64 bg-gray-50 rounded-lg animate-pulse" aria-label={title} />
     </div>
-  )
-}
-
-function Panel({ title, action, children }) {
-  return (
-    <section className="panel">
-      <header className="panel-header">
-        <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
-        {action}
-      </header>
-      {children}
-    </section>
   )
 }
 
@@ -139,17 +127,24 @@ export default function DashboardPage() {
   const { data: history = [], isLoading: historyLoading } = useComplianceHistory(historyParams)
   const { data: assetsStatus, isLoading: assetsLoading } = useAssetsStatus(assetsParams)
 
+  const { data: contractsSummary } = useContractsSummary()
   const hospitalList = Array.isArray(hospitals) ? hospitals : hospitals?.results ?? []
-
-  function goToAssets(maintenanceStatus) {
-    const qs = new URLSearchParams({ maintenance_status: maintenanceStatus })
-    if (hospitalId) qs.set('hospital_id', hospitalId)
-    return `/activos?${qs.toString()}`
-  }
 
   function handleRefresh() {
     queryClient.invalidateQueries({ queryKey: ['dashboard'] })
   }
+
+  const assetLinks = {
+    overdue: assetsLink('overdue', hospitalId),
+    due_soon: assetsLink('due_soon', hospitalId),
+    on_time: assetsLink('on_time', hospitalId),
+    no_plan: assetsLink('no_plan', hospitalId),
+  }
+  const deEste = (id) => !hospitalId || id === hospitalId
+  const contractsToAttend =
+    (contractsSummary?.expiring ?? []).filter((c) => deEste(c.hospital_id)).length +
+    (contractsSummary?.hospitals_without_contract ?? []).filter((h) => deEste(h.id)).length
+  const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD en hora local
 
   // ── Datos derivados ──────────────────────────────────────────────────────
   const compliance = data?.compliance
@@ -275,6 +270,32 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
+
+      {/* Lo que pide acción, primero */}
+      <AttentionRow
+        assetsOverdueLink={assetLinks.overdue}
+        assetsOverdue={assetsStatus?.overdue}
+        findings={data?.open_findings}
+        overdue={overdue}
+        contracts={contractsToAttend}
+      />
+
+      {/* Estado de los activos y planificación */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <AssetStatusPanel status={assetsStatus} loading={assetsLoading} links={assetLinks} />
+        <PlanningPanel
+          data={data?.pending_by_month}
+          loading={isLoading}
+          hospitalId={hospitalId}
+          today={today}
+        />
+      </div>
+
+      {/* Hallazgos y tipo de trabajo */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <OpenFindingsPanel data={data?.open_findings} loading={isLoading} hospitalId={hospitalId} />
+        <OtsByKindPanel data={data?.ots_by_kind} loading={isLoading} days={days} />
+      </div>
 
       {/* Fila 1 — KPIs principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger">
@@ -478,32 +499,6 @@ export default function DashboardPage() {
       </div>
 
       <ContratosPorVencer hospitalId={hospitalId} />
-
-      {/* Fila 4 — Estado de activos */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-800 mb-3">Estado de activos</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {ASSET_STATUS_CARDS.map((card) => (
-            <Link
-              key={card.key}
-              to={goToAssets(card.filter)}
-              className="card-interactive block p-4"
-            >
-              <div className="flex items-center gap-2">
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${card.dot}`} aria-hidden="true" />
-                <span className="label-meta truncate">{card.label}</span>
-              </div>
-              {assetsLoading ? (
-                <div className="mt-2.5 h-7 w-12 bg-gray-100 rounded-lg animate-pulse" />
-              ) : (
-                <p className={`mt-2.5 text-[1.625rem] leading-none stat-value ${card.color}`}>
-                  {assetsStatus?.[card.key] ?? 0}
-                </p>
-              )}
-            </Link>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }

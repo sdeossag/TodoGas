@@ -1,3 +1,4 @@
+import StageToggle, { StageBadge } from './StageToggle'
 import { useState } from 'react'
 import { useUpdatePhoto, useWorkOrderPhotos } from '../../api/evidence'
 import { mediaUrl } from '../../api/client'
@@ -62,6 +63,7 @@ export default function PhotoGallery({ workOrderId, editable = false }) {
           ) : photo.caption && (
             <p className="text-xs text-gray-600">{photo.caption}</p>
           )}
+          {!editable && photo.stage && <StageBadge stage={photo.stage} />}
           <p className="text-xs text-gray-500">{formatDateCO(photo.taken_at)}</p>
           {photo.latitude != null && photo.longitude != null ? (
             <a
@@ -97,6 +99,14 @@ function CorregirFoto({ workOrderId, photo }) {
 
   return (
     <div className="space-y-1">
+      {!photo.finding && (
+        <StageToggle
+          value={photo.stage ?? ''}
+          onChange={(stage) => guardar({ stage })}
+          disabled={updateMut.isPending}
+          compact
+        />
+      )}
       <input
         value={caption}
         onChange={(e) => setCaption(e.target.value)}

@@ -18,7 +18,8 @@ from rest_framework.response import Response
 
 from apps.users import scope
 from apps.users.models import User
-from apps.users.permissions import IsAdminOrSup
+from apps.users import permisos
+from apps.users.permissions import TienePermiso
 
 from . import findings as servicio
 from .device_time import device_time
@@ -121,13 +122,13 @@ class FindingViewSet(
             "asset__node", "work_order__hospital", "reported_by", "decided_by",
             "corrective_task__work_order",
         ).annotate(n_fotos=Count("photos"))
-        if user.role == User.Role.TEC:
+        if user.role == User.Role.TEC and not permisos.ve_ots_en_alcance(user):
             qs = qs.filter(work_order__assigned_to=user)
         elif user.role == User.Role.CLI:
             # Como sus OTs: lo de visitas finalizadas, dentro de su alcance.
             qs = scope.work_orders(qs.filter(work_order__status=WorkOrder.Status.COMPLETED),
                                    user, prefix="work_order__")
-        elif user.role in (User.Role.ADMIN, User.Role.SUP):
+        elif permisos.ve_ots_en_alcance(user):
             qs = scope.work_orders(qs, user, prefix="work_order__")
         else:
             return qs.none()
@@ -226,7 +227,7 @@ class FindingViewSet(
 
     # ── Bandeja del planificador ─────────────────────────────────────────────
 
-    @action(detail=True, methods=["post"], permission_classes=[IsAdminOrSup])
+    @action(detail=True, methods=["post"], permission_classes=[TienePermiso("hallazgos.decidir")])
     def convert(self, request, pk=None):
         hallazgo = self.get_object()
         fecha = request.data.get("scheduled_date")
@@ -238,7 +239,7 @@ class FindingViewSet(
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(self.get_queryset().get(pk=hallazgo.pk)).data)
 
-    @action(detail=True, methods=["post"], permission_classes=[IsAdminOrSup])
+    @action(detail=True, methods=["post"], permission_classes=[TienePermiso("hallazgos.decidir")])
     def dismiss(self, request, pk=None):
         hallazgo = self.get_object()
         try:
@@ -247,7 +248,7 @@ class FindingViewSet(
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(self.get_queryset().get(pk=hallazgo.pk)).data)
 
-    @action(detail=False, methods=["get"], url_path="summary", permission_classes=[IsAdminOrSup])
+    @action(detail=False, methods=["get"], url_path="summary", permission_classes=[TienePermiso("hallazgos.decidir")])
     def summary(self, request):
         """Cuántos pendientes hay en la bandeja, por severidad (para el menú y el tablero)."""
         pendientes = self.get_queryset().filter(

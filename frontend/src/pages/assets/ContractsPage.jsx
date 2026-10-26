@@ -19,6 +19,7 @@ import { apiErrorMessage } from '../../utils/apiError'
 import { flattenTree, indentedLabel } from '../../utils/locationTree'
 import { formatDate } from '../../utils/maintenance'
 import { mediaUrl } from '../../api/client'
+import { puede } from '../../utils/permisos'
 
 const VISTAS = [
   { value: 'ACTIVE', label: 'Vigentes' },
@@ -35,7 +36,7 @@ const VISTAS = [
  * hospital queda "sin contrato vigente" y el planificador decide.
  */
 export default function ContractsPage() {
-  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN')
+  const puedeGestionar = useAuthStore((s) => puede(s.user, 'contratos.gestionar'))
   const [searchParams] = useSearchParams()
   const [vista, setVista] = useState('ACTIVE')
   const [tipo, setTipo] = useState('')
@@ -64,7 +65,7 @@ export default function ContractsPage() {
             Vigencia de los contratos de mantenimiento y de las garantías de equipos.
           </p>
         </div>
-        {isAdmin && (
+        {puedeGestionar && (
           <button type="button" onClick={() => setEditando({})} className="btn-primary">
             + Nuevo documento
           </button>
@@ -127,7 +128,7 @@ export default function ContractsPage() {
           <p className="text-center py-16 text-sm text-red-600">No se pudo cargar el listado. Revisa tu conexión e intenta de nuevo.</p>
         ) : documentos.length === 0 ? (
           <EmptyState icon="document" title="Nada por aquí"
-            description={isAdmin ? 'No hay documentos con estos filtros. Carga uno con "Nuevo documento".' : 'No hay documentos con estos filtros.'} />
+            description={puedeGestionar ? 'No hay documentos con estos filtros. Carga uno con "Nuevo documento".' : 'No hay documentos con estos filtros.'} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[52rem]">
@@ -170,7 +171,7 @@ export default function ContractsPage() {
                             <Icon name="download" className="w-3.5 h-3.5" /> Documento
                           </a>
                         )}
-                        {isAdmin && (
+                        {puedeGestionar && (
                           <>
                             <button type="button" onClick={() => setEditando(c)}
                               className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200">Editar</button>

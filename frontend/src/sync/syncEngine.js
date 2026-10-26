@@ -356,6 +356,7 @@ export async function syncPhotos(ctx, onItemDone) {
         if (row.longitude != null) form.append('longitude', row.longitude)
         form.append('taken_at', row.taken_at)
         if (row.caption) form.append('caption', row.caption)
+        if (row.stage) form.append('stage', row.stage)
         // Con el identificador del telefono un reintento no duplica la foto, y el
         // campo foto del checklist ('sin-conexion:<uuid>') la encuentra despues.
         // Sin crypto.randomUUID newId() da 'local-...', que el servidor

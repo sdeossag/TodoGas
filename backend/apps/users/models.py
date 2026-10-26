@@ -2,6 +2,7 @@ import uuid
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
@@ -85,3 +86,33 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.role})"
+
+
+class PermisoExtra(models.Model):
+    """
+    Un permiso adicional que el administrador le da a un usuario (primer audio
+    del cliente, 10:18). El rol sigue siendo la base; esto solo suma y no
+    cambia el alcance por hospital. El catalogo vive en apps.users.permisos:
+    aqui solo se guarda el codigo, para que agregar uno no pida migracion.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT, related_name="permisos_extra",
+    )
+    codigo = models.CharField(max_length=50)
+    otorgado_por = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="permisos_otorgados",
+    )
+    otorgado_en = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "users_permisoextra"
+        ordering = ["codigo"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "codigo"], name="uniq_permiso_extra_usuario_codigo"),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} · {self.codigo}"

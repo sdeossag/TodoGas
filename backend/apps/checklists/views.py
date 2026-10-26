@@ -11,7 +11,8 @@ from apps.audit.ip import client_ip
 from apps.audit.models import AuditLog
 from apps.users import scope
 from apps.users.models import User
-from apps.users.permissions import IsAdminOrSup, IsAdminOrSupOrTec
+from apps.users import permisos
+from apps.users.permissions import IsAdminOrSupOrTec, TienePermiso
 from apps.work_orders.device_time import device_time
 
 from .models import ChecklistResponse, ChecklistTemplate, ChecklistTemplateVersion
@@ -44,7 +45,7 @@ class ChecklistTemplateViewSet(viewsets.ModelViewSet):
         # respondido en su OT, no el catalogo.
         if self.action in ("list", "retrieve"):
             return [IsAdminOrSupOrTec()]
-        return [IsAdminOrSup()]
+        return [TienePermiso("checklists.gestionar")()]
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -107,12 +108,25 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         qs = ChecklistResponse.objects.select_related(
             "version", "completed_by", "task__work_order"
         ).prefetch_related("field_responses__field")
-        if user.role == User.Role.TEC:
+        if user.role == User.Role.TEC and not permisos.ve_ots_en_alcance(user):
             return qs.filter(task__work_order__assigned_to=user)
         if user.role == User.Role.CLI:
             # Como sus OTs: solo lo finalizado, dentro de su alcance.
             qs = qs.filter(task__work_order__status="COMPLETED")
         return scope.work_orders(qs, user, prefix="task__work_order__")
+
+    def _solo_quien_ejecuta(self, request, response):
+        """
+        Un tecnico con permisos de gestion ve los checklists de su alcance para
+        revisarlos, pero responder y cerrar sigue siendo de quien tiene la OT
+        (admin y supervisor, como hoy, pueden ademas con las ajenas).
+        """
+        if request.user.role == User.Role.TEC and response.task.work_order.assigned_to_id != request.user.id:
+            return Response(
+                {"detail": "Solo quien tiene asignada la OT llena su checklist."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
 
     def destroy(self, request, *args, **kwargs):
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
@@ -126,6 +140,8 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="submit-field")
     def submit_field(self, request, pk=None):
         response = self.get_object()
+        if (bloqueo := self._solo_quien_ejecuta(request, response)) is not None:
+            return bloqueo
         if response.completed_at:
             return Response(
                 {"detail": "El checklist ya está completado.", "code": "checklist_completed"},
@@ -164,7 +180,7 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         marcada "Corregido por" y el valor anterior va a la auditoria; el acta
         sale con el valor final.
         """
-        if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
+        if not permisos.puede(request.user, "ot.revisar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         response = self.get_object()
         if response.task.work_order.status != "IN_REVIEW":
@@ -219,6 +235,8 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         queda con la real; la diferencia la ve el administrador en la OT.
         """
         response = self.get_object()
+        if (bloqueo := self._solo_quien_ejecuta(request, response)) is not None:
+            return bloqueo
         if response.completed_at:
             return Response(
                 {"detail": "El checklist ya está completado.", "code": "checklist_completed"},
@@ -255,6 +273,8 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
         response = self.get_object()
+        if (bloqueo := self._solo_quien_ejecuta(request, response)) is not None:
+            return bloqueo
         if response.completed_at:
             return Response(
                 {"detail": "El checklist ya está completado.", "code": "checklist_completed"},

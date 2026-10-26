@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 
 import useAuthStore from '../../store/authStore'
 import {
   useAssignPlanAssets,
+  useAssignPlanLocations,
   useComplianceData,
   useCreateEventOccurrence,
   useDeletePlanTask,
@@ -37,6 +38,7 @@ import {
   todayIso,
 } from '../../utils/maintenance'
 import { COMPARATORS, useMeterUnits } from '../../api/meters'
+import { puede } from '../../utils/permisos'
 
 const btnPrimary = 'px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 flex items-center gap-2'
 const btnGhost = 'px-4 py-2 text-sm text-gray-600 hover:text-gray-800'
@@ -47,7 +49,7 @@ export default function MaintenancePlanDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'ADMIN'
+  const puedeGestionar = puede(user, 'protocolos.gestionar')
   const recienCreado = !!location.state?.created
 
   const [tab, setTab] = useState('tareas')
@@ -95,7 +97,7 @@ export default function MaintenancePlanDetailPage() {
             <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">{plan.name}</h1>
             {plan.description && <p className="text-sm text-gray-500 mt-1">{plan.description}</p>}
           </div>
-          {isAdmin && (
+          {puedeGestionar && (
             <div className="flex gap-2 flex-wrap">
               <button onClick={() => navigate(`/planes-pm/${id}/editar`)}
                 className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200">
@@ -150,8 +152,8 @@ export default function MaintenancePlanDetailPage() {
           ))}
         </div>
         <div className="p-6">
-          {tab === 'tareas' && <TasksTab plan={plan} isAdmin={isAdmin} />}
-          {tab === 'activos' && <AssetsTab plan={plan} isAdmin={isAdmin} />}
+          {tab === 'tareas' && <TasksTab plan={plan} puedeGestionar={puedeGestionar} />}
+          {tab === 'activos' && <AssetsTab plan={plan} puedeGestionar={puedeGestionar} />}
           {tab === 'cumplimiento' && <ComplianceTab planId={id} />}
         </div>
       </div>
@@ -170,7 +172,7 @@ function InfoItem({ label, value }) {
 
 // ── Tareas del plan ──────────────────────────────────────────────────────────
 
-function TasksTab({ plan, isAdmin }) {
+function TasksTab({ plan, puedeGestionar }) {
   const [editing, setEditing] = useState(null) // {} para nueva, la tarea para editar
   const [toggling, setToggling] = useState(null)
   const [eventTask, setEventTask] = useState(null)
@@ -181,7 +183,7 @@ function TasksTab({ plan, isAdmin }) {
         <p className="text-sm text-gray-500">
           Cada tarea, en cada activo del protocolo, lleva su propio ciclo: al cerrarse la OT se crea la siguiente.
         </p>
-        {isAdmin && (
+        {puedeGestionar && (
           <button onClick={() => setEditing({})} className={btnPrimary}>
             <Icon name="plus" className="w-4 h-4" /> Agregar tarea
           </button>
@@ -228,7 +230,7 @@ function TasksTab({ plan, isAdmin }) {
                   <td className="px-3 py-2 text-gray-600">{formatDuration(t.estimated_duration)}</td>
                   <td className="px-3 py-2 text-gray-600">{t.open_count} / {t.done_count}</td>
                   <td className="px-3 py-2">
-                    {isAdmin && (
+                    {puedeGestionar && (
                       <div className="flex justify-end gap-1 flex-wrap">
                         {t.trigger === 'EVENT' && t.is_active && (
                           <button onClick={() => setEventTask(t)}
@@ -701,9 +703,10 @@ function EventOccurrenceModal({ plan, task, onClose }) {
 
 // ── Activos del plan ─────────────────────────────────────────────────────────
 
-function AssetsTab({ plan, isAdmin }) {
+function AssetsTab({ plan, puedeGestionar }) {
   const navigate = useNavigate()
   const [assigning, setAssigning] = useState(false)
+  const [assigningLocations, setAssigningLocations] = useState(false)
   const [removing, setRemoving] = useState(null)
   const removeMut = useRemovePlanAssets(plan.id)
 
@@ -711,17 +714,23 @@ function AssetsTab({ plan, isAdmin }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-gray-500">
-          Un activo tiene un solo plan. Asignarle este le quita el que tenía, sin perder su fecha.
+          Un activo o una ubicación tiene un solo protocolo. Asignarle este le quita el que tenía, sin perder su fecha.
         </p>
-        {isAdmin && (
-          <button onClick={() => setAssigning(true)} className={btnPrimary}>
-            <Icon name="plus" className="w-4 h-4" /> Asignar activos
-          </button>
+        {puedeGestionar && (
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setAssigningLocations(true)}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-2 whitespace-nowrap">
+              <Icon name="plus" className="w-4 h-4" /> Asignar ubicaciones
+            </button>
+            <button onClick={() => setAssigning(true)} className={btnPrimary}>
+              <Icon name="plus" className="w-4 h-4" /> Asignar activos
+            </button>
+          </div>
         )}
       </div>
 
       {plan.assets.length === 0 ? (
-        <p className="text-sm text-gray-500 text-center py-10">Ningún activo tiene este protocolo todavía.</p>
+        <p className="text-sm text-gray-500 text-center py-10">Ningún activo ni ubicación tiene este protocolo todavía.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -738,7 +747,14 @@ function AssetsTab({ plan, isAdmin }) {
               {plan.assets.map((a) => (
                 <tr key={a.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2 font-mono text-xs text-gray-500">{a.code}</td>
-                  <td className="px-3 py-2 text-gray-800">{a.name}</td>
+                  <td className="px-3 py-2 text-gray-800">
+                    {a.name}
+                    {a.is_location && (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
+                        Ubicación
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-gray-500">
                     {a.hospital.name}
                     {a.node_path && <span className="block text-xs">{a.node_path}</span>}
@@ -748,11 +764,13 @@ function AssetsTab({ plan, isAdmin }) {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
-                      <button onClick={() => navigate(`/activos/${a.id}`)}
-                        className="text-xs px-2 py-1 rounded bg-brand/10 text-brand hover:bg-brand/20">
-                        Ver activo
-                      </button>
-                      {isAdmin && (
+                      {!a.is_location && (
+                        <button onClick={() => navigate(`/activos/${a.id}`)}
+                          className="text-xs px-2 py-1 rounded bg-brand/10 text-brand hover:bg-brand/20">
+                          Ver activo
+                        </button>
+                      )}
+                      {puedeGestionar && (
                         <button onClick={() => setRemoving(a)}
                           className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200">
                           Quitar
@@ -768,6 +786,7 @@ function AssetsTab({ plan, isAdmin }) {
       )}
 
       {assigning && <AssignAssetsModal plan={plan} onClose={() => setAssigning(false)} />}
+      {assigningLocations && <AssignLocationsModal plan={plan} onClose={() => setAssigningLocations(false)} />}
       {removing && (
         <Modal title={`Quitar el protocolo a ${removing.code}`} onClose={() => setRemoving(null)} width="max-w-md">
           <div className="space-y-4 text-sm text-gray-600">
@@ -951,6 +970,127 @@ function AssignAssetsModal({ plan, onClose }) {
           <button onClick={handleAssign} disabled={selected.size === 0 || assignMut.isPending} className={btnPrimary}>
             {assignMut.isPending && <Spinner />}
             Asignar a {selected.size} activo{selected.size !== 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Protocolo sobre ubicaciones enteras (revisión del 2026-10-23): instalaciones
+ * entrega obras por "Bloque A / Piso 3", no por equipo. La OT, el checklist y el
+ * acta de esa ubicación salen igual que los de un equipo.
+ */
+function AssignLocationsModal({ plan, onClose }) {
+  const fijo = plan.restrict_to_hospital?.id
+  const { data: hospitals = [] } = useHospitals({ is_active: true })
+  const [hospital, setHospital] = useState(fijo ?? '')
+  const [filtro, setFiltro] = useState('')
+  const [selected, setSelected] = useState(() => new Set())
+  const [result, setResult] = useState(null)
+  const assignMut = useAssignPlanLocations(plan.id)
+
+  const { data: tree = [], isFetching } = useAssetTree(hospital)
+  const nodos = useMemo(() => flattenTree(tree), [tree])
+  const yaAsignadas = useMemo(
+    () => new Set(plan.assets.filter((a) => a.is_location).map((a) => a.node_id)),
+    [plan.assets],
+  )
+  const texto = filtro.trim().toLowerCase()
+  const candidatos = nodos.filter((n) => !texto || n.name.toLowerCase().includes(texto))
+
+  function toggle(id) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleAssign() {
+    try {
+      setResult(await assignMut.mutateAsync([...selected]))
+      setSelected(new Set())
+    } catch {
+      // el error se muestra abajo
+    }
+  }
+
+  const plural = (n) => (n === 1 ? 'ubicación' : 'ubicaciones')
+
+  return (
+    <Modal title={`Asignar «${plan.name}» a ubicaciones`}
+      subtitle="Para entregas de obra e instalaciones: la OT y el acta quedan a nombre de la ubicación."
+      onClose={onClose} width="max-w-2xl">
+      <div className="space-y-4">
+        {result && (
+          <div className="text-sm bg-green-50 border border-green-100 rounded-lg px-3 py-2 text-green-800" role="status">
+            <p className="flex items-center gap-1.5">
+              <Icon name="checkCircle" className="w-4 h-4" />
+              Protocolo asignado a {result.assigned} {plural(result.assigned)}.
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-sm font-medium text-gray-700 mb-1">Hospital</span>
+            <select value={hospital} disabled={!!fijo} className={input}
+              onChange={(e) => { setHospital(e.target.value); setSelected(new Set()) }}>
+              <option value="">Elige un hospital</option>
+              {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-sm font-medium text-gray-700 mb-1">Buscar ubicación</span>
+            <input value={filtro} onChange={(e) => setFiltro(e.target.value)} disabled={!hospital}
+              placeholder="Bloque, piso, sala…" className={input} />
+          </label>
+        </div>
+
+        <div className="border border-gray-100 rounded-lg max-h-80 overflow-y-auto">
+          {!hospital ? (
+            <p className="text-sm text-gray-500 text-center py-8">Elige un hospital para ver sus ubicaciones.</p>
+          ) : isFetching && nodos.length === 0 ? (
+            <div className="flex justify-center py-8"><Spinner /></div>
+          ) : candidatos.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-8">
+              {nodos.length === 0 ? 'Este hospital no tiene ubicaciones creadas.' : 'Ninguna ubicación coincide.'}
+            </p>
+          ) : (
+            <ul className="divide-y divide-gray-50">
+              {candidatos.map((n) => {
+                const asignada = yaAsignadas.has(n.id)
+                return (
+                  <li key={n.id}>
+                    <label className={`flex items-center gap-3 px-3 py-2 text-sm ${asignada ? 'text-gray-400' : 'hover:bg-gray-50 cursor-pointer'}`}>
+                      <input type="checkbox" disabled={asignada}
+                        checked={asignada || selected.has(n.id)} onChange={() => toggle(n.id)} />
+                      <span className={asignada ? '' : 'text-gray-800'}
+                        style={{ paddingLeft: `${texto ? 0 : n.depth}rem` }}>
+                        {n.name}
+                      </span>
+                      {asignada && <span className="ml-auto text-xs">Ya tiene este protocolo</span>}
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+
+        <p className="text-xs text-gray-500">
+          Si la ubicación tenía otro protocolo, se cambia a este y conserva la fecha de su pendiente.
+        </p>
+        {assignMut.isError && <p className="text-sm text-red-600" role="alert">{apiErrorMessage(assignMut.error)}</p>}
+
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className={btnGhost}>{result ? 'Cerrar' : 'Cancelar'}</button>
+          <button onClick={handleAssign} disabled={selected.size === 0 || assignMut.isPending} className={btnPrimary}>
+            {assignMut.isPending && <Spinner />}
+            Asignar a {selected.size} {plural(selected.size)}
           </button>
         </div>
       </div>

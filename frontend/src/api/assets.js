@@ -168,6 +168,17 @@ export function useUpdateAsset(id) {
   })
 }
 
+// Que pasaria al dar de baja el equipo (GET, no cambia nada).
+export function useDecommissionPreview(id, enabled = true) {
+  return useQuery({
+    queryKey: ['assets', id, 'decommission-preview'],
+    queryFn: () => client.get(`/api/assets/${id}/decommission-preview/`).then((r) => r.data),
+    enabled: !!id && enabled,
+    staleTime: 0,
+    gcTime: 0,
+  })
+}
+
 export function useDecommissionAsset(id) {
   const qc = useQueryClient()
   return useMutation({

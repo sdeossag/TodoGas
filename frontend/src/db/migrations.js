@@ -137,6 +137,14 @@ export const MIGRATIONS = [
       )
     },
   },
+  {
+    // Etiqueta Antes/Despues de la foto (audio3 ~05:10): 'BEFORE', 'AFTER' o
+    // vacia. Las fotos que ya esperan subir quedan sin etiqueta.
+    version: 6,
+    async up(driver) {
+      await addColumn(driver, 'offline_photos', 'stage', "TEXT DEFAULT ''")
+    },
+  },
 ]
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

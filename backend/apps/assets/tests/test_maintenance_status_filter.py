@@ -100,7 +100,7 @@ class TestMaintenanceStatusFilter:
                 assert row["maintenance_status"] == categoria
 
     def test_hoy_cuenta_como_due_soon(self, hospital):
-        """Frontera delta=0: mismo criterio que el serializer (delta <= 15)."""
+        """Frontera delta=0: mismo criterio que el serializer (delta <= 30)."""
         hoy = make_asset(hospital, "HOY")
         plan_for(hoy, 0)
         resp = admin_client(None).get(
@@ -108,11 +108,15 @@ class TestMaintenanceStatusFilter:
         )
         assert "HOY" in self._codes(resp)
 
-    def test_frontera_15_dias(self, hospital):
+    def test_frontera_30_dias(self, hospital):
+        """
+        30 dias, no 15: es la frontera del tablero. La tarjeta "Por vencer" y
+        la lista a la que lleva el clic tienen que mostrar el mismo numero.
+        """
         make_asset_15 = make_asset(hospital, "DIA15")
-        plan_for(make_asset_15, 15)
+        plan_for(make_asset_15, 30)
         make_asset_16 = make_asset(hospital, "DIA16")
-        plan_for(make_asset_16, 16)
+        plan_for(make_asset_16, 31)
         c = admin_client(None)
         due = c.get(reverse("assets-list"), {"maintenance_status": "due_soon"})
         ontime = c.get(reverse("assets-list"), {"maintenance_status": "on_time"})
@@ -129,3 +133,16 @@ class TestMaintenanceStatusFilter:
             reverse("assets-list"), {"maintenance_status": "no_plan"}
         )
         assert "INACT" in self._codes(resp)
+
+    def test_plan_activo_sin_tarea_abierta_no_es_sin_protocolo(self, hospital):
+        """Sin protocolo = sin plan activo, como en el tablero."""
+        from apps.maintenance.models import Task
+
+        a = make_asset(hospital, "SINTAREA")
+        plan_for(a, 5)
+        Task.objects.filter(asset=a).delete()
+        c = admin_client(None)
+        sin = c.get(reverse("assets-list"), {"maintenance_status": "no_plan"})
+        al_dia = c.get(reverse("assets-list"), {"maintenance_status": "on_time"})
+        assert "SINTAREA" not in self._codes(sin)
+        assert "SINTAREA" in self._codes(al_dia)

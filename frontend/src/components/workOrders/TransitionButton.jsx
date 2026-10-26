@@ -9,6 +9,7 @@ import Icon from '../ui/Icon'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import Spinner from '../ui/Spinner'
 import { laEjecuto } from '../../utils/ejecutores'
+import { puede } from '../../utils/permisos'
 
 // Cancelar usa otro endpoint que el motor de sincronizacion no reproduce,
 // asi que no se permite sin conexion en vez de encolar algo que fallaria.
@@ -28,7 +29,6 @@ function extractBackendError(err) {
 
 export default function TransitionButton({ workOrder, onSuccess }) {
   const { user } = useAuthStore()
-  const role = user?.role
   const status = workOrder?.status
 
   const [rejecting, setRejecting] = useState(false)
@@ -116,7 +116,7 @@ export default function TransitionButton({ workOrder, onSuccess }) {
     }
   }
 
-  if (!workOrder || !role) return null
+  if (!workOrder || !user?.role) return null
 
   const activeStatuses = ['PENDING', 'IN_PROGRESS', 'IN_REVIEW']
   const isActive = activeStatuses.includes(status)
@@ -154,8 +154,8 @@ export default function TransitionButton({ workOrder, onSuccess }) {
           </div>
         )}
 
-        {/* ADMIN/SUP: Completar */}
-        {['ADMIN', 'SUP'].includes(role) && status === 'IN_REVIEW' && !rejecting && (
+        {/* Quien revisa: Completar */}
+        {puede(user, 'ot.revisar') && status === 'IN_REVIEW' && !rejecting && (
           <button
             onClick={() => doTransition('COMPLETED')}
             disabled={loading}
@@ -166,8 +166,8 @@ export default function TransitionButton({ workOrder, onSuccess }) {
           </button>
         )}
 
-        {/* ADMIN/SUP: Rechazar (volver a IN_PROGRESS) */}
-        {['ADMIN', 'SUP'].includes(role) && status === 'IN_REVIEW' && (
+        {/* Quien revisa: Rechazar (volver a IN_PROGRESS) */}
+        {puede(user, 'ot.revisar') && status === 'IN_REVIEW' && (
           rejecting ? (
             <div className="flex items-center gap-2 flex-wrap">
               <input
@@ -206,8 +206,8 @@ export default function TransitionButton({ workOrder, onSuccess }) {
           )
         )}
 
-        {/* ADMIN: Cancelar OT */}
-        {role === 'ADMIN' && isActive && (
+        {/* Quien puede cancelar: Cancelar OT */}
+        {puede(user, 'ot.cancelar') && isActive && (
           <button
             onClick={() => setShowCancelModal(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200"

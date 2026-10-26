@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 
 import Icon from '../ui/Icon'
+import { distanciaMetros, textoDistancia } from '../../utils/ubicacion'
+import { UbicacionReferencia } from './ubicacionReferencia'
 
 /**
  * Google Maps (decisión del 2026-09-24), como el campo *LOCALIZACIÓN y la
@@ -154,7 +156,10 @@ export default function GoogleMap({ lat, lng, height = 260, editable = false, bu
  */
 export function UbicacionGps({ value, address, answeredAt, conMapa = true, height = 220 }) {
   const punto = parseLatLng(value)
+  const referencia = useContext(UbicacionReferencia)
   if (!punto) return <span>{value}</span>
+  // Ayuda para el supervisor, no una alarma: va en gris, sin color de aviso.
+  const distancia = textoDistancia(distanciaMetros(punto, referencia))
   return (
     <div className="space-y-2">
       <div className="text-sm text-gray-700 leading-snug">
@@ -164,6 +169,7 @@ export function UbicacionGps({ value, address, answeredAt, conMapa = true, heigh
             {new Date(answeredAt).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}
           </p>
         )}
+        {distancia && <p className="text-xs text-gray-600">{distancia}</p>}
         <p className="text-xs text-gray-500 tabular-nums">Lat: {punto.lat} · Long: {punto.lng}</p>
       </div>
       {conMapa && <GoogleMap lat={punto.lat} lng={punto.lng} height={height} />}

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useChecklistTemplate, usePublishVersion } from '../../api/checklists'
+import { withoutRetiredFields } from '../../constants/checklistFields'
 import FormBuilder from '../../components/checklists/FormBuilder'
 import ChecklistPreview from '../../components/checklists/ChecklistPreview'
 import Icon from '../../components/ui/Icon'
@@ -45,7 +46,11 @@ export default function ChecklistEditorPage() {
   useModalDismiss(showConfirm ? closeConfirm : null)
 
   const currentVersion = template?.versions?.find((v) => v.is_current)
-  const currentFields = currentVersion?.checklist_fields ?? []
+  // Duplicar una versión vieja con Foto o Firma: se quitan y se avisa. El
+  // servidor no publica versiones nuevas con esos campos.
+  const { kept: currentFields, removed: removedFields } = withoutRetiredFields(
+    currentVersion?.checklist_fields ?? []
+  )
   const nextVersionNumber = (currentVersion?.version_number ?? 0) + 1
   const repeatableGroups = repeatable ?? currentVersion?.repeatable_groups ?? []
 
@@ -170,6 +175,11 @@ export default function ChecklistEditorPage() {
           remontaba con la versión publicada y borraba lo no publicado
           (audio2 25:48, "se recargó, se borró la localización"). */}
       <div hidden={tab !== 0} className="space-y-4">
+        {removedFields > 0 && (
+          <p role="status" className="text-sm rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2">
+            Se quitaron {removedFields} campos de Foto/Firma: ahora van en la OT.
+          </p>
+        )}
         <RepeatableGroups
           fields={displayFields}
           value={repeatableGroups}

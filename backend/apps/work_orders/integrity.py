@@ -45,6 +45,14 @@ lavada.
   5  Fotos ocultas. Igual que la 4, mas si cada foto quedo oculta del acta
      (correccion en revision, 2026-10-01). Sin eso, ocultar o mostrar una foto
      despues de firmada cambiaria el acta sin cambiar el hash.
+  6  Etiqueta de la foto. Igual que la 5, mas si cada foto es "Antes" o
+     "Despues" del trabajo (vacia si no se etiqueto). El acta agrupa por ella,
+     asi que cambiarla despues de firmada alteraria el acta. Las actas v1 a v5
+     no la conocen y siguen verificando con su propia forma.
+  7  Fecha de intervencion corregida. Igual que la 6, mas el inicio y el fin
+     que un administrador o supervisor fijo en revision (vacios si no hubo
+     correccion). El acta imprime ese periodo, asi que cambiarlo despues de
+     firmada la alteraria. Las actas v1 a v6 no lo conocen.
 """
 
 import hashlib
@@ -53,8 +61,8 @@ from dataclasses import dataclass
 
 # Version con la que se calculan las actas nuevas. Las anteriores se siguen
 # verificando con la suya (SUPPORTED_VERSIONS).
-INTEGRITY_ALGORITHM_VERSION = "5"
-SUPPORTED_VERSIONS = ("1", "2", "3", "4", "5")
+INTEGRITY_ALGORITHM_VERSION = "7"
+SUPPORTED_VERSIONS = ("1", "2", "3", "4", "5", "6", "7")
 
 
 def _dt(value):
@@ -323,8 +331,39 @@ def _payload_v5(work_order):
     return datos
 
 
+def _payload_v6(work_order):
+    """
+    v5 mas la etiqueta Antes/Despues de cada foto. Para una version nueva,
+    partir de esta funcion (`datos = _payload_v6(work_order)`), cambiar
+    `algorithm_version` y agregar solo lo nuevo; no tocar las anteriores.
+    """
+    from apps.evidence.models import Photo
+
+    datos = _payload_v5(work_order)
+    datos["algorithm_version"] = "6"
+    etapas = {
+        _id(foto): etapa for foto, etapa in
+        Photo.objects.filter(work_order=work_order).values_list("id", "stage")
+    }
+    for foto in datos["photos"]:
+        foto["stage"] = etapas.get(foto["id"], "")
+    return datos
+
+
+def _payload_v7(work_order):
+    """v6 mas la fecha de intervencion corregida en revision (inicio y fin)."""
+    datos = _payload_v6(work_order)
+    datos["algorithm_version"] = "7"
+    datos["intervention"] = {
+        "start_override": _dt(work_order.intervention_start_override),
+        "end_override": _dt(work_order.intervention_end_override),
+    }
+    return datos
+
+
 _BUILDERS = {
     "1": _payload_v1, "2": _payload_v2, "3": _payload_v3, "4": _payload_v4, "5": _payload_v5,
+    "6": _payload_v6, "7": _payload_v7,
 }
 
 

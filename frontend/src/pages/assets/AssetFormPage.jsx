@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useHospitals, useAsset, useAssetTree, useCreateAsset, useUpdateAsset } from '../../api/assets'
 import { useMaintenancePlans } from '../../api/maintenance'
+import DecommissionPreview from '../../components/assets/DecommissionPreview'
 import Icon from '../../components/ui/Icon'
 import { flattenTree, indentedLabel } from '../../utils/locationTree'
 
@@ -257,6 +258,12 @@ export default function AssetFormPage() {
                     <option value="DECOMMISSIONED">Dado de baja</option>
                   </select>
                 </Field>
+                {isEdit && existing?.status !== 'DECOMMISSIONED' && form.status === 'DECOMMISSIONED' && (
+                  <div className="col-span-2 rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
+                    <p className="text-sm font-semibold text-red-700">Al guardar, el activo se da de baja</p>
+                    <DecommissionPreview assetId={id} />
+                  </div>
+                )}
                 <Field label="Prioridad *" error={errors.priority}>
                   <select value={form.priority} onChange={(e) => set('priority', e.target.value)}
                     className={sel(errors.priority)}>

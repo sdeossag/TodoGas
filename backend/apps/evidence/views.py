@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 from apps.audit.ip import client_ip
 from apps.audit.models import AuditLog
-from apps.users import scope
+from apps.users import permisos, scope
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 
@@ -25,7 +25,7 @@ def _can_read_wo(user, wo):
     """Misma logica de visibilidad que WorkOrderViewSet.get_queryset."""
     if user.role == User.Role.ADMIN:
         return True
-    if user.role == User.Role.SUP:
+    if permisos.ve_ots_en_alcance(user):
         return scope.can_see_work_order(user, wo)
     if user.role == User.Role.TEC:
         return wo.assigned_to_id == user.id
@@ -44,14 +44,14 @@ def _can_write_evidence(user, wo):
         return True
     if user.role in (User.Role.TEC, User.Role.SUP) and wo.assigned_to_id == user.id:
         return True
-    if user.role == User.Role.SUP:
+    if permisos.puede(user, "ot.revisar"):
         return wo.status == WorkOrder.Status.IN_REVIEW and scope.can_see_work_order(user, wo)
     return False
 
 
 def _corrige(user, wo):
     """Administrador o supervisor corrigiendo una OT en revision (2026-10-01)."""
-    return wo.status == WorkOrder.Status.IN_REVIEW and user.role in (User.Role.ADMIN, User.Role.SUP)
+    return wo.status == WorkOrder.Status.IN_REVIEW and permisos.puede(user, "ot.revisar")
 
 
 def _acepta_fotos(user, wo):
@@ -163,7 +163,7 @@ class PhotoViewSet(viewsets.GenericViewSet):
 
     def partial_update(self, request, pk=None):
         """
-        Corregir una foto: cambiar su descripcion u ocultarla del acta. No hay
+        Corregir una foto: cambiar su descripcion o su etiqueta Antes/Despues, u ocultarla del acta. No hay
         borrado: la foto sigue en la OT y en la auditoria.
         """
         try:
@@ -181,17 +181,19 @@ class PhotoViewSet(viewsets.GenericViewSet):
 
         serializer = PhotoUpdateSerializer(photo, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        antes = {"caption": photo.caption, "hidden": photo.hidden}
+        antes = {"caption": photo.caption, "stage": photo.stage, "hidden": photo.hidden}
         datos = serializer.validated_data
         if "caption" in datos:
             photo.caption = datos["caption"]
+        if "stage" in datos:
+            photo.stage = datos["stage"]
         if "hidden" in datos and datos["hidden"] != photo.hidden:
             photo.hidden = datos["hidden"]
             photo.hidden_by = request.user if photo.hidden else None
             photo.hidden_at = timezone.now() if photo.hidden else None
-        photo.save(update_fields=["caption", "hidden", "hidden_by", "hidden_at"])
+        photo.save(update_fields=["caption", "stage", "hidden", "hidden_by", "hidden_at"])
 
-        despues = {"caption": photo.caption, "hidden": photo.hidden}
+        despues = {"caption": photo.caption, "stage": photo.stage, "hidden": photo.hidden}
         cambios = {k: {"from": antes[k], "to": despues[k]} for k in antes if antes[k] != despues[k]}
         if cambios:
             if wo.status == WorkOrder.Status.IN_REVIEW:

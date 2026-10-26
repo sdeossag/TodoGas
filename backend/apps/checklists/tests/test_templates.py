@@ -78,7 +78,7 @@ def test_publish_version_creates_fields(client_admin, template):
     payload = {
         "checklist_fields": [
             {"label": "Presión (bar)", "field_type": "NUMBER", "is_required": True, "sort_order": 0},
-            {"label": "Firma técnico", "field_type": "SIGNATURE", "is_required": True, "sort_order": 1},
+            {"label": "Observaciones", "field_type": "TEXTAREA", "is_required": True, "sort_order": 1},
         ]
     }
     resp = client_admin.post(

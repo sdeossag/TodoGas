@@ -5,6 +5,7 @@ import Icon from '../components/ui/Icon'
 import Avatar from '../components/ui/Avatar'
 import OfflineBanner from '../components/ui/OfflineBanner'
 import { useTaskTypes } from '../api/taskTypes'
+import { esGestor, veOrdenes } from '../utils/permisos'
 
 const NAV_LINKS = [
   { to: '/mis-ordenes', label: 'Mis ordenes', icon: 'wrench' },
@@ -23,6 +24,15 @@ export default function TechnicianLayout() {
   const { user, logout } = useAuthStore()
   const [showLogo, setShowLogo] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(() => !isNarrow())
+  // Un tecnico al que el administrador le sumo permisos tambien entra a las
+  // pantallas de gestion; la puerta es esta, el resto lo decide cada permiso.
+  const links = esGestor(user)
+    ? [
+        NAV_LINKS[0],
+        { to: veOrdenes(user) ? '/ordenes' : '/hospitales', label: 'Gestión', icon: 'workOrder' },
+        NAV_LINKS[1],
+      ]
+    : NAV_LINKS
 
   // En movil el panel tapa el contenido, asi que al navegar hay que replegarlo.
   useEffect(() => {
@@ -104,7 +114,7 @@ export default function TechnicianLayout() {
           {/* Ancho fijo para que el contenido no se reflow mientras se anima */}
           <div className="w-56 h-full flex flex-col">
             <nav aria-label="Navegacion principal" className="flex-1 py-3">
-              {NAV_LINKS.map(({ to, label, icon }) => (
+              {links.map(({ to, label, icon }) => (
                 <NavLink
                   key={to}
                   to={to}

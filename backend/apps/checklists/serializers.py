@@ -15,6 +15,10 @@ from .models import (
 )
 
 
+# Tipos que ya no se ofrecen en versiones nuevas (siguen en las publicadas).
+SIN_CAMPO_NUEVO = {ChecklistField.FieldType.PHOTO, ChecklistField.FieldType.SIGNATURE}
+
+
 class ChecklistFieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChecklistField
@@ -109,6 +113,18 @@ class ChecklistVersionCreateSerializer(serializers.Serializer):
     repeatable_groups = serializers.ListField(
         child=serializers.CharField(max_length=100), required=False, default=list
     )
+
+    def validate_checklist_fields(self, campos):
+        # La OT ya tiene fotos de evidencia y firmas (audio3 05:10). Las versiones
+        # ya publicadas conservan estos tipos; aqui solo se rechazan las nuevas,
+        # incluso si vienen de duplicar una version vieja: el editor los quita.
+        sobran = [f["label"] for f in campos if f.get("field_type") in SIN_CAMPO_NUEVO]
+        if sobran:
+            raise serializers.ValidationError(
+                "Las fotos y las firmas se toman en la OT, no en el checklist. "
+                f"Quita los campos: {', '.join(sobran)}."
+            )
+        return campos
 
     def validate(self, attrs):
         grupos = {f.get("group", "") for f in attrs["checklist_fields"]} - {""}

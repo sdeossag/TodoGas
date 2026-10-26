@@ -8,6 +8,7 @@ import {
 } from '../../api/inventory'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import EmptyState from '../../components/ui/EmptyState'
+import { puede } from '../../utils/permisos'
 
 const UNIT_OPTIONS = ['und', 'kg', 'g', 'l', 'ml', 'mt', 'cm', 'caja', 'rollo', 'par']
 
@@ -34,7 +35,7 @@ export default function InventoryPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'ADMIN'
+  const puedeGestionar = puede(user, 'inventario.articulos')
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -80,7 +81,7 @@ export default function InventoryPage() {
             {lowStockOnly && <span className="ml-2 text-red-500 font-medium">— Solo stock bajo</span>}
           </p>
         </div>
-        {isAdmin && (
+        {puedeGestionar && (
           <button
             onClick={handleCreate}
             className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors"
@@ -163,7 +164,7 @@ export default function InventoryPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
-                        {isAdmin && (
+                        {puedeGestionar && (
                           <button
                             onClick={() => handleEdit(item)}
                             className="text-xs text-brand hover:underline"

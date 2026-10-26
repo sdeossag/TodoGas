@@ -29,7 +29,7 @@ class HospitalSerializer(_ContractStatusMixin, serializers.ModelSerializer):
         read_only_fields = ["id", "asset_count"]
 
     def get_asset_count(self, obj):
-        return obj.assets.filter(status=Asset.Status.ACTIVE).count()
+        return obj.assets.equipment().filter(status=Asset.Status.ACTIVE).count()
 
 
 class HospitalListSerializer(_ContractStatusMixin, serializers.ModelSerializer):
@@ -41,7 +41,7 @@ class HospitalListSerializer(_ContractStatusMixin, serializers.ModelSerializer):
         fields = ["id", "name", "code", "city", "is_active", "asset_count", "contract_status"]
 
     def get_asset_count(self, obj):
-        return obj.assets.filter(status=Asset.Status.ACTIVE).count()
+        return obj.assets.equipment().filter(status=Asset.Status.ACTIVE).count()
 
 
 class AssetNodeSerializer(serializers.ModelSerializer):
@@ -245,15 +245,25 @@ class AssetMaintenanceFieldsMixin:
         next_date = self._next_due(obj)
         return str(next_date) if next_date else None
 
+    # Dias de anticipacion de "por vencer". Los comparten el tablero, el filtro
+    # del listado y el color: la tarjeta y la lista a la que lleva el clic deben
+    # cuadrar.
+    DUE_SOON_DAYS = 30
+
     def get_maintenance_status(self, obj):
-        from datetime import date
+        from django.utils import timezone
+
+        # Sin protocolo = sin plan activo (igual que el tablero), tenga o no
+        # una tarea abierta: un plan solo por medidor aun no abre ninguna.
+        if obj.plan_id is None or not obj.plan.is_active:
+            return "no_plan"
         next_date = self._next_due(obj)
         if next_date is None:
-            return "no_plan"
-        delta = (next_date - date.today()).days
+            return "on_time"
+        delta = (next_date - timezone.localdate()).days
         if delta < 0:
             return "overdue"
-        if delta <= 15:
+        if delta <= self.DUE_SOON_DAYS:
             return "due_soon"
         return "on_time"
 
@@ -281,9 +291,11 @@ class AssetSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
             "qr_code", "photo_url", "installation_date", "warranty_expiry",
             "created_at", "updated_at", "custom_field_values",
             "last_maintenance_date", "next_maintenance_date", "maintenance_status",
-            "plan", "coverage",
+            "plan", "coverage", "is_location", "represents_node",
         ]
-        read_only_fields = ["id", "qr_code", "created_at", "updated_at"]
+        read_only_fields = ["id", "qr_code", "created_at", "updated_at", "is_location", "represents_node"]
+
+    is_location = serializers.BooleanField(read_only=True)
 
     def get_coverage(self, obj):
         """Garantia y contrato vigentes que cubren el equipo (o None cada uno)."""
@@ -320,7 +332,10 @@ class AssetListSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializ
             # Columnas planas que el portal del cliente muestra en su tabla.
             "manufacturer", "model", "equipment_location",
             "last_maintenance_date", "next_maintenance_date", "maintenance_status",
+            "is_location",
         ]
+
+    is_location = serializers.BooleanField(read_only=True)
 
     def get_hospital(self, obj):
         return {"id": str(obj.hospital_id), "name": obj.hospital.name}

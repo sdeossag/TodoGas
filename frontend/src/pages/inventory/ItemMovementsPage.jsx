@@ -5,6 +5,7 @@ import { useInventoryItem, useStockMovements, useCreateStockMovement } from '../
 import useModalDismiss from '../../hooks/useModalDismiss'
 import EmptyState from '../../components/ui/EmptyState'
 import { formatWoCode } from '../../utils/workOrder'
+import { puede } from '../../utils/permisos'
 
 const MOVEMENT_LABELS = {
   IN: 'Entrada',
@@ -32,7 +33,7 @@ export default function ItemMovementsPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'ADMIN'
+  const puedeRegistrar = puede(user, 'inventario.movimientos')
 
   const [page, setPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
@@ -78,7 +79,7 @@ export default function ItemMovementsPage() {
 
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-800">Movimientos</h2>
-        {isAdmin && (
+        {puedeRegistrar && (
           <button
             onClick={() => setShowModal(true)}
             className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors"

@@ -45,7 +45,7 @@ class PhotoSerializer(serializers.ModelSerializer):
         model = Photo
         fields = [
             "id", "work_order", "task", "task_asset", "finding", "file_url", "thumbnail_url",
-            "latitude", "longitude", "taken_at", "caption",
+            "latitude", "longitude", "taken_at", "caption", "stage",
             "file_hash", "uploaded_by", "offline_uuid", "created_at",
             "hidden", "hidden_by_name", "hidden_at",
         ]
@@ -74,12 +74,14 @@ class PhotoSerializer(serializers.ModelSerializer):
 
 
 class PhotoUpdateSerializer(serializers.ModelSerializer):
-    """Corregir una foto: su descripcion, o sacarla del acta sin borrarla."""
+    """Corregir una foto: su descripcion, su etiqueta Antes/Despues, o sacarla del acta sin borrarla."""
 
     class Meta:
         model = Photo
-        fields = ["caption", "hidden"]
-        extra_kwargs = {"caption": {"required": False}, "hidden": {"required": False}}
+        fields = ["caption", "stage", "hidden"]
+        extra_kwargs = {
+            "caption": {"required": False}, "stage": {"required": False}, "hidden": {"required": False},
+        }
 
 
 class PhotoCreateSerializer(serializers.Serializer):
@@ -102,6 +104,7 @@ class PhotoCreateSerializer(serializers.Serializer):
     longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
     taken_at = serializers.DateTimeField()
     caption = serializers.CharField(max_length=500, required=False, default="", allow_blank=True)
+    stage = serializers.ChoiceField(choices=Photo.Stage.choices, required=False, default="", allow_blank=True)
     offline_uuid = serializers.UUIDField(required=False, allow_null=True)
 
     def validate_latitude(self, value):
@@ -163,6 +166,7 @@ class PhotoCreateSerializer(serializers.Serializer):
             longitude=validated_data.get("longitude"),
             taken_at=validated_data["taken_at"],
             caption=validated_data.get("caption", ""),
+            stage=validated_data.get("stage", ""),
             offline_uuid=validated_data.get("offline_uuid"),
             uploaded_by=uploaded_by,
             task=validated_data.get("task"),

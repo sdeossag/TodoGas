@@ -15,6 +15,7 @@ import { apiErrorMessage } from '../../utils/apiError'
 import EmptyState from '../ui/EmptyState'
 import Modal from '../ui/Modal'
 import Spinner from '../ui/Spinner'
+import { puede } from '../../utils/permisos'
 
 const fechaHora = (iso) => new Date(iso).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -25,7 +26,7 @@ const fechaHora = (iso) => new Date(iso).toLocaleString('es-CO', { dateStyle: 'm
  * registra a mano.
  */
 export default function MetersPanel({ assetId }) {
-  const puedeRegistrar = useAuthStore((s) => ['ADMIN', 'SUP'].includes(s.user?.role))
+  const puedeRegistrar = useAuthStore((s) => puede(s.user, 'activos.gestionar'))
   const { data: medidores = [], isLoading } = useMeters(assetId)
   const [registrando, setRegistrando] = useState(null)
   const [abierto, setAbierto] = useState(null)

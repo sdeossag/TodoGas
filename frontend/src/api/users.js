@@ -16,6 +16,15 @@ export function useUsers(params = {}) {
   })
 }
 
+/** Las casillas de "Permisos adicionales": nombre, descripcion, area y roles que ya lo traen. */
+export function useCatalogoDePermisos() {
+  return useQuery({
+    queryKey: ['users', 'permissions-catalog'],
+    queryFn: () => client.get('/api/users/permissions-catalog/').then((r) => r.data),
+    staleTime: Infinity,
+  })
+}
+
 export function useUser(id) {
   return useQuery({
     queryKey: ['users', id],

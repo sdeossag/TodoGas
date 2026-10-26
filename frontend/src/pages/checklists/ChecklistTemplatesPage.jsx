@@ -5,6 +5,7 @@ import { useChecklistTemplates, useCreateChecklistTemplate } from '../../api/che
 import Icon from '../../components/ui/Icon'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import Spinner from '../../components/ui/Spinner'
+import { puede } from '../../utils/permisos'
 
 
 const FILTERS = [
@@ -16,7 +17,7 @@ const FILTERS = [
 export default function ChecklistTemplatesPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'ADMIN'
+  const puedeGestionar = puede(user, 'checklists.gestionar')
 
   const [showModal, setShowModal] = useState(false)
   const [filter, setFilter] = useState('')
@@ -33,7 +34,7 @@ export default function ChecklistTemplatesPage() {
           <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Checklists</h1>
           <p className="text-sm text-gray-500 mt-0.5">{templates.length} plantillas</p>
         </div>
-        {isAdmin && (
+        {puedeGestionar && (
           <button
             onClick={() => setShowModal(true)}
             className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors"
@@ -74,7 +75,7 @@ export default function ChecklistTemplatesPage() {
           <div className="text-center py-16 text-gray-500">
             <Icon name="checklist" className="w-10 h-10 mx-auto mb-3 text-gray-400" />
             <p className="font-medium">No hay plantillas de checklist</p>
-            {isAdmin && (
+            {puedeGestionar && (
               <button
                 onClick={() => setShowModal(true)}
                 className="mt-3 text-sm text-brand hover:underline"
@@ -122,7 +123,7 @@ export default function ChecklistTemplatesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {isAdmin && (
+                      {puedeGestionar && (
                         <button
                           onClick={() => navigate(`/checklists/${t.id}/editar`)}
                           className="text-xs px-3 py-1.5 rounded-lg bg-brand/10 text-brand hover:bg-brand/20 transition-colors"

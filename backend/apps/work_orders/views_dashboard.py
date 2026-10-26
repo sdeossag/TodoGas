@@ -7,16 +7,20 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.users.permissions import IsAdminOrSup
+from apps.users.permissions import TienePermiso
 from apps.users.models import User
 
 from .dashboard import (
+    calculate_assets_status,
     calculate_assets_without_maintenance,
     calculate_compliance_percentage,
     calculate_mttr,
+    calculate_open_findings,
+    calculate_ots_by_kind,
     calculate_ots_by_status,
     calculate_ots_by_technician,
     calculate_overdue_count,
+    calculate_pending_by_month,
 )
 
 
@@ -35,7 +39,7 @@ def _hospital_del_tablero(request):
 class DashboardView(APIView):
     """GET /api/dashboard/ — todos los KPIs en un solo request."""
 
-    permission_classes = [IsAdminOrSup]
+    permission_classes = [TienePermiso("reportes.ver")]
 
     def get(self, request):
         hospital_id = _hospital_del_tablero(request)
@@ -51,7 +55,10 @@ class DashboardView(APIView):
             "mttr": calculate_mttr(hospital_id=hospital_id, days=days),
             "overdue": calculate_overdue_count(hospital_id=hospital_id),
             "ots_by_status": calculate_ots_by_status(hospital_id=hospital_id, days=days),
+            "ots_by_kind": calculate_ots_by_kind(hospital_id=hospital_id, days=days),
             "ots_by_technician": calculate_ots_by_technician(days=days),
+            "pending_by_month": calculate_pending_by_month(hospital_id=hospital_id),
+            "open_findings": calculate_open_findings(hospital_id=hospital_id),
             "assets_without_maintenance": calculate_assets_without_maintenance(
                 hospital_id=hospital_id
             )[:10],
@@ -64,7 +71,7 @@ class DashboardView(APIView):
 class DashboardComplianceHistoryView(APIView):
     """GET /api/dashboard/compliance-history/ — cumplimiento mes a mes."""
 
-    permission_classes = [IsAdminOrSup]
+    permission_classes = [TienePermiso("reportes.ver")]
 
     def get(self, request):
         hospital_id = _hospital_del_tablero(request)
@@ -85,54 +92,7 @@ class DashboardComplianceHistoryView(APIView):
 class DashboardAssetsStatusView(APIView):
     """GET /api/dashboard/assets-status/ — conteo de activos por estado de mantenimiento."""
 
-    permission_classes = [IsAdminOrSup]
+    permission_classes = [TienePermiso("reportes.ver")]
 
     def get(self, request):
-        from apps.assets.models import Asset
-        from apps.maintenance.models import Task
-
-        hospital_id = _hospital_del_tablero(request)
-        today = timezone.now().date()
-        due_soon_threshold = today + timedelta(days=30)
-
-        assets = Asset.objects.filter(status=Asset.Status.ACTIVE)
-        if hospital_id:
-            assets = assets.filter(hospital_id=hospital_id)
-
-        total = assets.count()
-
-        assets_with_active_plan_ids = Asset.objects.filter(
-            plan__is_active=True
-        ).values_list("id", flat=True)
-        no_plan = assets.exclude(id__in=assets_with_active_plan_ids).count()
-
-        # La proxima fecha es la de la tarea abierta mas proxima del activo.
-        min_due_subq = (
-            Task.objects.filter(Task.next_maintenance_q(), asset=OuterRef("pk"))
-            .values("asset")
-            .annotate(min_due=Min("scheduled_date"))
-            .values("min_due")[:1]
-        )
-
-        with_plan = (
-            assets.filter(id__in=assets_with_active_plan_ids)
-            .annotate(next_pm_date=Subquery(min_due_subq))
-        )
-
-        overdue = with_plan.filter(next_pm_date__lt=today).count()
-        due_soon = with_plan.filter(
-            next_pm_date__gte=today, next_pm_date__lte=due_soon_threshold
-        ).count()
-        on_time = with_plan.filter(
-            Q(next_pm_date__gt=due_soon_threshold) | Q(next_pm_date__isnull=True)
-        ).count()
-
-        return Response(
-            {
-                "on_time": on_time,
-                "due_soon": due_soon,
-                "overdue": overdue,
-                "no_plan": no_plan,
-                "total": total,
-            }
-        )
+        return Response(calculate_assets_status(hospital_id=_hospital_del_tablero(request)))

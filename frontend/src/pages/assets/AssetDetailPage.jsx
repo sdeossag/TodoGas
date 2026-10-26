@@ -8,8 +8,10 @@ import { useAssetTasks } from '../../api/tasks'
 import { TASK_STATUS, formatDate as fechaCorta, formatFrequency } from '../../utils/maintenance'
 import { CoberturaEquipo } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
+import DecommissionPreview from '../../components/assets/DecommissionPreview'
 import MetersPanel from '../../components/meters/MetersPanel'
 import useModalDismiss from '../../hooks/useModalDismiss'
+import { puede } from '../../utils/permisos'
 
 const STATUS_LABELS = {
   ACTIVE: { label: 'Activo', cls: 'bg-green-100 text-green-700' },
@@ -29,8 +31,9 @@ export default function AssetDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'ADMIN'
-  const isAdminOrSup = ['ADMIN', 'SUP'].includes(user?.role)
+  // Editar y dar de baja van con el mismo permiso: el servidor ya dejaba al
+  // supervisor darlo de baja por el formulario, y el boton era el unico que lo escondia.
+  const puedeGestionar = puede(user, 'activos.gestionar')
 
   const [tab, setTab] = useState(0)
   const [confirmDecom, setConfirmDecom] = useState(false)
@@ -108,13 +111,13 @@ export default function AssetDetailPage() {
             )}
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            {isAdminOrSup && asset.status !== 'DECOMMISSIONED' && (
+            {puedeGestionar && asset.status !== 'DECOMMISSIONED' && (
               <button onClick={() => navigate(`/activos/${id}/editar`)}
                 className="px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-light">
                 Editar
               </button>
             )}
-            {isAdmin && asset.status !== 'DECOMMISSIONED' && (
+            {puedeGestionar && asset.status !== 'DECOMMISSIONED' && (
               <button onClick={() => setConfirmDecom(true)}
                 className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700">
                 Dar de baja
@@ -177,17 +180,11 @@ export default function AssetDetailPage() {
             ) : (
               <>
                 <h3 className="text-lg font-semibold text-gray-800">Confirmar baja del activo</h3>
-                <div className="text-sm text-gray-600 space-y-2">
-                  <p>
-                    El activo queda <strong>dado de baja</strong>: no se le programan más tareas ni
-                    puede entrar en nuevas órdenes de trabajo.
-                  </p>
-                  <p>
-                    Sus tareas pendientes se anulan con la nota «El activo se dio de baja». Nada se
-                    borra: el historial y las actas se conservan. Si vuelve a estar activo, su
-                    protocolo se reprograma.
-                  </p>
-                </div>
+                <p className="text-sm text-gray-600">
+                  El activo queda <strong>dado de baja</strong>: no se le programan m�s tareas ni
+                  puede entrar en nuevas �rdenes de trabajo.
+                </p>
+                <DecommissionPreview assetId={id} />
                 {decommissionMut.isError && (
                   <p className="text-sm text-red-600">
                     {decommissionMut.error?.response?.data?.detail ?? 'No se pudo dar de baja.'}

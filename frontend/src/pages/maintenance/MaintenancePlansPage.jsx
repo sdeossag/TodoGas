@@ -6,6 +6,7 @@ import Icon from '../../components/ui/Icon'
 import Spinner from '../../components/ui/Spinner'
 import { taskTypeLabel } from '../../constants/labels'
 import { formatDate, formatFrequency, relativeDue } from '../../utils/maintenance'
+import { puede } from '../../utils/permisos'
 
 function ComplianceBar({ pct }) {
   if (pct === null || pct === undefined) {
@@ -25,7 +26,7 @@ function ComplianceBar({ pct }) {
 export default function MaintenancePlansPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'ADMIN'
+  const puedeGestionar = puede(user, 'protocolos.gestionar')
 
   const [statusFilter, setStatusFilter] = useState('')
   const [searchInput, setSearchInput] = useState('')
@@ -46,7 +47,7 @@ export default function MaintenancePlansPage() {
             Cada activo tiene un protocolo; el protocolo dice qué tareas se le hacen y cada cuánto.
           </p>
         </div>
-        {isAdmin && (
+        {puedeGestionar && (
           <button onClick={() => navigate('/planes-pm/nuevo')}
             className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors flex items-center gap-1.5">
             <Icon name="plus" className="w-4 h-4" />
@@ -92,7 +93,7 @@ export default function MaintenancePlansPage() {
           <div className="text-center py-16 text-gray-500">
             <Icon name="plan" className="w-10 h-10 mx-auto mb-3 text-gray-400" />
             <p className="font-medium">{search ? `Ningún protocolo coincide con «${search}»` : 'No hay protocolos'}</p>
-            {isAdmin && !search && (
+            {puedeGestionar && !search && (
               <button onClick={() => navigate('/planes-pm/nuevo')} className="mt-3 text-sm text-brand hover:underline">
                 Crear el primer protocolo
               </button>
@@ -114,7 +115,7 @@ export default function MaintenancePlansPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {plans.map((plan) => (
-                  <PlanRow key={plan.id} plan={plan} isAdmin={isAdmin}
+                  <PlanRow key={plan.id} plan={plan} puedeGestionar={puedeGestionar}
                     onView={() => navigate(`/planes-pm/${plan.id}`)}
                     onEdit={() => navigate(`/planes-pm/${plan.id}/editar`)} />
                 ))}
@@ -127,7 +128,7 @@ export default function MaintenancePlansPage() {
   )
 }
 
-function PlanRow({ plan, isAdmin, onView, onEdit }) {
+function PlanRow({ plan, puedeGestionar, onView, onEdit }) {
   const pauseMut = usePausePlan(plan.id)
   const resumeMut = useResumePlan(plan.id)
   const activas = plan.tasks.filter((t) => t.is_active)
@@ -180,7 +181,7 @@ function PlanRow({ plan, isAdmin, onView, onEdit }) {
           <button onClick={onView} className="text-xs px-2 py-1 rounded bg-brand/10 text-brand hover:bg-brand/20">
             Ver
           </button>
-          {isAdmin && (
+          {puedeGestionar && (
             <>
               <button onClick={onEdit} className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200">
                 Editar

@@ -40,6 +40,7 @@
   .out-of-range { background-color: #fff9c4; }
   .photo-grid td { border: none; padding: 8px; vertical-align: top; text-align: center; }
   .photo-grid img { max-width: 100%; max-height: 200px; border: 1px solid #ddd; }
+  .photo-stage { font-size: 10pt; margin: 10px 0 2px; color: #333; }
   .photo-caption { font-size: 8pt; color: #555; margin-top: 4px; }
   .gps-map { width: 100%; max-width: 260px; margin-top: 4px; border: 1px solid #ddd; }
   .sig-table td { border: 1px solid #ccc; padding: 10px; text-align: center; vertical-align: top; }
@@ -139,7 +140,7 @@
   <table>
     <tr>
       <td style="width:50%">
-        {% if op.activo_ubicacion and b.asset.node %}<div class="kv"><span class="label">Ubicación</span><br>{{ b.asset.node.path }}</div>{% endif %}
+        {% if op.activo_ubicacion and b.asset.node %}<div class="kv"><span class="label">Ubicación</span><br>{{ b.asset.node.path }}{% if b.sublocation.address %}<br><span class="label">{{ b.sublocation.address }}</span>{% endif %}{% if b.sublocation.map %}<br><img class="gps-map" src="{{ b.sublocation.map }}" alt="Mapa de la ubicación">{% endif %}</div>{% endif %}
         {% if op.activo_ubicacion_equipo and b.asset.equipment_location %}<div class="kv"><span class="label">Ubicación del equipo</span><br>{{ b.asset.equipment_location }}</div>{% endif %}
         {% if op.activo_tipo and b.asset.asset_type %}<div class="kv"><span class="label">Tipo de activo</span><br>{{ b.asset.asset_type }}</div>{% endif %}
         <div class="kv"><span class="label">Tarea</span><br>{{ b.task.title }}</div>
@@ -196,8 +197,10 @@
   {% endif %}
 
   {% if op.fotos_activo and b.photos %}
+  {% for g in b.photo_groups %}
+  {% if g.label %}<h3 class="photo-stage">{{ g.label }}</h3>{% endif %}
   <table class="photo-grid">
-    {% for photo in b.photos|slice:":6" %}
+    {% for photo in g.photos %}
       {% if forloop.counter0|divisibleby:2 %}<tr>{% endif %}
       <td style="width:50%">
         <img src="{{ photo.file_url }}" alt="Foto de {{ b.asset.code }}">
@@ -207,6 +210,7 @@
       {% if forloop.counter|divisibleby:2 or forloop.last %}</tr>{% endif %}
     {% endfor %}
   </table>
+  {% endfor %}
   {% if b.photos|length > 6 %}<p class="no-data">Se muestran 6 de {{ b.photos|length }} fotos de este activo. Ver las demás en el sistema CMMS.</p>{% endif %}
   {% endif %}
 </div>
@@ -239,8 +243,10 @@
 <div class="section">
   <h2>{{ n.fotos_visita }}. Evidencia fotográfica de la visita</h2>
   {% if visit_photos %}
+    {% for g in visit_photo_groups %}
+    {% if g.label %}<h3 class="photo-stage">{{ g.label }}</h3>{% endif %}
     <table class="photo-grid">
-      {% for photo in visit_photos|slice:":10" %}
+      {% for photo in g.photos %}
         {% if forloop.counter0|divisibleby:2 %}<tr>{% endif %}
         <td style="width:50%">
           <img src="{{ photo.file_url }}" alt="Foto {{ forloop.counter }}">
@@ -253,6 +259,7 @@
         {% if forloop.counter|divisibleby:2 or forloop.last %}</tr>{% endif %}
       {% endfor %}
     </table>
+    {% endfor %}
     {% if visit_photos|length > 10 %}
     <p class="no-data">Nota: Se muestran las primeras 10 fotos. Ver fotos adicionales en el sistema CMMS.</p>
     {% endif %}

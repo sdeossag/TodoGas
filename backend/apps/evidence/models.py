@@ -10,6 +10,11 @@ class Photo(models.Model):
     Fracttal: tab Adjuntos en la tarea de la OT.
     """
 
+    class Stage(models.TextChoices):
+        BEFORE = "BEFORE", "Antes"
+        AFTER = "AFTER", "Después"
+        NONE = "", "Sin etiqueta"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     work_order = models.ForeignKey(
         "work_orders.WorkOrder", on_delete=models.PROTECT,
@@ -33,6 +38,9 @@ class Photo(models.Model):
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     taken_at = models.DateTimeField()
     caption = models.CharField(max_length=500, blank=True, default="")
+    # Antes o despues del trabajo (audio3 ~05:10). Vacio en las fotos anteriores
+    # a esta decision y en las que el tecnico no etiqueta.
+    stage = models.CharField(max_length=6, choices=Stage.choices, blank=True, default="")
     file_hash = models.CharField(max_length=64, blank=True, default="")
     uploaded_by = models.ForeignKey(
         "users.User", on_delete=models.PROTECT,

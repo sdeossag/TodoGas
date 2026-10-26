@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 
 from apps.users import scope
 from apps.users.models import User
-from apps.users.permissions import IsAdmin, IsAdminOrSup, IsAdminOrSupOrTec
+from apps.users import permisos
+from apps.users.permissions import IsAdminOrSupOrTec, TienePermiso
 
 from .models import InventoryItem, StockMovement
 from .serializers import (
@@ -25,7 +26,7 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ('list', 'retrieve', 'low_stock'):
             return [IsAdminOrSupOrTec()]
-        return [IsAdmin()]
+        return [TienePermiso("inventario.articulos")()]
 
     def get_serializer_class(self):
         if self.action in ('create', 'partial_update'):
@@ -94,7 +95,8 @@ class StockMovementViewSet(
         if role not in (User.Role.ADMIN, User.Role.SUP, User.Role.TEC):
             return Response(status=status.HTTP_403_FORBIDDEN)
 
-        if role == User.Role.TEC:
+        # El tecnico sin el permiso sigue como hoy: solo salidas de sus OT.
+        if role == User.Role.TEC and not permisos.puede(user, 'inventario.movimientos'):
             if request.data.get('movement_type') != StockMovement.MovementType.OUT:
                 return Response(
                     {'detail': 'Los tecnicos solo pueden registrar salidas (OUT).'},
@@ -144,7 +146,7 @@ class StockMovementViewSet(
 
 
 class StockAlertView(APIView):
-    permission_classes = [IsAdminOrSup]
+    permission_classes = [TienePermiso('inventario.movimientos', 'inventario.articulos')]
 
     def get(self, request):
         items = InventoryItem.objects.filter(current_stock__lte=F('min_stock'))

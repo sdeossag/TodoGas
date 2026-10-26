@@ -3,7 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.users import scope
-from apps.users.permissions import IsAdmin, IsAdminOrSup
+from apps.users.permissions import IsAdmin, TienePermiso
 
 from .meters import recompute_accumulated, record_manual
 from .models import Meter, MeterReading, MeterUnit
@@ -50,7 +50,7 @@ class MeterViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
             return [IsAuthenticated()]
-        return [IsAdminOrSup()]
+        return [TienePermiso("activos.gestionar")()]
 
     def get_queryset(self):
         qs = scope.assets(
@@ -74,7 +74,7 @@ class MeterReadingViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins
     def get_permissions(self):
         if self.action == "list":
             return [IsAuthenticated()]
-        return [IsAdminOrSup()]
+        return [TienePermiso("activos.gestionar")()]
 
     def get_queryset(self):
         qs = scope.assets(

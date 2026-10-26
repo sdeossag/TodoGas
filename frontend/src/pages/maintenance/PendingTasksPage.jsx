@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAssetTree, useHospitals } from '../../api/assets'
 import { useMaintenancePlans } from '../../api/maintenance'
 import {
@@ -31,6 +31,7 @@ import {
   todayIso,
 } from '../../utils/maintenance'
 import { ejecutores, etiquetaEjecutor } from '../../utils/ejecutores'
+import UbicacionBadge from '../../components/UbicacionBadge'
 
 const btnPrimary = 'px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light disabled:opacity-60 flex items-center gap-2'
 const btnGhost = 'px-4 py-2 text-sm text-gray-600 hover:text-gray-800'
@@ -43,12 +44,15 @@ const PESO = { HIGH: 0, MEDIUM: 1, LOW: 2 }
  * marcan las de una misma visita y se arma la OT, o se reprograman con causa.
  */
 export default function PendingTasksPage() {
-  const [hospital, setHospital] = useState('')
+  // Los filtros pueden llegar en la URL (el tablero enlaza a las vencidas o a
+  // un mes): hospital_id, due_after, due_before y overdue.
+  const [urlParams] = useSearchParams()
+  const [hospital, setHospital] = useState(urlParams.get('hospital_id') ?? '')
   const [node, setNode] = useState('')
   const [plan, setPlan] = useState('')
-  const [desde, setDesde] = useState('')
-  const [hasta, setHasta] = useState('')
-  const [soloVencidas, setSoloVencidas] = useState(false)
+  const [desde, setDesde] = useState(urlParams.get('due_after') ?? '')
+  const [hasta, setHasta] = useState(urlParams.get('due_before') ?? '')
+  const [soloVencidas, setSoloVencidas] = useState(['1', 'true'].includes(urlParams.get('overdue')))
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(() => new Set())
@@ -250,6 +254,7 @@ export default function PendingTasksPage() {
                         className="text-gray-800 hover:text-brand">
                         <span className="font-mono text-xs text-gray-500">{t.asset.code}</span> {t.asset.name}
                       </Link>
+                      <UbicacionBadge asset={t.asset} />
                       <p className="text-xs text-gray-500">
                         {t.hospital.name}{t.asset.node_path && ` · ${t.asset.node_path}`}
                       </p>

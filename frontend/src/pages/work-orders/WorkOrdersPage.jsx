@@ -11,6 +11,7 @@ import { taskTypeLabel } from '../../constants/labels'
 import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
 import Spinner from '../../components/ui/Spinner'
 import { formatWoCode } from '../../utils/workOrder'
+import { puede } from '../../utils/permisos'
 
 const PAGE_SIZE = 20
 
@@ -18,7 +19,7 @@ const PAGE_SIZE = 20
 export default function WorkOrdersPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'ADMIN'
+  const puedeCrear = puede(user, 'ot.crear_manual')
 
   const [statusFilter, setStatusFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('')
@@ -91,7 +92,7 @@ export default function WorkOrdersPage() {
             {workOrders.length} {workOrders.length === 1 ? 'orden' : 'órdenes'} encontradas
           </p>
         </div>
-        {isAdmin && (
+        {puedeCrear && (
           <button
             onClick={() => navigate('/ordenes/nueva')}
             className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors"
@@ -201,7 +202,7 @@ export default function WorkOrdersPage() {
           <div className="text-center py-16 text-gray-500">
             <Icon name="wrench" className="w-10 h-10 mx-auto mb-3 text-gray-400" />
             <p className="font-medium">No hay órdenes de trabajo</p>
-            {isAdmin && (
+            {puedeCrear && (
               <button onClick={() => navigate('/ordenes/nueva')}
                 className="mt-3 text-sm text-brand hover:underline">
                 + Crear la primera OT

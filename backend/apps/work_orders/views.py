@@ -11,9 +11,9 @@ from rest_framework.views import APIView
 
 from apps.audit.ip import client_ip
 from apps.audit.models import AuditLog
-from apps.users import scope
+from apps.users import permisos, scope
 from apps.users.models import User
-from apps.users.permissions import IsAdmin, IsAdminOrSup
+from apps.users.permissions import IsAdmin, IsGestorDeOT, TienePermiso
 
 from . import integrity
 from .integrity import verify_work_order
@@ -72,6 +72,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             "location",
             "assigned_to",
             "created_by",
+            "intervention_corrected_by",
         ).prefetch_related(
             "tasks__asset__hospital",
             "tasks__asset__node",
@@ -88,8 +89,10 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
 
         # Hospital o parte del arbol (apps.users.scope). Al tecnico no se le
         # aplica: ve lo que tiene asignado, y si se le asigna una OT de fuera de
-        # su alcance es porque alguien lo decidio.
-        if user.role in (User.Role.ADMIN, User.Role.SUP):
+        # su alcance es porque alguien lo decidio. Un tecnico con algun permiso
+        # sobre OT (revisar, asignar...) ve ademas las de su alcance: el permiso
+        # suma, pero no salta el limite de hospital.
+        if permisos.ve_ots_en_alcance(user):
             qs = scope.work_orders(qs, user)
         elif user.role == User.Role.TEC:
             qs = qs.filter(assigned_to=user)
@@ -176,7 +179,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
                 return WorkOrderFromTasksSerializer
             return WorkOrderCreateSerializer
         if self.action == "partial_update":
-            if self.request.user.role == User.Role.TEC:
+            if not permisos.edita_ot_completa(self.request.user):
                 return WorkOrderTechnicianUpdateSerializer
             return WorkOrderUpdateSerializer
         return WorkOrderDetailSerializer
@@ -188,7 +191,9 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             # Agrupar pendientes es trabajo del planificador, que en el diseno
             # es administrador o supervisor. El alta manual sigue solo para ADMIN.
-            return [IsAdminOrSup()] if self._from_tasks() else [IsAdmin()]
+            # Los dos son permisos que se pueden sumar a un tecnico.
+            codigo = "ot.crear_desde_pendientes" if self._from_tasks() else "ot.crear_manual"
+            return [TienePermiso(codigo)()]
         return [IsAuthenticated()]
 
     def create(self, request, *args, **kwargs):
@@ -209,13 +214,19 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if user.role not in (User.Role.ADMIN, User.Role.SUP, User.Role.TEC):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
-        if user.role == User.Role.TEC and wo.assigned_to_id != user.id:
+        if not permisos.edita_ot_completa(user) and wo.assigned_to_id != user.id:
             return Response(
                 {"detail": "Solo puedes editar tus propias OTs."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if blocked := _terminal_state_response(wo):
             return blocked
+        # Reasignar por esta via es lo mismo que "Asignar": pide el mismo permiso.
+        if "assigned_to" in request.data and not permisos.puede(user, "ot.asignar"):
+            return Response(
+                {"detail": "No tienes permiso para asignar OTs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         return super().partial_update(request, *args, **kwargs)
 
     # DELETE always returns 405 (http_method_names excludes 'delete', so this
@@ -249,7 +260,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def assign(self, request, pk=None):
-        if request.user.role != User.Role.ADMIN:
+        if not permisos.puede(request.user, "ot.asignar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
         # Segunda via de mutacion: `assign` no pasa por partial_update, asi que
@@ -288,6 +299,98 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             WorkOrderDetailSerializer(wo, context={"request": request}).data
         )
 
+    @action(detail=True, methods=["post"], url_path="correct-intervention")
+    def correct_intervention(self, request, pk=None):
+        """
+        Un administrador o supervisor fija la fecha de intervencion de una OT en
+        revision (decision del cliente, 2026-10): para cuando el reloj del
+        telefono estaba mal o la visita se cargo despues. No pisa lo calculado
+        de la hora del tecnico; queda aparte, con quien y cuando, y el valor
+        anterior va a la auditoria. El acta y el correo usan el corregido.
+        {"start": null, "end": null} quita la correccion.
+        """
+        from django.utils.dateparse import parse_datetime
+
+        from .device_time import TOLERANCIA
+
+        if not permisos.puede(request.user, "ot.revisar"):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        wo = self.get_object()
+        if wo.status != WorkOrder.Status.IN_REVIEW:
+            return Response(
+                {"detail": "Solo se corrige la fecha de una OT en revisión."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        crudo = {k: request.data.get(k) for k in ("start", "end")}
+        if crudo["start"] is None and crudo["end"] is None and {"start", "end"} <= set(request.data):
+            nuevo = {"start": None, "end": None}
+        else:
+            errores, nuevo = {}, {}
+            for k, v in crudo.items():
+                if v in (None, ""):
+                    errores[k] = "Indica la fecha y la hora."
+                    continue
+                try:
+                    dt = parse_datetime(str(v))
+                except ValueError:
+                    dt = None
+                if dt is None:
+                    errores[k] = "Fecha y hora no válidas."
+                    continue
+                if timezone.is_naive(dt):
+                    dt = timezone.make_aware(dt)
+                nuevo[k] = dt
+            if not errores:
+                ahora = timezone.now()
+                if nuevo["end"] < nuevo["start"]:
+                    errores["end"] = "El fin no puede ser antes del inicio."
+                for k in ("start", "end"):
+                    if k in errores:
+                        continue
+                    if nuevo[k] > ahora + TOLERANCIA:
+                        errores[k] = "No puede estar en el futuro."
+                    elif nuevo[k] < wo.created_at - TOLERANCIA:
+                        errores[k] = "No puede ser anterior a la creación de la OT."
+            if errores:
+                return Response(errores, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.reports.generator import field_facts
+
+        antes = {
+            "start": wo.intervention_start_override,
+            "end": wo.intervention_end_override,
+        }
+        if antes["start"] is None:
+            # Sin correccion previa, el valor anterior es el calculado.
+            calculado = (field_facts(wo)["field_work"] or {})
+            antes = {"start": calculado.get("start"), "end": calculado.get("end")}
+
+        quitar = nuevo["start"] is None
+        wo.intervention_start_override = nuevo["start"]
+        wo.intervention_end_override = nuevo["end"]
+        wo.intervention_corrected_by = None if quitar else request.user
+        wo.intervention_corrected_at = None if quitar else timezone.now()
+        wo.save(update_fields=[
+            "intervention_start_override", "intervention_end_override",
+            "intervention_corrected_by", "intervention_corrected_at", "updated_at",
+        ])
+        iso = lambda v: v.isoformat() if v else None  # noqa: E731
+        AuditLog.objects.create(
+            user=request.user,
+            action=AuditLog.Action.UPDATE,
+            entity_type="WorkOrder",
+            entity_id=wo.id,
+            changes={
+                "correccion": True,
+                "intervention_start": {"from": iso(antes["start"]), "to": iso(nuevo["start"])},
+                "intervention_end": {"from": iso(antes["end"]), "to": iso(nuevo["end"])},
+            },
+            ip_address=client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+        return self._detalle(wo)
+
     @action(detail=True, methods=["post"], url_path="regenerate-report")
     def regenerate_report(self, request, pk=None):
         """
@@ -324,7 +427,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
-        if request.user.role != User.Role.ADMIN:
+        if not permisos.puede(request.user, "ot.cancelar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
         comment = request.data.get("comment", "").strip()
@@ -360,7 +463,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         """Agrega tareas pendientes a una OT que aun no empezo."""
         from apps.maintenance import services
 
-        if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
+        if not permisos.puede(request.user, "tareas.planificar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
         entrada = TaskIdsSerializer(data=request.data, context={"request": request})
@@ -380,7 +483,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         """
         from apps.maintenance import services
 
-        if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
+        if not permisos.puede(request.user, "tareas.planificar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
         entrada = TaskIdsSerializer(
@@ -403,7 +506,7 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         """Cambia el checklist de una tarea de la OT, mientras nadie lo respondio."""
         from apps.maintenance import services
 
-        if request.user.role not in (User.Role.ADMIN, User.Role.SUP):
+        if not permisos.puede(request.user, "tareas.planificar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
         entrada = TaskChecklistSerializer(data=request.data, context={"work_order": wo})
@@ -458,7 +561,7 @@ class WorkOrderStatusHistoryViewSet(
     """
 
     serializer_class = WorkOrderStatusHistorySerializer
-    permission_classes = [IsAdminOrSup]
+    permission_classes = [IsGestorDeOT]
 
     def get_queryset(self):
         # Solo el historial de una OT que el usuario puede ver: un supervisor

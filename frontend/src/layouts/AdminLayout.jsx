@@ -9,6 +9,7 @@ import OfflineBanner from '../components/ui/OfflineBanner'
 import { useFindingsSummary } from '../api/findings'
 import { useContractsSummary } from '../api/contracts'
 import { useTaskTypes } from '../api/taskTypes'
+import { esGestor, puede, puedeAlguno, veOrdenes } from '../utils/permisos'
 
 const ROLE_LABELS = {
   ADMIN: 'Administrador',
@@ -26,7 +27,7 @@ const isNarrow = () => window.matchMedia('(max-width: 1023px)').matches
 const NAV_GROUPS = [
   {
     id: 'inicio',
-    links: [{ to: '/dashboard', label: 'Dashboard', icon: 'dashboard' }],
+    links: [{ to: '/dashboard', label: 'Dashboard', icon: 'dashboard', permiso: ['reportes.ver'] }],
   },
   {
     id: 'activos',
@@ -41,9 +42,10 @@ const NAV_GROUPS = [
     id: 'mantenimiento',
     title: 'Mantenimiento',
     links: [
-      { to: '/tareas-pendientes', label: 'Tareas pendientes', icon: 'clock' },
-      { to: '/hallazgos', label: 'Hallazgos', icon: 'warning', alertKey: 'findings' },
-      { to: '/ordenes', label: 'Ordenes de trabajo', icon: 'workOrder' },
+      { to: '/mis-ordenes', label: 'Mis órdenes', icon: 'wrench', soloTecnico: true },
+      { to: '/tareas-pendientes', label: 'Tareas pendientes', icon: 'clock', permiso: ['tareas.planificar', 'ot.crear_desde_pendientes'] },
+      { to: '/hallazgos', label: 'Hallazgos', icon: 'warning', alertKey: 'findings', permiso: ['hallazgos.decidir'] },
+      { to: '/ordenes', label: 'Ordenes de trabajo', icon: 'workOrder', ordenes: true },
       { to: '/planes-pm', label: 'Protocolos', icon: 'plan' },
       { to: '/calendario-pm', label: 'Calendario', icon: 'calendar' },
     ],
@@ -59,7 +61,7 @@ const NAV_GROUPS = [
     links: [
       { to: '/inventario', label: 'Inventario', icon: 'inventory', alertKey: 'inventory' },
       { to: '/usuarios', label: 'Usuarios', icon: 'users', adminOnly: true },
-      { to: '/reportes', label: 'Reportes', icon: 'report' },
+      { to: '/reportes', label: 'Reportes', icon: 'report', permiso: ['reportes.ver'] },
       { to: '/formato-acta', label: 'Formato del acta', icon: 'settings', adminOnly: true },
       { to: '/tipos-de-tarea', label: 'Tipos de tarea', icon: 'wrench', adminOnly: true },
       { to: '/auditoria', label: 'Auditoria', icon: 'audit', adminOnly: true },
@@ -71,6 +73,16 @@ const NAV_GROUPS = [
     links: [{ to: '/mi-perfil', label: 'Mi perfil', icon: 'profile' }],
   },
 ]
+
+// Un enlace se ve segun lo que el usuario puede hacer, no segun su rol: asi un
+// tecnico con permisos extra ve lo que le toca. Sin regla propia, es de gestion.
+function enlaceVisible(l, user) {
+  if (l.adminOnly) return user?.role === 'ADMIN'
+  if (l.soloTecnico) return user?.role === 'TEC'
+  if (l.ordenes) return veOrdenes(user)
+  if (l.permiso) return puedeAlguno(user, ...l.permiso)
+  return esGestor(user)
+}
 
 function navClasses({ isActive }) {
   return [
@@ -88,7 +100,7 @@ export default function AdminLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuthStore()
-  const { data: alertData } = useStockAlerts()
+  const { data: alertData } = useStockAlerts({ enabled: puedeAlguno(user, 'inventario.movimientos', 'inventario.articulos') })
   const [showLogo, setShowLogo] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     if (isNarrow()) return false
@@ -96,9 +108,9 @@ export default function AdminLayout() {
   })
   const lowStockCount = alertData?.low_stock_count ?? 0
   // Hallazgos esperando decisión del planificador (bloque E).
-  const { data: hallazgos } = useFindingsSummary()
+  const { data: hallazgos } = useFindingsSummary({ enabled: puede(user, 'hallazgos.decidir') })
   // Contratos y garantías por vencer en 60 días.
-  const { data: contratos } = useContractsSummary({ staleTime: 5 * 60_000 })
+  const { data: contratos } = useContractsSummary({ staleTime: 5 * 60_000, enabled: esGestor(user) })
   const alertas = {
     inventory: lowStockCount,
     findings: hallazgos?.pending ?? 0,
@@ -210,7 +222,7 @@ export default function AdminLayout() {
           <div className="w-60 h-full flex flex-col">
             <nav aria-label="Navegacion principal" className="flex-1 py-3 overflow-y-auto no-scrollbar">
               {NAV_GROUPS.map((group, gi) => {
-                const links = group.links.filter((l) => !l.adminOnly || user?.role === 'ADMIN')
+                const links = group.links.filter((l) => enlaceVisible(l, user))
                 if (links.length === 0) return null
                 return (
                   <div

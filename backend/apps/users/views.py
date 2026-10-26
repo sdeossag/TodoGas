@@ -13,9 +13,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.audit.services import LoginOutcome, log_login_attempt
 
+from . import permisos
 from .emails import send_password_reset_email, send_welcome_email
 from .models import User
-from .permissions import IsAdmin, IsAdminOrSup, IsOwnerOrAdmin
+from .permissions import IsAdmin, IsOwnerOrAdmin, TienePermiso
 from .serializers import (
     ChangePasswordSerializer,
     ResetPasswordRequestSerializer,
@@ -162,7 +163,11 @@ class UserViewSet(viewsets.ModelViewSet):
     - reset_password: ADMIN
     """
 
-    queryset = User.objects.select_related("hospital", "scope_node").order_by("last_name", "first_name")
+    queryset = (
+        User.objects.select_related("hospital", "scope_node")
+        .prefetch_related("permisos_extra")
+        .order_by("last_name", "first_name")
+    )
     serializer_class = UserSerializer
 
     def get_serializer_class(self):
@@ -174,8 +179,13 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
-            return [IsAdminOrSup()]
-        if self.action in ("deactivate", "reset_password", "create", "update", "partial_update", "destroy"):
+            # Quien asigna OT necesita ver a quien puede ejecutarlas; admin y
+            # supervisor lo traen por rol, a un tecnico se le suma con el permiso.
+            return [TienePermiso("ot.asignar", "ot.crear_manual")()]
+        if self.action in (
+            "deactivate", "reset_password", "create", "update", "partial_update", "destroy",
+            "permissions", "permissions_catalog",
+        ):
             return [IsAdmin()]
         return [IsAuthenticated()]
 
@@ -191,6 +201,36 @@ class UserViewSet(viewsets.ModelViewSet):
                 send_welcome_email(user, password)
             except Exception:
                 pass  # No falla si el email falla
+
+    @action(detail=False, methods=["get"], url_path="permissions-catalog")
+    def permissions_catalog(self, request):
+        """GET /api/users/permissions-catalog/ — las casillas de permisos adicionales."""
+        return Response(permisos.catalogo_para_api())
+
+    @action(detail=True, methods=["get", "put"], url_path="permissions")
+    def permissions(self, request, pk=None):
+        """
+        GET/PUT /api/users/{id}/permissions/ — permisos adicionales del usuario.
+        PUT {"permisos_extra": [codigos]} los deja exactamente asi; lo que el rol
+        ya trae no se guarda y una cuenta de hospital no puede recibir ninguno.
+        """
+        user = self.get_object()
+        if request.method == "PUT":
+            codigos = request.data.get("permisos_extra")
+            if not isinstance(codigos, list):
+                return Response(
+                    {"permisos_extra": "Manda la lista de permisos."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                permisos.establecer(user, codigos, por=request.user, request=request)
+            except ValueError as exc:
+                return Response({"permisos_extra": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            user = User.objects.get(pk=user.pk)
+        return Response({
+            "permisos_extra": permisos.extras_de(user),
+            "permisos": sorted(permisos.permisos_efectivos(user)),
+        })
 
     @action(detail=True, methods=["post"], url_path="deactivate")
     def deactivate(self, request, pk=None):

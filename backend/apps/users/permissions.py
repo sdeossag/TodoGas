@@ -1,5 +1,6 @@
 from rest_framework.permissions import BasePermission
 
+from . import permisos
 from .models import User
 
 
@@ -66,3 +67,46 @@ class IsAdminOrSupOrClient(BasePermission):
             request.user and request.user.is_authenticated
             and request.user.role in (User.Role.ADMIN, User.Role.SUP, User.Role.CLI)
         )
+
+
+# ── Permisos extra (apps.users.permisos) ─────────────────────────────────────
+
+class IsGestor(BasePermission):
+    """
+    Lectura de las pantallas de gestion: ADMIN, SUP o quien tenga algun permiso
+    extra. Reemplaza a IsAdminOrSup en las listas; lo que se cambia lo decide
+    cada permiso con TienePermiso.
+    """
+
+    def has_permission(self, request, view):
+        return permisos.es_gestor(request.user)
+
+
+class IsGestorOrClient(BasePermission):
+    """Como IsGestor, y ademas la cuenta de un hospital (que se limita a su alcance)."""
+
+    def has_permission(self, request, view):
+        u = request.user
+        return bool(u and u.is_authenticated and (u.role == User.Role.CLI or permisos.es_gestor(u)))
+
+
+class IsGestorDeOT(BasePermission):
+    """Ve las OT de su alcance (ADMIN, SUP o un tecnico con algun permiso sobre OT)."""
+
+    def has_permission(self, request, view):
+        return permisos.ve_ots_en_alcance(request.user)
+
+
+def TienePermiso(*codigos):
+    """
+    Clase de permiso de DRF: el usuario tiene alguno de `codigos`, por su rol o
+    como extra. `permission_classes = [TienePermiso("ot.revisar")]` o, en
+    get_permissions, `[TienePermiso("ot.revisar")()]`.
+    """
+
+    class _TienePermiso(BasePermission):
+        def has_permission(self, request, view):
+            return permisos.puede_alguno(request.user, *codigos)
+
+    _TienePermiso.__name__ = "TienePermiso_" + "_".join(c.replace(".", "_") for c in codigos)
+    return _TienePermiso

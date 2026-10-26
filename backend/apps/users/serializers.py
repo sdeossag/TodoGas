@@ -2,6 +2,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from . import permisos
 from .models import User
 
 
@@ -37,11 +38,43 @@ def _validar_alcance(attrs, instance=None):
     return attrs
 
 
+class _PermisosExtraMixin:
+    """
+    `permisos_extra`: los codigos que el administrador suma al rol (apps.users.
+    permisos). Entra en crear y editar; si no viene, no se toca. Una cuenta de
+    hospital no puede tenerlos y el servidor lo rechaza aunque la pantalla no
+    ofrezca las casillas.
+    """
+
+    def _validar_permisos_extra(self, attrs, rol):
+        if "permisos_extra" not in attrs:
+            return attrs
+        try:
+            permisos.normalizar(rol, attrs["permisos_extra"])
+        except ValueError as exc:
+            raise serializers.ValidationError({"permisos_extra": str(exc)}) from exc
+        return attrs
+
+    def _guardar_permisos_extra(self, user, codigos):
+        request = self.context.get("request")
+        permisos.establecer(user, codigos, por=getattr(request, "user", None), request=request)
+
+    def to_representation(self, instance):
+        datos = super().to_representation(instance)
+        datos["permisos_extra"] = permisos.extras_de(instance)
+        datos["permisos"] = sorted(permisos.permisos_efectivos(instance))
+        return datos
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Lectura pública de un usuario. No expone datos sensibles."""
 
     full_name = serializers.SerializerMethodField()
     scope_node_path = serializers.SerializerMethodField()
+    # Lo que puede hacer (rol + extras) y, aparte, lo que se le sumo: la app
+    # pinta los botones con el primero y el formulario de usuarios con ambos.
+    permisos = serializers.SerializerMethodField()
+    permisos_extra = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -49,9 +82,15 @@ class UserSerializer(serializers.ModelSerializer):
             "id", "email", "first_name", "last_name", "full_name",
             "role", "employee_code", "phone", "is_active",
             "must_change_password", "hospital", "scope_node", "scope_node_path",
-            "created_at", "updated_at",
+            "permisos", "permisos_extra", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "email", "created_at", "updated_at"]
+
+    def get_permisos(self, obj):
+        return sorted(permisos.permisos_efectivos(obj))
+
+    def get_permisos_extra(self, obj):
+        return permisos.extras_de(obj)
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip()
@@ -60,20 +99,25 @@ class UserSerializer(serializers.ModelSerializer):
         return obj.scope_node.path if obj.scope_node_id else None
 
 
-class UserCreateSerializer(serializers.ModelSerializer):
+class UserCreateSerializer(_PermisosExtraMixin, serializers.ModelSerializer):
     """Crea un usuario nuevo. Solo ADMIN puede usar este serializer."""
 
     password = serializers.CharField(write_only=True, required=True, style={"input_type": "password"})
+    permisos_extra = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True
+    )
 
     class Meta:
         model = User
         fields = [
             "email", "first_name", "last_name", "role",
             "employee_code", "phone", "hospital", "scope_node", "password",
+            "permisos_extra",
         ]
 
     def validate(self, attrs):
-        return _validar_alcance(attrs)
+        attrs = _validar_alcance(attrs)
+        return self._validar_permisos_extra(attrs, attrs.get("role", User.Role.TEC))
 
     def validate_password(self, value):
         try:
@@ -84,21 +128,28 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password")
+        extras = validated_data.pop("permisos_extra", None)
         user = User(**validated_data)
         user.set_password(password)
         user.must_change_password = True
         user.save()
+        if extras:
+            self._guardar_permisos_extra(user, extras)
         return user
 
 
-class UserUpdateSerializer(serializers.ModelSerializer):
+class UserUpdateSerializer(_PermisosExtraMixin, serializers.ModelSerializer):
     """Actualización parcial de un usuario existente (ADMIN o propio perfil)."""
+
+    permisos_extra = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True
+    )
 
     class Meta:
         model = User
         fields = [
             "first_name", "last_name", "phone", "employee_code",
-            "hospital", "scope_node", "is_active",
+            "hospital", "scope_node", "is_active", "permisos_extra",
         ]
 
     def validate(self, attrs):
@@ -108,7 +159,8 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             and getattr(attrs["hospital"], "pk", None) != self.instance.hospital_id
         ):
             attrs["scope_node"] = None
-        return _validar_alcance(attrs, self.instance)
+        attrs = _validar_alcance(attrs, self.instance)
+        return self._validar_permisos_extra(attrs, self.instance.role)
 
     def validate_is_active(self, value):
         # No existe una acción `activate`, así que reactivar sólo es posible por
@@ -120,9 +172,12 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
+        extras = validated_data.pop("permisos_extra", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+        if extras is not None:
+            self._guardar_permisos_extra(instance, extras)
         return instance
 
 

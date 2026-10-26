@@ -13,6 +13,20 @@ export const FIELD_TYPES = [
   { value: 'SIGNATURE',    label: 'Firma digital',         icon: 'signature',  hasOptions: false, hasMinMax: false, hasUnit: false },
 ]
 
+// Foto y Firma ya no se ofrecen en campos nuevos (audio3 05:10): la OT ya tiene
+// fotos de evidencia y firmas. Siguen existiendo en las versiones publicadas,
+// así que FIELD_TYPES las conserva (getFieldType, vista previa, ejecución) y la
+// paleta del constructor usa NEW_FIELD_TYPES. El servidor rechaza publicar una
+// versión nueva que los traiga.
+export const RETIRED_FIELD_TYPES = ['PHOTO', 'SIGNATURE']
+export const NEW_FIELD_TYPES = FIELD_TYPES.filter((ft) => !RETIRED_FIELD_TYPES.includes(ft.value))
+
+/** Separa los campos que ya no se pueden publicar de los que sí. */
+export function withoutRetiredFields(fields) {
+  const kept = fields.filter((f) => !RETIRED_FIELD_TYPES.includes(f.field_type))
+  return { kept, removed: fields.length - kept.length }
+}
+
 // Sí/No/N/A (decisión del 2026-09-24): el N/A es una opción del Sí/No y el
 // campo guarda 'true', 'false' o 'na'.
 export function allowsNa(field) {

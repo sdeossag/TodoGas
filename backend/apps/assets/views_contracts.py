@@ -8,7 +8,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.users import scope
-from apps.users.permissions import IsAdmin, IsAdminOrSup, IsAdminOrSupOrClient
+from apps.users.permissions import IsGestor, IsGestorOrClient, TienePermiso
 
 from .contracts import hoy, hospitales_sin_contrato, renovado, resumen
 from .models import Contract
@@ -32,10 +32,10 @@ class ContractViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
-            return [IsAdminOrSupOrClient()]
+            return [IsGestorOrClient()]
         if self.action == "summary":
-            return [IsAdminOrSup()]
-        return [IsAdmin()]
+            return [IsGestor()]
+        return [TienePermiso("contratos.gestionar")()]
 
     def get_queryset(self):
         qs = scope.contracts(

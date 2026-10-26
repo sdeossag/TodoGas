@@ -2,7 +2,7 @@ from django.db.models import Min
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from apps.assets.models import Asset
+from apps.assets.models import Asset, AssetNode
 from apps.checklists.models import ChecklistTemplate
 from apps.users import scope
 from apps.users.scope import ScopedFieldsMixin
@@ -95,8 +95,10 @@ class MaintenancePlanDetailSerializer(MaintenancePlanListSerializer):
                 "name": a.name,
                 "status": a.status,
                 "hospital": {"id": str(a.hospital_id), "name": a.hospital.name},
+                "node_id": str(a.node_id) if a.node_id else None,
                 "node_path": a.node.path if a.node_id else "",
                 "next_due_date": proximas.get(a.id),
+                "is_location": a.represents_node_id is not None,
             }
             for a in scope.assets(obj.assets.select_related("hospital", "node"), user).order_by("code")
         ]
@@ -123,6 +125,15 @@ class MaintenancePlanCreateUpdateSerializer(serializers.ModelSerializer):
 class AssetIdsSerializer(serializers.Serializer):
     asset_ids = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Asset.objects.select_related("plan"), allow_empty=False,
+    )
+
+
+class NodeIdsSerializer(ScopedFieldsMixin, serializers.Serializer):
+    """Ubicaciones a las que se asigna un protocolo (dentro del alcance)."""
+
+    scoped_fields = {"node_ids": "nodes"}
+    node_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=AssetNode.objects.select_related("hospital"), allow_empty=False,
     )
 
 
@@ -323,6 +334,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "name": a.name,
             "node_id": str(a.node_id) if a.node_id else None,
             "node_path": a.node.path if a.node_id else "",
+            "is_location": a.represents_node_id is not None,
         }
 
     def get_hospital(self, obj):

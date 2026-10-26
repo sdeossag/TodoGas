@@ -2,6 +2,8 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from apps.users import permisos
+
 from .models import WorkOrder, WorkOrderStatusHistory
 
 # Quien puede quedar como asignado de una OT y ejecutarla. Ademas del tecnico,
@@ -21,12 +23,14 @@ ALLOWED_TRANSITIONS = {
         "roles": list(EXECUTOR_ROLES),
         "require_assignee": True,
     },
+    # Aprobar y devolver son del permiso "revisar" (admin y supervisor lo traen;
+    # a un tecnico se le puede sumar, apps.users.permisos).
     (WorkOrder.Status.IN_REVIEW, WorkOrder.Status.COMPLETED): {
-        "roles": ["ADMIN", "SUP"],
+        "permiso": "ot.revisar",
         "require_assignee": False,
     },
     (WorkOrder.Status.IN_REVIEW, WorkOrder.Status.IN_PROGRESS): {
-        "roles": ["ADMIN", "SUP"],
+        "permiso": "ot.revisar",
         "require_assignee": False,
     },
 }
@@ -46,8 +50,8 @@ def validate_transition(work_order, new_status, user, comment=""):
             raise ValidationError(
                 f"No se puede cancelar una OT en estado '{from_status}'."
             )
-        if user.role != "ADMIN":
-            raise ValidationError("Solo un ADMIN puede cancelar una OT.")
+        if not permisos.puede(user, "ot.cancelar"):
+            raise ValidationError("No tienes permiso para cancelar una OT: es del ADMIN o de quien él habilite.")
         if not comment:
             raise ValidationError("Se requiere un comentario para cancelar una OT.")
         return True
@@ -60,7 +64,11 @@ def validate_transition(work_order, new_status, user, comment=""):
 
     rule = ALLOWED_TRANSITIONS[key]
 
-    if user.role not in rule["roles"]:
+    if "permiso" in rule:
+        permitido = permisos.puede(user, rule["permiso"])
+    else:
+        permitido = user.role in rule["roles"]
+    if not permitido:
         raise ValidationError(
             f"Tu rol '{user.role}' no puede realizar la transición "
             f"'{from_status}' → '{new_status}'."
