@@ -45,3 +45,16 @@ transcripts/
 
 # Restos de pruebas de render en servidor
 frontend/__*
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.plan
+crash.log
+
+# Audios de las revisiones con el cliente
+audios-neuvareu/
+# Grabaciones sueltas en la raiz y capturas de control de la presentacion
+Nueva grabaci*
+docs/presentacion/qc/

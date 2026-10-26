@@ -19,6 +19,7 @@ evidence, inventory, audit, reports, notifications
 - on_delete=models.PROTECT siempre, nunca CASCADE
 - AUTH_USER_MODEL = 'users.User'
 - Los modelos estan en models_complete.py en la raiz
+- En los commits, no pongas co authored, ni que tu me ayudaste ni nada de eso
 
 ## graphify
 
