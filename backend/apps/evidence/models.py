@@ -104,3 +104,30 @@ class Signature(models.Model):
 
     def __str__(self):
         return f"Firma {self.signature_type} OT-{self.work_order.wo_number}"
+
+
+class UserSignature(models.Model):
+    """
+    Firma que un usuario del sistema (tecnico, supervisor, administrador)
+    registra una vez para no dibujarla en cada OT. Es un dato personal: solo la
+    ve y la usa su duena, y puede reemplazarla o borrarla cuando quiera.
+
+    No es la firma de la OT: al aplicarla se hace una copia propia en Signature,
+    asi cambiarla o borrarla despues no altera las actas ya firmadas. La firma
+    de quien recibe en el hospital (CLIENT) no se guarda nunca.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        "users.User", on_delete=models.PROTECT, related_name="saved_signature"
+    )
+    file_url = models.CharField(max_length=500)
+    file_hash = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "evidence_usersignature"
+
+    def __str__(self):
+        return f"Firma guardada de {self.user_id}"

@@ -145,6 +145,21 @@ export const MIGRATIONS = [
       await addColumn(driver, 'offline_photos', 'stage', "TEXT DEFAULT ''")
     },
   },
+  {
+    // Firma guardada del usuario (revision del 23-oct-2026): copia local de su
+    // firma para usarla sin red. Tabla nueva, una fila por usuario del telefono
+    // (varios tecnicos pueden compartir el equipo); no toca nada de la cola.
+    version: 7,
+    async up(driver) {
+      await driver.execute(
+        `CREATE TABLE IF NOT EXISTS saved_signature (
+           user_id TEXT PRIMARY KEY,
+           image_base64 TEXT NOT NULL,
+           updated_at TEXT
+         )`
+      )
+    },
+  },
 ]
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

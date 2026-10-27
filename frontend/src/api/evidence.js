@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
 import { fetchAllPages } from './pagination'
+import {
+  clearMySignatureLocal,
+  getMySignatureLocal,
+  saveMySignatureLocal,
+} from '../db/repositories'
+import useAuthStore from '../store/authStore'
+import useNetworkStore from '../store/networkStore'
+import { elegirFirmaGuardada, puedeTenerFirmaGuardada } from '../utils/firmaGuardada'
 
 export function useWorkOrderPhotos(workOrderId) {
   return useQuery({
@@ -62,11 +70,14 @@ export function useWorkOrderSignatures(workOrderId) {
 export function useCreateSignature() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ work_order, image_data, signer_name, signer_role, signature_type }) =>
+    mutationFn: ({ work_order, image_data, use_saved, signer_name, signer_role, signature_type }) =>
       client
         .post('/api/evidence/signatures/', {
           work_order,
-          image_data: image_data.replace(/^data:image\/\w+;base64,/, ''),
+          // Con use_saved el servidor copia la firma guardada del usuario.
+          ...(use_saved
+            ? { use_saved: true }
+            : { image_data: image_data.replace(/^data:image\/\w+;base64,/, '') }),
           signer_name,
           signer_role,
           ...(signature_type ? { signature_type } : {}),
@@ -75,6 +86,75 @@ export function useCreateSignature() {
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['signatures', variables.work_order] })
       qc.invalidateQueries({ queryKey: ['work-orders', variables.work_order] })
+    },
+  })
+}
+
+// ── Firma guardada del usuario ───────────────────────────────────────────────
+
+/**
+ * Trae la firma guardada del servidor y deja una copia en el telefono (o la
+ * borra de alli si ya no existe), para poder usarla sin red.
+ * Devuelve la respuesta del servidor, o null si no hubo.
+ */
+export async function cacheMySignature(user) {
+  if (!user?.id || !puedeTenerFirmaGuardada(user.role)) return null
+  try {
+    const { data } = await client.get('/api/evidence/my-signature/')
+    if (data?.exists && data.image_data) await saveMySignatureLocal(user.id, data.image_data)
+    else await clearMySignatureLocal(user.id)
+    return data
+  } catch {
+    return null
+  }
+}
+
+/**
+ * La firma guardada del usuario actual: del servidor con red, de la copia del
+ * telefono sin ella. { dataUrl, origen } (ver elegirFirmaGuardada).
+ */
+export function useMySignature() {
+  const user = useAuthStore((s) => s.user)
+  const isOnline = useNetworkStore((s) => s.isOnline)
+  return useQuery({
+    queryKey: ['my-signature', user?.id ?? null, isOnline],
+    queryFn: async () => {
+      const remota = isOnline ? await cacheMySignature(user) : null
+      const local = remota ? null : await getMySignatureLocal(user.id)
+      return elegirFirmaGuardada({ remota, local })
+    },
+    enabled: !!user?.id && puedeTenerFirmaGuardada(user.role),
+    staleTime: 60_000,
+    // Sin red lee SQLite; con el modo por defecto la consulta se pausaria.
+    networkMode: 'always',
+  })
+}
+
+export function useSaveMySignature() {
+  const qc = useQueryClient()
+  const user = useAuthStore((s) => s.user)
+  return useMutation({
+    mutationFn: (image_data) =>
+      client
+        .put('/api/evidence/my-signature/', {
+          image_data: image_data.replace(/^data:image\/\w+;base64,/, ''),
+        })
+        .then((r) => r.data),
+    onSuccess: async (data) => {
+      await saveMySignatureLocal(user?.id, data.image_data)
+      qc.invalidateQueries({ queryKey: ['my-signature'] })
+    },
+  })
+}
+
+export function useDeleteMySignature() {
+  const qc = useQueryClient()
+  const user = useAuthStore((s) => s.user)
+  return useMutation({
+    mutationFn: () => client.delete('/api/evidence/my-signature/').then((r) => r.data),
+    onSuccess: async () => {
+      await clearMySignatureLocal(user?.id)
+      qc.invalidateQueries({ queryKey: ['my-signature'] })
     },
   })
 }

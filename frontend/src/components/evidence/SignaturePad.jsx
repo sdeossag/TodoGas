@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { useCreateSignature } from '../../api/evidence'
+import { useCreateSignature, useMySignature } from '../../api/evidence'
 import { saveSignatureOffline } from '../../db/repositories'
+import useAuthStore from '../../store/authStore'
 import useNetworkStore from '../../store/networkStore'
+import { base64DeDataUrl, cargoDelFirmante } from '../../utils/firmaGuardada'
 
 function extractError(err) {
   const data = err?.response?.data
@@ -19,6 +21,11 @@ export default function SignaturePad({
   signatureType = 'TECHNICIAN',
   disabled = false,
   onSuccess,
+  // Modo "registrar mi firma": solo dibuja y entrega la imagen (data URL) a
+  // onCapture; no pide nombre ni cargo y no la sube a ninguna OT.
+  onCapture,
+  captureLabel = 'Guardar firma',
+  captureBusy = false,
 }) {
   const canvasRef = useRef(null)
   const isDrawing = useRef(false)
@@ -35,7 +42,16 @@ export default function SignaturePad({
   const refreshPendingCount = useNetworkStore((s) => s.refreshPendingCount)
 
   const createSignature = useCreateSignature()
-  const busy = createSignature.isPending || savingOffline
+  const busy = createSignature.isPending || savingOffline || captureBusy
+
+  // Firma guardada del usuario: solo para la del tecnico (la de quien recibe
+  // se dibuja siempre) y nunca en el modo de registrarla.
+  const user = useAuthStore((s) => s.user)
+  const ofreceGuardada = !onCapture && signatureType === 'TECHNICIAN'
+  const { data: guardada } = useMySignature()
+  const firmaGuardada = ofreceGuardada ? guardada?.dataUrl ?? null : null
+  const [dibujarAMano, setDibujarAMano] = useState(false)
+  const mostrandoGuardada = !!firmaGuardada && !dibujarAMano
 
   function initCtx(ctx, w, h) {
     ctx.fillStyle = '#ffffff'
@@ -64,7 +80,7 @@ export default function SignaturePad({
     resizeCanvas()
     window.addEventListener('resize', resizeCanvas)
     return () => window.removeEventListener('resize', resizeCanvas)
-  }, [disabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [disabled, mostrandoGuardada]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function getPos(e) {
     const canvas = canvasRef.current
@@ -134,15 +150,15 @@ export default function SignaturePad({
    * Deja la firma en SQLite. syncSignatures() la sube al recuperar la conexion,
    * respetando el signature_type con el que se capturo.
    */
-  async function saveOffline(base64) {
+  async function saveOffline(base64, firmante = null) {
     setSavingOffline(true)
     try {
       const localId = await saveSignatureOffline({
         work_order_id: workOrderId,
         signature_type: signatureType,
         image_base64: base64,
-        signer_name: signerName.trim(),
-        signer_role: signerRole.trim(),
+        signer_name: firmante ? firmante.nombre : signerName.trim(),
+        signer_role: firmante ? firmante.cargo : signerRole.trim(),
         latitude: null,
         longitude: null,
         signed_at: new Date().toISOString(),
@@ -162,11 +178,53 @@ export default function SignaturePad({
     }
   }
 
+  /**
+   * Aplica la firma guardada: con red el servidor la copia a la OT; sin red se
+   * deja la imagen del telefono en la cola y sube al reconectar. En ambos casos
+   * la OT queda con su propia copia.
+   */
+  async function usarGuardada() {
+    setValidationError('')
+    setApiError('')
+    const firmante = user?.full_name || `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim()
+    if (!firmante) {
+      setApiError('No se pudo saber el nombre del firmante.')
+      return
+    }
+    const cargo = cargoDelFirmante(user?.role)
+    if (!isOnline) {
+      await saveOffline(base64DeDataUrl(firmaGuardada), { nombre: firmante, cargo })
+      return
+    }
+    createSignature.mutate(
+      {
+        work_order: workOrderId,
+        signature_type: signatureType,
+        use_saved: true,
+        signer_name: firmante,
+        signer_role: cargo,
+      },
+      {
+        onSuccess: () => {
+          setSuccess(true)
+          setTimeout(() => setSuccess(false), 4000)
+          onSuccess?.()
+        },
+        onError: (err) => setApiError(extractError(err)),
+      }
+    )
+  }
+
   async function handleSubmit() {
     setValidationError('')
     setApiError('')
     if (!hasStrokes) {
       setValidationError('Por favor firme en el area antes de guardar.')
+      return
+    }
+    if (onCapture) {
+      await onCapture(canvasRef.current.toDataURL('image/png'))
+      clearCanvas()
       return
     }
     if (!signerName.trim()) {
@@ -210,8 +268,51 @@ export default function SignaturePad({
     )
   }
 
+  if (mostrandoGuardada) {
+    return (
+      <div className="space-y-3">
+        <div className="border border-gray-200 rounded-lg bg-white p-3 inline-block max-w-full">
+          <img src={firmaGuardada} alt="Tu firma guardada" className="max-h-28 max-w-full" />
+        </div>
+        {!isOnline && (
+          <p className="text-xs text-amber-600">
+            Sin conexion: la firma se guardara en el dispositivo y se subira al reconectar.
+          </p>
+        )}
+        {apiError && <p className="text-sm text-red-500">{apiError}</p>}
+        {success && <p className="text-sm text-green-600">Firma guardada correctamente.</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={usarGuardada}
+            disabled={busy}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand/90 disabled:opacity-60 transition-colors"
+          >
+            {busy ? 'Guardando...' : 'Usar mi firma guardada'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDibujarAMano(true)}
+            className="text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            Dibujar a mano
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
+      {firmaGuardada && (
+        <button
+          type="button"
+          onClick={() => setDibujarAMano(false)}
+          className="text-sm text-gray-500 hover:text-gray-700 underline"
+        >
+          Usar mi firma guardada
+        </button>
+      )}
       <div>
         <canvas
           ref={canvasRef}
@@ -234,6 +335,7 @@ export default function SignaturePad({
         </button>
       </div>
 
+      {!onCapture && (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -260,8 +362,9 @@ export default function SignaturePad({
           />
         </div>
       </div>
+      )}
 
-      {!isOnline && (
+      {!onCapture && !isOnline && (
         <p className="text-xs text-amber-600">
           Sin conexion: la firma se guardara en el dispositivo y se subira al reconectar.
         </p>
@@ -273,7 +376,7 @@ export default function SignaturePad({
       <button
         type="button"
         onClick={handleSubmit}
-        disabled={busy || !hasStrokes || !signerName.trim()}
+        disabled={busy || !hasStrokes || (!onCapture && !signerName.trim())}
         className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand/90 disabled:opacity-60 transition-colors"
       >
         {busy && (
@@ -282,7 +385,7 @@ export default function SignaturePad({
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
         )}
-        {busy ? 'Guardando...' : 'Guardar firma'}
+        {busy ? 'Guardando...' : onCapture ? captureLabel : 'Guardar firma'}
       </button>
     </div>
   )

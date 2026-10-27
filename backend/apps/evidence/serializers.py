@@ -11,7 +11,7 @@ from apps.maintenance.models import Task
 from apps.work_orders.device_time import device_time
 from apps.work_orders.models import Finding, WorkOrder
 
-from .models import Photo, Signature
+from .models import Photo, Signature, UserSignature
 
 MAX_PHOTO_BYTES = 10 * 1024 * 1024  # 10 MB
 ALLOWED_IMAGE_EXTS = {"jpg", "jpeg", "png", "webp"}
@@ -194,7 +194,10 @@ class SignatureSerializer(serializers.ModelSerializer):
 
 class SignatureCreateSerializer(serializers.Serializer):
     work_order = serializers.PrimaryKeyRelatedField(queryset=WorkOrder.objects.all())
-    image_data = serializers.CharField()
+    # Sin image_data solo vale con use_saved: la imagen sale de la firma que el
+    # usuario guardo y se copia a la OT.
+    image_data = serializers.CharField(required=False)
+    use_saved = serializers.BooleanField(required=False, default=False)
     signer_name = serializers.CharField(max_length=200)
     signer_role = serializers.CharField(max_length=100, required=False, default="", allow_blank=True)
     signature_type = serializers.ChoiceField(
@@ -230,6 +233,20 @@ class SignatureCreateSerializer(serializers.Serializer):
     def validate(self, data):
         work_order = data["work_order"]
         sig_type = data.get("signature_type", Signature.SignatureType.TECHNICIAN)
+        if data.get("use_saved"):
+            # La firma de quien recibe se dibuja siempre; la guardada es del
+            # usuario del sistema y solo sirve para la del tecnico.
+            if sig_type != Signature.SignatureType.TECHNICIAN:
+                raise serializers.ValidationError(
+                    "La firma guardada solo se usa como firma del tecnico."
+                )
+            user = self.context["request"].user
+            if not UserSignature.objects.filter(user=user).exists():
+                raise serializers.ValidationError(
+                    "No tienes una firma guardada. Registrala en tu perfil."
+                )
+        elif not data.get("image_data"):
+            raise serializers.ValidationError({"image_data": "Este campo es requerido."})
         if Signature.objects.filter(work_order=work_order, signature_type=sig_type).exists():
             raise serializers.ValidationError(
                 f"Ya existe una firma de tipo '{sig_type}' para esta OT."
@@ -237,8 +254,14 @@ class SignatureCreateSerializer(serializers.Serializer):
         return data
 
     def create(self, validated_data):
-        image_data = validated_data["image_data"]
-        img_bytes = base64.b64decode(image_data)
+        if validated_data.get("use_saved"):
+            # Copia de la firma guardada: otro archivo y otra fila, para que
+            # cambiarla o borrarla despues no toque esta OT ni su acta.
+            saved = UserSignature.objects.get(user=self.context["request"].user)
+            with default_storage.open(saved.file_url) as f:
+                img_bytes = f.read()
+        else:
+            img_bytes = base64.b64decode(validated_data["image_data"])
         file_hash = hashlib.sha256(img_bytes).hexdigest()
 
         work_order = validated_data["work_order"]

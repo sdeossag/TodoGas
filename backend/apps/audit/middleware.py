@@ -11,6 +11,7 @@ from .services import AUTH_ENTITY_TYPE
 logger = logging.getLogger(__name__)
 
 _PATH_ENTITY_MAP = [
+    ('/api/evidence/my-signature/', 'UserSignature'),
     ('/api/evidence/photos/', 'Photo'),
     ('/api/evidence/signatures/', 'Signature'),
     ('/api/asset-nodes/', 'AssetNode'),

@@ -236,7 +236,7 @@ test('la v6 agrega la etiqueta de la foto sin tocar las que esperan subir', asyn
   const antes = await pendientes(d)
 
   assert.equal(await migrate(d), LATEST_VERSION)
-  assert.equal(LATEST_VERSION, 6)
+  assert.ok(LATEST_VERSION >= 6)
   assert.ok((await columnas(d, 'offline_photos')).includes('stage'))
   assert.deepEqual(await pendientes(d), antes)
 
@@ -261,4 +261,36 @@ test('la v6 se puede repetir sobre una base que ya la tiene', async () => {
   assert.equal(await migrate(d), LATEST_VERSION)
   const cols = (await columnas(d, 'offline_photos')).filter((c) => c === 'stage')
   assert.equal(cols.length, 1)
+})
+
+test('la v7 agrega la firma guardada sin tocar lo que esta en cola', async () => {
+  const { d } = await baseV1ConPendientes()
+  await d.execute('PRAGMA user_version = 6')
+  const antes = await pendientes(d)
+
+  assert.equal(await migrate(d), LATEST_VERSION)
+  assert.equal(LATEST_VERSION, 7)
+  assert.deepEqual(await pendientes(d), antes)
+  assert.ok((await columnas(d, 'saved_signature')).includes('image_base64'))
+
+  // Una firma por usuario: guardar otra reemplaza, y otro usuario no la pisa.
+  await d.run(`INSERT OR REPLACE INTO saved_signature (user_id, image_base64) VALUES ('tec-1', 'AAAA')`)
+  await d.run(`INSERT OR REPLACE INTO saved_signature (user_id, image_base64) VALUES ('tec-1', 'BBBB')`)
+  await d.run(`INSERT OR REPLACE INTO saved_signature (user_id, image_base64) VALUES ('tec-2', 'CCCC')`)
+  const filas = await d.query('SELECT user_id, image_base64 FROM saved_signature ORDER BY user_id')
+  assert.deepEqual(filas, [
+    { user_id: 'tec-1', image_base64: 'BBBB' },
+    { user_id: 'tec-2', image_base64: 'CCCC' },
+  ])
+})
+
+test('la v7 se puede repetir sobre una base que ya la tiene', async () => {
+  const { d } = await baseV1ConPendientes()
+  await migrate(d)
+  await d.run(`INSERT INTO saved_signature (user_id, image_base64) VALUES ('tec-1', 'AAAA')`)
+  await d.execute('PRAGMA user_version = 6')
+
+  assert.equal(await migrate(d), LATEST_VERSION)
+  const [fila] = await d.query("SELECT image_base64 FROM saved_signature WHERE user_id = 'tec-1'")
+  assert.equal(fila.image_base64, 'AAAA')
 })

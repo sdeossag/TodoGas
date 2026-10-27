@@ -5,6 +5,8 @@ import { useHospital } from '../../api/assets'
 import { useClientPortalSummary } from '../../api/clientPortal'
 import PasswordStrength, { getStrength } from '../../components/ui/PasswordStrength'
 import { RoleBadge } from './UsersPage'
+import MiFirmaGuardada from '../../components/evidence/MiFirmaGuardada'
+import { puedeTenerFirmaGuardada } from '../../utils/firmaGuardada'
 
 const inputCls =
   'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30'
@@ -117,6 +119,8 @@ export default function ProfilePage() {
           {user.phone && <Field label="Telefono">{user.phone}</Field>}
         </div>
       </section>
+
+      {puedeTenerFirmaGuardada(user.role) && <MiFirmaGuardada />}
 
       <section className="bg-white rounded-xl border border-gray-200 shadow-card p-5">
         <h2 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">

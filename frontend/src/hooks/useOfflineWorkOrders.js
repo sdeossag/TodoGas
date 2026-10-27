@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
+import { cacheMySignature } from '../api/evidence'
 import { downloadOfflineBundles, fetchWorkOrders } from '../api/workOrders'
 import {
   getOfflineWorkOrders,
@@ -35,6 +36,8 @@ export function useOfflineWorkOrders(params = {}) {
         try {
           await saveWorkOrdersOffline(rows)
           downloadOfflineBundles()
+          // Su firma guardada tambien queda en el telefono, para usarla sin red.
+          cacheMySignature(user)
         } catch (error) {
           console.warn('[offline] no se pudieron cachear las OT:', error?.message ?? error)
         }

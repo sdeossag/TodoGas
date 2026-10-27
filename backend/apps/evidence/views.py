@@ -11,7 +11,7 @@ from apps.users import permisos, scope
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 
-from .models import Photo, Signature
+from .models import Photo, Signature, UserSignature
 from .serializers import (
     PhotoCreateSerializer,
     PhotoSerializer,
@@ -250,6 +250,7 @@ class SignatureViewSet(viewsets.GenericViewSet):
                 "work_order": str(wo.id),
                 "signature_type": sig.signature_type,
                 "signer_name": sig.signer_name,
+                **({"firma_guardada": True} if serializer.validated_data.get("use_saved") else {}),
             },
             ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),

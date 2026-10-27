@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { Preferences } from '@capacitor/preferences'
 import client from '../api/client'
+import { clearMySignatureLocal } from '../db/repositories'
 
 const CACHED_USER_KEY = 'cached_user'
 
@@ -34,6 +35,19 @@ async function clearCachedUser() {
   }
 }
 
+/**
+ * Borra la firma guardada del usuario en la base local. Sin SQLite (navegador)
+ * no hay nada que borrar: el fallo se registra y el logout sigue.
+ */
+async function clearSavedSignature(userId) {
+  if (!userId) return
+  try {
+    await clearMySignatureLocal(userId)
+  } catch (error) {
+    console.warn('[auth] no se pudo borrar la firma guardada:', error?.message ?? error)
+  }
+}
+
 const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
@@ -52,6 +66,7 @@ const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     const refresh = localStorage.getItem('refresh_token')
+    const userId = get().user?.id
     try {
       if (refresh) {
         await client.post('/api/auth/logout/', { refresh })
@@ -62,6 +77,7 @@ const useAuthStore = create((set, get) => ({
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       await clearCachedUser()
+      await clearSavedSignature(userId)
       set({ user: null, isAuthenticated: false, isSessionFromCache: false })
     }
   },
