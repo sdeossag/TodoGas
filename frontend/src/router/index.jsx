@@ -59,10 +59,13 @@ function Spinner() {
   )
 }
 
-/** "Mi perfil" usa el layout del rol: el técnico el suyo, admin y supervisor el de administración. */
+/** "Mi perfil" usa el layout del rol: técnico, cuenta de hospital (CLI) o administración (ADMIN y SUP). */
 function PerfilLayout() {
   const role = useAuthStore((s) => s.user?.role)
-  return layoutPerfil(role) === 'tecnico' ? <TechnicianLayout /> : <AdminLayout />
+  const layout = layoutPerfil(role)
+  if (layout === 'tecnico') return <TechnicianLayout />
+  if (layout === 'cliente') return <ClientLayout />
+  return <AdminLayout />
 }
 
 function ProtectedRoute({ allowedRoles, gestion = false, redirectTo }) {
@@ -136,9 +139,9 @@ export const router = createBrowserRouter(
       ],
     },
 
-    // Mi perfil compartido: ADMIN y SUP con AdminLayout, TEC con TechnicianLayout.
+    // Mi perfil compartido: ADMIN y SUP con AdminLayout, TEC con TechnicianLayout, CLI con ClientLayout.
     {
-      element: <ProtectedRoute allowedRoles={['ADMIN', 'SUP', 'TEC']} />,
+      element: <ProtectedRoute allowedRoles={['ADMIN', 'SUP', 'TEC', 'CLI']} />,
       children: [
         {
           path: '/mi-perfil',
@@ -174,7 +177,6 @@ export const router = createBrowserRouter(
             { path: '/mis-activos/:id', element: <ClientAssetPage /> },
             { path: '/historial/:id', element: <ClientWorkOrderPage /> },
             { path: '/mis-reportes', element: <ClientReportsPage /> },
-            { path: '/mi-perfil', element: <ProfilePage /> },
           ],
         },
       ],

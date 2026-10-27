@@ -12,6 +12,10 @@ test('admin y supervisor ven Mi perfil dentro del layout de administración', ()
   assert.equal(layoutPerfil('SUP'), 'administracion')
 })
 
+test('la cuenta de hospital (CLI) ve Mi perfil dentro de su propio layout', () => {
+  assert.equal(layoutPerfil('CLI'), 'cliente')
+})
+
 test('sin rol conocido cae en administración (la puerta ya filtró el acceso)', () => {
   assert.equal(layoutPerfil(undefined), 'administracion')
 })
