@@ -123,6 +123,160 @@ def send_report_email(self, work_order_id):
         raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))
 
 
+def _url_del_acta(report):
+    """Enlace al PDF si el almacenamiento da uno absoluto; si no, a la OT en la plataforma."""
+    try:
+        url = default_storage.url(report.file_url)
+    except Exception:
+        url = ""
+    if url.startswith("http"):
+        return url
+    return f"{settings.FRONTEND_URL}/ordenes/{report.work_order_id}"
+
+
+def _armar_lotes(items, limite):
+    """
+    Reparte las actas en lotes cuyos adjuntos suman <= limite. Un PDF que solo
+    ya supera el limite no se adjunta (item["pdf"] = None): viaja como enlace
+    en el lote abierto en ese momento.
+    """
+    lotes, actual, peso = [], [], 0
+    for item in items:
+        if len(item["pdf"]) > limite:
+            item["pdf"] = None
+            item["oversize"] = True
+            actual.append(item)
+            continue
+        tam = len(item["pdf"])
+        if actual and peso + tam > limite:
+            lotes.append(actual)
+            actual, peso = [], 0
+        actual.append(item)
+        peso += tam
+    if actual:
+        lotes.append(actual)
+    return lotes
+
+
+@shared_task(bind=True, max_retries=3)
+def send_reports_bundle(self, hospital_id, report_ids):
+    """
+    Reenvia varias actas de un hospital con los PDF adjuntos, en uno o varios
+    correos segun settings.REPORTS_EMAIL_MAX_BYTES.
+
+    Reintentos: se procesa lote a lote; los lotes enviados no se repiten. Si
+    alguno falla, se anota el fallo en ReportSendLog de sus actas y el reintento
+    se encola solo con las actas de los lotes fallidos (args nuevos), asi nunca
+    se reenvia lo que ya salio. Sin reintentos disponibles (o en modo eager) se
+    devuelve el resumen con lo que fallo.
+    """
+    from apps.assets.models import Hospital
+
+    hospital = Hospital.objects.get(id=hospital_id)
+    if not hospital.contact_email:
+        return {"status": "skipped", "reason": "no email"}
+    to = hospital.contact_email
+
+    reportes = {
+        str(r.id): r
+        for r in GeneratedReport.objects.filter(id__in=report_ids).select_related("work_order")
+    }
+    items, ilegibles = [], []
+    nombres = set()
+    for rid in report_ids:
+        r = reportes.get(str(rid))
+        if r is None or r.work_order_id is None:
+            continue
+        try:
+            with default_storage.open(r.file_url, "rb") as f:
+                pdf = f.read()
+        except Exception as exc:
+            logger.exception("No se pudo leer el PDF del acta %s: %s", rid, exc)
+            ilegibles.append((r, str(exc)))
+            continue
+        wo = r.work_order
+        nombre = f"{wo.wo_code}.pdf"
+        if nombre in nombres:
+            nombre = f"{wo.wo_code}-{str(r.id)[:8]}.pdf"
+        nombres.add(nombre)
+        items.append({"report": r, "wo": wo, "pdf": pdf, "name": nombre, "oversize": False})
+
+    lotes = _armar_lotes(items, settings.REPORTS_EMAIL_MAX_BYTES)
+    enviados, lotes_fallidos = 0, []
+    for i, lote in enumerate(lotes, start=1):
+        asunto = f"Actas de servicio - {hospital.name}"
+        if len(lotes) > 1:
+            asunto += f" ({i} de {len(lotes)})"
+        try:
+            filas = []
+            for it in lote:
+                wo = it["wo"]
+                inicio = (field_facts(wo).get("field_work") or {}).get("start")
+                filas.append({
+                    "wo_code": wo.wo_code,
+                    "assets": _assets_label(wo) or wo.title,
+                    "date": inicio or wo.scheduled_date,
+                    "link": _url_del_acta(it["report"]) if it["oversize"] else "",
+                })
+            body = render_to_string(
+                "reports/email_reports_bundle.html",
+                {
+                    "hospital": hospital,
+                    "items": filas,
+                    "frontend_url": settings.FRONTEND_URL,
+                    "batch_index": i,
+                    "batch_total": len(lotes),
+                },
+            )
+            msg = EmailMessage(
+                subject=asunto,
+                body=body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[to],
+            )
+            msg.content_subtype = "html"
+            for it in lote:
+                if it["pdf"] is not None:
+                    msg.attach(it["name"], it["pdf"], "application/pdf")
+            msg.send()
+        except Exception as exc:
+            logger.exception("No se pudo enviar el lote %s de actas a %s: %s", i, to, exc)
+            for it in lote:
+                ReportSendLog.objects.create(
+                    report=it["report"], recipient_email=to, was_successful=False,
+                    error_message=str(exc),
+                )
+            lotes_fallidos.append(lote)
+            continue
+        enviados += 1
+        for it in lote:
+            ReportSendLog.objects.create(
+                report=it["report"], recipient_email=to,
+                recipient_name=hospital.contact_name or "", was_successful=True,
+            )
+
+    for r, error in ilegibles:
+        ReportSendLog.objects.create(
+            report=r, recipient_email=to, was_successful=False, error_message=error,
+        )
+
+    pendientes = [str(it["report"].id) for lote in lotes_fallidos for it in lote]
+    pendientes += [str(r.id) for r, _ in ilegibles]
+    resultado = {
+        "status": "sent" if not pendientes else "partial" if enviados else "failed",
+        "to": to,
+        "batches": len(lotes),
+        "sent_batches": enviados,
+        "failed_report_ids": pendientes,
+    }
+    if pendientes and not self.request.is_eager and self.request.retries < self.max_retries:
+        raise self.retry(
+            args=(hospital_id, pendientes),
+            countdown=60 * (self.request.retries + 1),
+        )
+    return resultado
+
+
 @shared_task(bind=True, max_retries=3)
 def generate_consolidated_report(
     self, hospital_id, date_from, date_to, task_type=None, requested_by_id=None

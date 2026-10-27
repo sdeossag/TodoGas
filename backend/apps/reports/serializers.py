@@ -32,7 +32,7 @@ class WorkOrderMinSerializer(serializers.Serializer):
 
     def get_hospital(self, obj):
         h = obj.hospital
-        return {"id": str(h.id), "name": h.name}
+        return {"id": str(h.id), "name": h.name, "contact_email": h.contact_email}
 
 
 class GeneratedReportSerializer(serializers.ModelSerializer):

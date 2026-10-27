@@ -179,6 +179,9 @@ DEFAULT_FROM_EMAIL = config(
     default="TodoGas CMMS <noreply@todogas.com.co>",
 )
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
+# Tope de adjuntos por correo al reenviar varias actas juntas. Los buzones del
+# cliente aceptan 25-35 MB; 20 deja margen para la codificacion base64 (~33 %).
+REPORTS_EMAIL_MAX_BYTES = config("REPORTS_EMAIL_MAX_MB", default=20, cast=int) * 1024 * 1024
 
 # Amazon SES (django_ses.SESBackend). En ECS las credenciales salen del rol de
 # la tarea: django-ses lee AWS_ACCESS_KEY_ID de arriba (vacío por defecto, por

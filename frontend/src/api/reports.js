@@ -70,6 +70,21 @@ export function useResendReportEmail() {
   })
 }
 
+/**
+ * Reenvía varias actas por correo (solo ADMIN). El servidor las agrupa por
+ * hospital y devuelve a quién se encoló y qué se saltó: { queued, skipped }.
+ */
+export function useResendReportsEmail() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (reportIds) =>
+      client.post('/api/reports/resend-email/', { report_ids: reportIds }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reports'] })
+    },
+  })
+}
+
 /** Qué imprime el acta: interruptores por sección y campo (solo ADMIN). */
 export function useReportSettings() {
   return useQuery({

@@ -18,6 +18,9 @@ from .models import GeneratedReport, ReportSettings
 from .serializers import GeneratedReportSerializer
 
 
+MAX_ACTAS_REENVIO = 50
+
+
 class GeneratedReportViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
@@ -97,6 +100,81 @@ class GeneratedReportViewSet(
         from .tasks import send_report_email
         send_report_email.delay(str(report.work_order_id))
         return Response({"status": "queued"})
+
+    @action(detail=False, methods=["post"], url_path="resend-email")
+    def resend_email_bundle(self, request):
+        """
+        POST /api/reports/resend-email/ — reenvia varias actas por correo,
+        agrupadas por hospital (una tarea por hospital con correo).
+        """
+        if request.user.role != User.Role.ADMIN:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        crudos = request.data.get("report_ids") if hasattr(request.data, "get") else None
+        if not isinstance(crudos, list) or not 1 <= len(crudos) <= MAX_ACTAS_REENVIO:
+            return Response(
+                {"detail": f"Envía entre 1 y {MAX_ACTAS_REENVIO} actas en 'report_ids'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ids, invalidos = [], []
+        for crudo in crudos:
+            try:
+                u = uuid.UUID(str(crudo))
+            except ValueError:
+                invalidos.append(str(crudo))
+                continue
+            if u not in ids:
+                ids.append(u)
+        if invalidos:
+            return Response(
+                {"detail": "Identificadores mal formados.", "invalid_ids": invalidos},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reportes = {r.id: r for r in self.get_queryset().filter(id__in=ids)}
+        faltan = [str(u) for u in ids if u not in reportes]
+        if faltan:
+            return Response(
+                {"detail": "Hay actas que no existen o no puedes ver.", "missing_ids": faltan},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sin_ot = [str(u) for u in ids if not reportes[u].work_order_id]
+        if sin_ot:
+            return Response(
+                {"detail": "Solo se reenvían actas con OT asociada.", "without_work_order": sin_ot},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        por_hospital = {}
+        for u in ids:  # conserva el orden recibido
+            h = reportes[u].work_order.hospital
+            por_hospital.setdefault(h.id, (h, []))[1].append(reportes[u])
+
+        from .tasks import send_reports_bundle
+
+        queued, skipped = [], []
+        for h, actas in por_hospital.values():
+            if not h.contact_email:
+                skipped += [
+                    {
+                        "report_id": str(r.id),
+                        "wo_code": r.work_order.wo_code,
+                        "hospital": h.name,
+                        "reason": "El hospital no tiene correo de contacto",
+                    }
+                    for r in actas
+                ]
+                continue
+            send_reports_bundle.delay(str(h.id), [str(r.id) for r in actas])
+            queued.append(
+                {
+                    "hospital_id": str(h.id),
+                    "hospital": h.name,
+                    "to": h.contact_email,
+                    "count": len(actas),
+                }
+            )
+        return Response({"queued": queued, "skipped": skipped}, status=status.HTTP_202_ACCEPTED)
 
 
 class ConsolidatedReportView(APIView):

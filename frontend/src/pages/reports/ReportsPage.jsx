@@ -1,11 +1,24 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import useAuthStore from '../../store/authStore'
-import { useReports, useReportDownload } from '../../api/reports'
+import { useReports, useReportDownload, useResendReportsEmail } from '../../api/reports'
 import { useGenerateConsolidatedReport } from '../../api/dashboard'
 import { useHospitals } from '../../api/assets'
 import EmptyState from '../../components/ui/EmptyState'
 import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
+import Modal from '../../components/ui/Modal'
 import { formatWoCode } from '../../utils/workOrder'
+import { apiErrorMessage } from '../../utils/apiError'
+import {
+  agruparPorHospital,
+  alternarTodas,
+  avisoLimite,
+  esReenviable,
+  excedeLimite,
+  resumenGrupos,
+  textoGrupo,
+  textoSeleccion,
+  todasMarcadas,
+} from '../../utils/reenvioActas'
 
 function Spinner({ small }) {
   return (
@@ -114,6 +127,84 @@ function ConsolidatedReportForm() {
   )
 }
 
+function ReenvioModal({ grupos, total, mutation, onSend, onClose }) {
+  const { conCorreo, sinCorreo } = resumenGrupos(grupos)
+  const resultado = mutation.data
+  return (
+    <Modal
+      title="Reenviar actas por correo"
+      subtitle={resultado ? undefined : `${textoSeleccion(total)}. Los PDF van adjuntos.`}
+      onClose={onClose}
+    >
+      {resultado ? (
+        <div className="space-y-4 text-sm">
+          {resultado.queued.length > 0 && (
+            <div>
+              <p className="font-medium text-green-700 mb-1">En camino</p>
+              <ul className="space-y-1 text-gray-700">
+                {resultado.queued.map((q) => (
+                  <li key={q.hospital_id}>
+                    <span className="font-medium">{q.hospital}</span>: {q.count}{' '}
+                    {q.count === 1 ? 'acta' : 'actas'} a {q.to}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {resultado.skipped.length > 0 && (
+            <div>
+              <p className="font-medium text-amber-700 mb-1">No se enviaron</p>
+              <ul className="space-y-1 text-gray-700">
+                {resultado.skipped.map((s) => (
+                  <li key={s.report_id}>
+                    <span className="font-mono text-xs">{s.wo_code}</span> · {s.hospital}: {s.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <button type="button" onClick={onClose} className="btn-primary">Cerrar</button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4 text-sm">
+          <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg">
+            {grupos.map((g) => (
+              <li key={g.hospital_id || g.name} className="px-3 py-2 flex flex-col gap-0.5">
+                <span className="font-medium text-gray-800">{g.name}</span>
+                <span className={g.contact_email ? 'text-gray-600' : 'text-amber-700'}>{textoGrupo(g)}</span>
+              </li>
+            ))}
+          </ul>
+          {sinCorreo > 0 && (
+            <p className="text-amber-700">
+              {sinCorreo} {sinCorreo === 1 ? 'acta no se enviará' : 'actas no se enviarán'} porque su hospital no tiene correo de contacto.
+            </p>
+          )}
+          {mutation.isError && (
+            <p className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700">
+              {apiErrorMessage(mutation.error, 'No se pudo reenviar las actas.')}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button type="button" onClick={onSend}
+              disabled={mutation.isPending || conCorreo === 0}
+              className="btn-primary inline-flex items-center gap-2 disabled:opacity-60">
+              {mutation.isPending && <Spinner small />}
+              Reenviar
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 export default function ReportsPage() {
   const role = useAuthStore((s) => s.user?.role)
   const [woNumber, setWoNumber] = useState('')
@@ -130,6 +221,31 @@ export default function ReportsPage() {
     ...(hospital && { hospital_id: hospital }),
   })
   const downloadMut = useReportDownload()
+
+  // Reenvío en bloque (solo ADMIN): la selección se vacía al cambiar los filtros.
+  const isAdmin = role === 'ADMIN'
+  const resendMut = useResendReportsEmail()
+  const [seleccion, setSeleccion] = useState(() => new Set())
+  const [confirmando, setConfirmando] = useState(false)
+  useEffect(() => {
+    setSeleccion(new Set())
+  }, [appliedFilters, hospital])
+
+  function alternarUna(id) {
+    setSeleccion((prev) => {
+      const nueva = new Set(prev)
+      if (nueva.has(id)) nueva.delete(id)
+      else nueva.add(id)
+      return nueva
+    })
+  }
+
+  function cerrarReenvio() {
+    const hecho = resendMut.isSuccess
+    setConfirmando(false)
+    resendMut.reset()
+    if (hecho) setSeleccion(new Set())
+  }
 
   function handleApply(e) {
     e.preventDefault()
@@ -226,6 +342,27 @@ export default function ReportsPage() {
         </div>
       </form>
 
+      {isAdmin && seleccion.size > 0 && (
+        // Abajo y fija: arriba empujaba la tabla y el siguiente clic caía en otra fila.
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[min(44rem,calc(100%-2rem))] bg-brand text-white rounded-xl shadow-lg px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
+          <span className="font-medium">{textoSeleccion(seleccion.size)}</span>
+          {excedeLimite(seleccion.size) && (
+            <span className="text-amber-200">{avisoLimite()}</span>
+          )}
+          <div className="ml-auto flex gap-2">
+            <button type="button" onClick={() => setConfirmando(true)}
+              disabled={excedeLimite(seleccion.size)}
+              className="px-3 py-1.5 rounded-lg bg-white text-brand font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
+              Reenviar por correo
+            </button>
+            <button type="button" onClick={() => setSeleccion(new Set())}
+              className="px-3 py-1.5 rounded-lg border border-white/40 hover:bg-white/10">
+              Quitar selección
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tabla */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-card overflow-hidden">
         {isLoading ? (
@@ -247,6 +384,16 @@ export default function ReportsPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr className="text-left text-xs font-medium text-gray-500">
+                  {isAdmin && (
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Marcar todas las actas visibles"
+                        checked={todasMarcadas(seleccion, reports)}
+                        onChange={() => setSeleccion((prev) => alternarTodas(prev, reports))}
+                      />
+                    </th>
+                  )}
                   <th className="px-4 py-3">OT</th>
                   <th className="px-4 py-3">Titulo</th>
                   <th className="px-4 py-3">Hospital</th>
@@ -262,6 +409,17 @@ export default function ReportsPage() {
                   const successLogs = (report.send_logs || []).filter((l) => l.was_successful)
                   return (
                     <tr key={report.id} className="hover:bg-gray-50 transition-colors">
+                      {isAdmin && (
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`Marcar acta ${formatWoCode(wo)}`}
+                            disabled={!esReenviable(report)}
+                            checked={seleccion.has(report.id)}
+                            onChange={() => alternarUna(report.id)}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-mono text-xs text-gray-600 whitespace-nowrap">
                         {formatWoCode(wo)}
                       </td>
@@ -303,6 +461,19 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
+
+      {/* Espacio para que la barra fija no tape la última fila. */}
+      {isAdmin && seleccion.size > 0 && <div className="h-16" aria-hidden="true" />}
+
+      {confirmando && (
+        <ReenvioModal
+          grupos={agruparPorHospital(reports, seleccion)}
+          total={seleccion.size}
+          mutation={resendMut}
+          onSend={() => resendMut.mutate([...seleccion])}
+          onClose={cerrarReenvio}
+        />
+      )}
     </div>
   )
 }
