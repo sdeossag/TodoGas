@@ -31,7 +31,7 @@
   td, th { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; font-size: 9pt; }
   th { background-color: #e8edf3; font-weight: bold; text-align: left; }
   .header { background-color: #1e3a5f; color: white; padding: 16px 20px; margin-bottom: 20px; }
-  .header-title { font-size: 18pt; font-weight: bold; letter-spacing: 1px; }
+  .header-title { font-size: 18pt; font-weight: bold; letter-spacing: 1px; white-space: nowrap; }
   .header-sub { font-size: 10pt; margin-top: 4px; opacity: 0.9; }
   .header-table td { border: none; background: transparent; color: white; padding: 2px 0; }
   .section { page-break-inside: avoid; margin-bottom: 20px; }
@@ -64,7 +64,7 @@
   <table class="header-table">
     <tr>
       {% if logo_base64 %}
-      <td style="width:20%; vertical-align:middle">
+      <td style="width:1%; white-space:nowrap; vertical-align:middle; padding-right:18px">
         <img src="data:image/png;base64,{{ logo_base64 }}"
              style="height:46px; width:auto;" />
       </td>
@@ -73,7 +73,7 @@
         <div class="header-title">ACTA DE SERVICIO</div>
         <div class="header-sub">{{ work_order.get_task_type_display }}</div>
       </td>
-      <td style="width:38%; text-align:right; vertical-align:middle">
+      <td style="width:1%; white-space:nowrap; text-align:right; vertical-align:middle; padding-left:18px">
         <div style="font-size:14pt; font-weight:bold">{{ work_order.wo_code }}</div>
         <div class="header-sub">Emitido: {{ generated_at|date:"d/m/Y" }}</div>
       </td>
