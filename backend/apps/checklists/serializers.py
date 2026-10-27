@@ -193,6 +193,7 @@ class ChecklistResponseSerializer(serializers.ModelSerializer):
     version_number = serializers.IntegerField(source="version.version_number", read_only=True)
     version_fields = serializers.SerializerMethodField()
     repeatable_groups = serializers.ListField(source="version.repeatable_groups", read_only=True)
+    pendientes = serializers.SerializerMethodField()
 
     class Meta:
         model = ChecklistResponse
@@ -200,9 +201,16 @@ class ChecklistResponseSerializer(serializers.ModelSerializer):
             "id", "task", "work_order", "version", "version_number",
             "started_at", "completed_at", "completed_by", "completed_by_name",
             "field_responses", "version_fields", "repeatable_groups",
-            "block_counts", "planned_block_counts", "created_at",
+            "block_counts", "planned_block_counts", "pendientes", "created_at",
         ]
         read_only_fields = ["block_counts", "planned_block_counts"]
+
+    def get_pendientes(self, obj):
+        """Cada pendiente con su texto ya armado: "Cubículo 7: pendiente — motivo"."""
+        return [
+            {**p, "text": texto}
+            for p, texto in zip(obj.pendientes or [], obj.pendientes_texto())
+        ]
 
     def get_version_fields(self, obj):
         qs = obj.version.fields.all().order_by("sort_order")

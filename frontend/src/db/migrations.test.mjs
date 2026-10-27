@@ -269,7 +269,7 @@ test('la v7 agrega la firma guardada sin tocar lo que esta en cola', async () =>
   const antes = await pendientes(d)
 
   assert.equal(await migrate(d), LATEST_VERSION)
-  assert.equal(LATEST_VERSION, 7)
+  assert.ok(LATEST_VERSION >= 7)
   assert.deepEqual(await pendientes(d), antes)
   assert.ok((await columnas(d, 'saved_signature')).includes('image_base64'))
 
@@ -293,4 +293,46 @@ test('la v7 se puede repetir sobre una base que ya la tiene', async () => {
   assert.equal(await migrate(d), LATEST_VERSION)
   const [fila] = await d.query("SELECT image_base64 FROM saved_signature WHERE user_id = 'tec-1'")
   assert.equal(fila.image_base64, 'AAAA')
+})
+
+test('la v8 agrega los pendientes del checklist sin tocar lo que esta en cola', async () => {
+  const { d } = await baseV1ConPendientes()
+  await d.execute('PRAGMA user_version = 7')
+  const antes = await pendientes(d)
+
+  assert.equal(await migrate(d), LATEST_VERSION)
+  assert.equal(LATEST_VERSION, 8)
+  assert.deepEqual(await pendientes(d), antes)
+  const cols = await columnas(d, 'offline_checklist_responses')
+  for (const c of ['local_pendientes', 'pendientes_pending', 'reopened']) assert.ok(cols.includes(c), c)
+
+  // Lo que ya estaba queda sin pendientes ni reabierto.
+  const [cr] = await d.query(
+    "SELECT local_pendientes, pendientes_pending, reopened FROM offline_checklist_responses WHERE id = 'cr-1'"
+  )
+  assert.equal(cr.local_pendientes, null)
+  assert.equal(cr.pendientes_pending ?? 0, 0)
+  assert.equal(cr.reopened ?? 0, 0)
+
+  // Se guardan y se leen.
+  await d.run(
+    `UPDATE offline_checklist_responses SET local_pendientes = '[{"group":"Cubiculo"}]',
+       pendientes_pending = 1, reopened = 1 WHERE id = 'cr-1'`
+  )
+  const [despues] = await d.query(
+    "SELECT local_pendientes, pendientes_pending, reopened FROM offline_checklist_responses WHERE id = 'cr-1'"
+  )
+  assert.equal(despues.pendientes_pending, 1)
+  assert.equal(despues.reopened, 1)
+})
+
+test('la v8 se puede repetir sobre una base que ya la tiene', async () => {
+  const { d } = await baseV1ConPendientes()
+  await migrate(d)
+  await d.run("UPDATE offline_checklist_responses SET pendientes_pending = 1 WHERE id = 'cr-1'")
+  await d.execute('PRAGMA user_version = 7')
+
+  assert.equal(await migrate(d), LATEST_VERSION)
+  const [fila] = await d.query("SELECT pendientes_pending FROM offline_checklist_responses WHERE id = 'cr-1'")
+  assert.equal(fila.pendientes_pending, 1)
 })

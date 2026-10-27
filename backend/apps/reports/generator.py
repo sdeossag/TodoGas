@@ -191,7 +191,12 @@ def _trabajo_en_campo(respuestas, photos, signatures):
     horas = [fr.answered_at for r in respuestas for fr in r.field_responses.all()]
     horas += [r.completed_at for r in respuestas if r.completed_at]
     horas += [p.taken_at for p in photos if p.taken_at]
-    horas += [s.signed_at for s in signatures if s.signed_at]
+    # La firma de validacion es de la aprobacion (dias despues, a veces): no es
+    # hora de trabajo en campo.
+    horas += [
+        s.signed_at for s in signatures
+        if s.signed_at and s.signature_type != Signature.SignatureType.VALIDATION
+    ]
     if not horas:
         return None
     inicio, fin = min(horas), max(horas)
@@ -452,6 +457,9 @@ def _render(work_order, opciones):
         "validation": _validacion(work_order),
         "technician_signature": next(
             (s for s in signatures if s.signature_type == Signature.SignatureType.TECHNICIAN), None
+        ),
+        "validation_signature": next(
+            (s for s in signatures if s.signature_type == Signature.SignatureType.VALIDATION), None
         ),
         "client_signature": next(
             (s for s in signatures if s.signature_type == Signature.SignatureType.CLIENT), None

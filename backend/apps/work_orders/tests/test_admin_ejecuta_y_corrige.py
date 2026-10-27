@@ -21,6 +21,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.evidence.tests.firmas import firmar
 from apps.assets.models import Asset, AssetNode, Hospital
 from apps.audit.models import AuditLog
 from apps.checklists.models import (
@@ -137,10 +138,11 @@ def test_el_admin_se_la_asigna_la_ejecuta_y_la_aprueba(d):
     wo_id = crear_ot(d, admin)
     ejecutar(c, wo_id, d["campo"])
 
+    firmar(admin)
     r = transicion(c, wo_id, WorkOrder.Status.COMPLETED)
     assert r.status_code == 200, r.data
     reporte = GeneratedReport.objects.get(work_order_id=wo_id)
-    assert reporte.integrity_version == "7"
+    assert reporte.integrity_version == integrity.INTEGRITY_ALGORITHM_VERSION
     hechos = field_facts(WorkOrder.objects.get(pk=wo_id))
     assert hechos["executors"] == ["Zz Admin"], "el acta dice quien la ejecuto"
 
@@ -205,6 +207,7 @@ def test_el_admin_corrige_una_respuesta_en_revision(en_revision):
     assert log.changes["correccion"] is True
 
     # El acta sale con el valor final y la aprobacion sigue funcionando.
+    firmar(e["admin"])
     assert transicion(client_for(e["admin"]), e["wo_id"], WorkOrder.Status.COMPLETED).status_code == 200
     wo = WorkOrder.objects.get(pk=e["wo_id"])
     assert integrity.verify_work_order(wo).verified is True
@@ -269,6 +272,7 @@ def test_una_foto_mala_se_oculta_del_acta_sin_borrarse(en_revision):
                                    {"hidden": False}, format="json")
     assert r.status_code in (400, 403)
 
+    firmar(e["admin"])
     assert transicion(c, e["wo_id"], WorkOrder.Status.COMPLETED).status_code == 200
     wo = WorkOrder.objects.get(pk=e["wo_id"])
     assert [p.caption for p in _contexto_del_acta(wo)["photos"]] == ["La buena"]

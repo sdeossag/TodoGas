@@ -24,6 +24,7 @@ import {
   useCorrectField,
   useCompleteChecklist,
   useSetBlockCount,
+  useSetPendientes,
 } from '../../api/checklists'
 import { booleanLabel, booleanOptions, getFieldType } from '../../constants/checklistFields'
 import StatusBadge from '../../components/workOrders/StatusBadge'
@@ -51,15 +52,30 @@ import { taskTypeLabel, woStatusLabel } from '../../constants/labels'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import useNetworkStore from '../../store/networkStore'
 import {
+  clearChecklistReopened,
   markChecklistCompletedOffline,
   markFieldResponseSynced,
+  markPendientesSynced,
   newId,
+  reopenChecklistOffline,
   saveChecklistResponse,
   saveFieldResponse,
   savePhotoOffline,
   setBlockCountOffline,
+  setPendientesOffline,
 } from '../../db/repositories'
 import { countFor, isRepeatable, slotKey, slots } from '../../utils/checklistSlots'
+import {
+  conPendiente,
+  pendienteDeBloque,
+  pendienteDeCampo,
+  pendientesDeLaOt,
+  sinPendiente,
+  sinPendientesAlResponder,
+  sinPendientesDeTomasQueSobran,
+  textoPendiente,
+} from '../../utils/pendientes'
+import MarcarPendiente, { InsigniaPendiente, PendienteMarcado } from '../../components/checklists/Pendiente'
 import CompletedChecklistView, {
   CorregidoPor,
   FOTO,
@@ -206,6 +222,23 @@ export default function WorkOrderDetailPage() {
         {/* Botones de transición */}
         <TransitionButton workOrder={wo} onSuccess={refetch} />
       </div>
+
+      {/* Lo que quedó pendiente en los checklists: hay que volver a ello */}
+      {!['COMPLETED', 'CANCELLED'].includes(wo.status) && pendientesDeLaOt(wo.tasks).length > 0 && (
+        <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-sm space-y-1.5">
+          <p className="font-semibold flex items-center gap-1.5">
+            <Icon name="warning" className="w-4 h-4 flex-shrink-0" />
+            {pendientesDeLaOt(wo.tasks).length} pendiente{pendientesDeLaOt(wo.tasks).length !== 1 ? 's' : ''} por volver a revisar
+          </p>
+          <ul className="list-disc pl-6 space-y-0.5">
+            {pendientesDeLaOt(wo.tasks).map((t) => <li key={t}>{t}</li>)}
+          </ul>
+          <p className="text-xs text-amber-800">
+            Mientras haya pendientes la OT no se puede enviar a revisión. Cuando se pueda, se responde el
+            punto y el pendiente desaparece.
+          </p>
+        </div>
+      )}
 
       {/* Grid de información */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -903,7 +936,14 @@ function TaskRow({ task, abierta, onToggle, onRemove = null }) {
               {task.asset.location && ` · ${task.asset.location}`}
             </p>
           </div>
-          <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full ${estado.cls}`}>{estado.label}</span>
+          <span className="flex-shrink-0 flex items-center gap-1.5">
+            {c?.pending_count > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                {c.pending_count} pendiente{c.pending_count !== 1 ? 's' : ''}
+              </span>
+            )}
+            <span className={`text-xs px-2 py-0.5 rounded-full ${estado.cls}`}>{estado.label}</span>
+          </span>
         </div>
         {c?.block_changes?.length > 0 && (
           <p className="mt-1.5 text-xs text-amber-700">
@@ -1023,6 +1063,8 @@ function NoResponseView({ task, assigned, canStart, onStart }) {
 function ChecklistResponseView({ responseId, workOrderId, canEdit, canCorrect, onChange, onComplete }) {
   const { data: response, isLoading, isError, error, refetch } = useChecklistResponse(responseId)
   const [corrigiendo, setCorrigiendo] = useState(false)
+  // Quien ejecuta, con la OT en curso, corrige respuestas aunque ya haya cerrado el checklist.
+  const [reabriendo, setReabriendo] = useState(false)
 
   if (isLoading) {
     return (
@@ -1034,12 +1076,12 @@ function ChecklistResponseView({ responseId, workOrderId, canEdit, canCorrect, o
   if (isError) return <p className="text-sm text-amber-700 text-center py-6">{error?.message}</p>
   if (!response) return null
 
-  if (response.completed_at && !(canCorrect && corrigiendo)) {
+  if (response.completed_at && !(canCorrect && corrigiendo) && !(canEdit && reabriendo)) {
     return (
       <div className="space-y-3">
-        {canCorrect && (
+        {(canCorrect || canEdit) && (
           <div className="flex justify-end">
-            <button onClick={() => setCorrigiendo(true)}
+            <button onClick={() => (canCorrect ? setCorrigiendo(true) : setReabriendo(true))}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
               <Icon name="edit" className="w-4 h-4" /> Corregir respuestas
             </button>
@@ -1050,7 +1092,7 @@ function ChecklistResponseView({ responseId, workOrderId, canEdit, canCorrect, o
     )
   }
 
-  if (response.completed_at) {
+  if (response.completed_at && canCorrect) {
     return (
       <ActiveChecklistForm
         key={`${response.id}-corregir`}
@@ -1073,11 +1115,13 @@ function ChecklistResponseView({ responseId, workOrderId, canEdit, canCorrect, o
       response={response}
       workOrderId={workOrderId}
       canEdit={canEdit}
+      reabriendo={reabriendo}
       onFieldSaved={() => {
         refetch()
         onChange?.()
       }}
       onComplete={() => {
+        setReabriendo(false)
         refetch()
         onComplete?.()
       }}
@@ -1201,7 +1245,7 @@ function RemoveTaskModal({ wo, task, onClose, onDone }) {
  * directo al servidor (correct-field), queda "Corregido por" y no se cierra
  * el checklist: ya estaba cerrado.
  */
-function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = false, onFieldSaved, onComplete }) {
+function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = false, reabriendo = false, onFieldSaved, onComplete }) {
   const allFields = response.version_fields ?? []
   const fieldResponses = response.field_responses ?? []
 
@@ -1226,6 +1270,16 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
   const correctFieldMut = useCorrectField(response.id)
   const completeMut = useCompleteChecklist(response.id)
   const blockCountMut = useSetBlockCount(response.id)
+  const pendientesMut = useSetPendientes(response.id)
+
+  // Lo que se dejo pendiente ("no se pudo revisar"). Se sigue lo del servidor,
+  // pero lo que el tecnico acaba de marcar se ve en el acto, aunque este sin red.
+  const [pendientes, setPendientes] = useState(response.pendientes ?? [])
+  const pendientesServidor = JSON.stringify(response.pendientes ?? [])
+  useEffect(() => {
+    setPendientes(response.pendientes ?? [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendientesServidor])
   // Rechazos permanentes (4xx) por campo, para poder avisar al tecnico en vez
   // de tragarlos como si fueran falta de red.
   const [fieldErrors, setFieldErrors] = useState({})
@@ -1249,7 +1303,7 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
   const answeredCount = esperadas.filter(respondida).length
   const totalCount = esperadas.length
   const requiredUnanswered = esperadas.filter((x) => x.field.is_required && !respondida(x))
-  const canComplete = requiredUnanswered.length === 0
+  const canComplete = requiredUnanswered.length === 0 && pendientes.length === 0
   const isLastGroup = groupIdx === groups.length - 1
 
   /** Respuestas escritas que aun no llegaron al servidor (nadie disparo el blur). */
@@ -1302,6 +1356,10 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
       return
     }
 
+    // Cambiar algo de un checklist ya cerrado (OT en curso) lo deja por cerrar
+    // de nuevo: el servidor lo reabre al recibir la respuesta.
+    if (response.completed_at) await reopenChecklistOffline(response.id)
+
     // Siempre a SQLite primero: es la unica escritura que no puede fallar.
     await saveFieldResponse({
       id: newId(),
@@ -1314,6 +1372,15 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
       synced: 0,
     })
 
+    // Responder el punto (o algo de su bloque) quita su pendiente.
+    const campo = allFields.find((f) => f.id === fieldId)
+    const sinEste = campo ? sinPendientesAlResponder(pendientes, response, campo, repetition) : pendientes
+    const quitoPendiente = sinEste.length !== pendientes.length
+    if (quitoPendiente) {
+      setPendientes(sinEste)
+      await setPendientesOffline(response.id, sinEste)
+    }
+
     if (!isOnline) {
       await refreshPendingCount()
       // Relee el checklist y la OT desde SQLite para que el avance se mueva.
@@ -1324,6 +1391,8 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
     try {
       await submitFieldMut.mutateAsync({ field: fieldId, repetition, value, notes: '' })
       await markFieldResponseSynced(response.id, fieldId, repetition)
+      // El servidor ya quito el pendiente al recibir la respuesta.
+      if (quitoPendiente) await markPendientesSynced(response.id)
       setFieldErrors((prev) => {
         if (!prev[key]) return prev
         const { [key]: _, ...resto } = prev
@@ -1383,8 +1452,46 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
         // Sin respuesta del servidor: se guarda en el telefono como sin red.
       }
     }
+    if (response.completed_at) await reopenChecklistOffline(response.id)
     await setBlockCountOffline(response.id, { ...(response.block_counts ?? {}), [grupo]: nueva })
+    const sinSobrantes = sinPendientesDeTomasQueSobran(pendientes, grupo, nueva)
+    if (sinSobrantes.length !== pendientes.length) {
+      setPendientes(sinSobrantes)
+      await setPendientesOffline(response.id, sinSobrantes)
+    }
     await refreshPendingCount()
+    onFieldSaved()
+  }
+
+  /**
+   * Deja la lista de pendientes como `nueva`. Primero al telefono (cuenta como
+   * cambio y reabre el checklist si estaba cerrado); con red, tambien al
+   * servidor. Lanza con el texto del rechazo para mostrarlo junto al boton.
+   */
+  async function guardarPendientes(nueva) {
+    const anterior = pendientes
+    setPendientes(nueva)
+    await setPendientesOffline(response.id, nueva)
+    await refreshPendingCount()
+    if (isOnline) {
+      try {
+        await pendientesMut.mutateAsync(nueva.map(({ text, ...p }) => p))
+        await markPendientesSynced(response.id)
+        await refreshPendingCount()
+      } catch (err) {
+        if (err?.response) {
+          // Rechazado (p. ej. la OT ya no esta en curso): se deshace lo local.
+          setPendientes(anterior)
+          await setPendientesOffline(response.id, anterior)
+          await markPendientesSynced(response.id)
+          await refreshPendingCount()
+          const data = err.response.data
+          const detalle = data?.reason ?? data?.repetition ?? data?.group ?? data?.detail
+          throw new Error(Array.isArray(detalle) ? String(detalle[0]) : String(detalle ?? 'No se pudo guardar el pendiente.'))
+        }
+        // Sin respuesta del servidor: queda en el telefono y sube al volver la red.
+      }
+    }
     onFieldSaved()
   }
 
@@ -1411,6 +1518,7 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
         return
       }
       await completeMut.mutateAsync()
+      await clearChecklistReopened(response.id)
       onComplete()
     } catch (err) {
       // Sin respuesta del servidor es la red: se cierra en el telefono.
@@ -1449,6 +1557,25 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
         {fieldErrors[key] && (
           <p className="mt-1 text-xs text-red-600">{fieldErrors[key]}</p>
         )}
+        {(() => {
+          const pendiente = pendienteDeCampo(pendientes, field.id, repetition)
+          const puedeMarcar = canEdit && !corrigiendo
+          if (pendiente) {
+            return (
+              <PendienteMarcado pendiente={pendiente} className="mt-2"
+                onQuitar={puedeMarcar
+                  ? () => guardarPendientes(sinPendiente(pendientes, { field: field.id, repetition })).catch(() => {})
+                  : null} />
+            )
+          }
+          if (!puedeMarcar || answeredMap[key]) return null
+          return (
+            <MarcarPendiente className="mt-1.5"
+              onGuardar={(motivo) => guardarPendientes(
+                conPendiente(pendientes, { field: field.id, repetition, reason: motivo })
+              )} />
+          )
+        })()}
       </div>
     )
   }
@@ -1464,6 +1591,30 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
           <button onClick={onComplete} className="flex-shrink-0 px-3 py-1 rounded-lg bg-white border border-amber-300 hover:bg-amber-100">
             Terminar
           </button>
+        </div>
+      )}
+      {reabriendo && !corrigiendo && (
+        <div className="flex items-start justify-between gap-3 px-4 py-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-sm">
+          <span>
+            Puedes cambiar cualquier respuesta mientras la OT esté en curso; cada cambio se guarda al salir
+            del campo.
+            {!response.completed_at && ' El checklist quedó por finalizar: vuelve a finalizarlo al terminar.'}
+          </span>
+          {response.completed_at && (
+            <button onClick={onComplete} className="flex-shrink-0 px-3 py-1 rounded-lg bg-white border border-blue-300 hover:bg-blue-100">
+              Terminar
+            </button>
+          )}
+        </div>
+      )}
+      {pendientes.length > 0 && (
+        <div className="px-4 py-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-sm space-y-1">
+          <p className="font-semibold">
+            {pendientes.length} pendiente{pendientes.length !== 1 ? 's' : ''} por volver a revisar
+          </p>
+          <ul className="list-disc pl-5 space-y-0.5">
+            {pendientes.map((p, i) => <li key={i}>{textoPendiente(p, allFields)}</li>)}
+          </ul>
         </div>
       )}
       {/* Progress */}
@@ -1512,6 +1663,13 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
           onChangeCount={cambiarCantidad}
           busy={blockCountMut.isPending}
           error={countError}
+          pendientes={pendientes}
+          puedeMarcar={canEdit && !corrigiendo}
+          onMarcarBloque={(grupo, n, motivo) => guardarPendientes(
+            conPendiente(pendientes, { group: grupo, repetition: n, reason: motivo })
+          )}
+          onQuitarBloque={(grupo, n) =>
+            guardarPendientes(sinPendiente(pendientes, { group: grupo, repetition: n })).catch(() => {})}
         />
       ) : (
         <div className="space-y-5">
@@ -1542,11 +1700,14 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
           )}
         </div>
 
-        {isLastGroup && canEdit && !corrigiendo && (
+        {isLastGroup && canEdit && !corrigiendo && !response.completed_at && (
           <div className="flex items-center gap-2">
             {!canComplete && (
               <span className="text-xs text-orange-500">
-                {requiredUnanswered.length} campo(s) obligatorio(s) pendiente(s)
+                {[
+                  requiredUnanswered.length > 0 && `${requiredUnanswered.length} campo(s) obligatorio(s) sin responder`,
+                  pendientes.length > 0 && `${pendientes.length} pendiente(s) por resolver`,
+                ].filter(Boolean).join(' · ')}
               </span>
             )}
             <button
@@ -1573,7 +1734,10 @@ function ActiveChecklistForm({ response, workOrderId, canEdit, corrigiendo = fal
  * tomas no sean 270 campos en pantalla. Abajo, agregar o quitar tomas si en
  * campo hay otra cantidad que la del plan.
  */
-function RepeatedGroup({ response, group, answeredMap, canEdit, renderField, onChangeCount, busy, error }) {
+function RepeatedGroup({
+  response, group, answeredMap, canEdit, renderField, onChangeCount, busy, error,
+  pendientes = [], puedeMarcar = false, onMarcarBloque, onQuitarBloque,
+}) {
   const cuantas = countFor(response, group.name)
   const planeadas = response.planned_block_counts?.[group.name]
   const respondidasDe = (n) => group.fields.filter((f) => answeredMap[slotKey(f.id, n)]).length
@@ -1596,6 +1760,7 @@ function RepeatedGroup({ response, group, answeredMap, canEdit, renderField, onC
       {numeros.map((n) => {
         const respondidas = respondidasDe(n)
         const completa = respondidas === group.fields.length
+        const pendienteBloque = pendienteDeBloque(pendientes, group.name, n)
         return (
           <div key={n} className="border border-gray-200 rounded-xl overflow-hidden">
             <button
@@ -1605,12 +1770,24 @@ function RepeatedGroup({ response, group, answeredMap, canEdit, renderField, onC
               className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-gray-50"
             >
               <span className="text-sm font-medium text-gray-800">{group.name} {n}</span>
-              <span className={`text-xs ${completa ? 'text-green-600' : faltanDe(n) ? 'text-orange-500' : 'text-gray-500'}`}>
-                {completa ? 'Completa' : `${respondidas} de ${group.fields.length}`}
-              </span>
+              {pendienteBloque ? (
+                <InsigniaPendiente />
+              ) : (
+                <span className={`text-xs ${completa ? 'text-green-600' : faltanDe(n) ? 'text-orange-500' : 'text-gray-500'}`}>
+                  {completa ? 'Completa' : `${respondidas} de ${group.fields.length}`}
+                </span>
+              )}
             </button>
             {abierta === n && (
               <div className="border-t border-gray-100 p-4 space-y-5 bg-gray-50/40">
+                {pendienteBloque && (
+                  <PendienteMarcado pendiente={pendienteBloque}
+                    onQuitar={puedeMarcar ? () => onQuitarBloque(group.name, n) : null} />
+                )}
+                {!pendienteBloque && puedeMarcar && !completa && (
+                  <MarcarPendiente etiqueta={`Marcar ${group.name} ${n} como pendiente (no se pudo revisar)`}
+                    onGuardar={(motivo) => onMarcarBloque(group.name, n, motivo)} />
+                )}
                 {group.fields.map((field) => renderField(field, n))}
                 {n < cuantas && (
                   <button type="button" onClick={() => setAbierta(n + 1)}

@@ -13,6 +13,7 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.evidence.tests.firmas import firmar
 from apps.assets.models import Asset, Hospital
 from apps.audit.models import AuditLog
 from apps.checklists.models import ChecklistField, ChecklistTemplate, ChecklistTemplateVersion
@@ -140,6 +141,7 @@ def test_tecnico_con_revisar_aprueba_la_ot_de_otro(d):
     ejecuta = make_user(User.Role.TEC)
     wo_id = _ot_en_revision(d, ejecuta)
     revisor = dar(make_user(User.Role.TEC), "ot.revisar")
+    firmar(revisor)
     r = transicion(client_for(revisor), wo_id, WorkOrder.Status.COMPLETED)
     assert r.status_code == 200, r.data
     assert WorkOrder.objects.get(pk=wo_id).status == WorkOrder.Status.COMPLETED
@@ -169,6 +171,7 @@ def test_revisar_extra_no_amplia_el_alcance_por_hospital(d):
     assert str(wo_id) not in {x["id"] for x in lista.data["results"]}
     # El del hospital correcto si.
     del_hospital = dar(make_user(User.Role.TEC, hospital=d["h"]), "ot.revisar")
+    firmar(del_hospital)
     r = transicion(client_for(del_hospital), wo_id, WorkOrder.Status.COMPLETED)
     assert r.status_code == 200, r.data
 

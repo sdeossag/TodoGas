@@ -1,15 +1,23 @@
 import { useCallback, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import useAuthStore from '../../store/authStore'
 import useNetworkStore from '../../store/networkStore'
 import { useCancelWorkOrder, useTransitionWorkOrder } from '../../api/workOrders'
+import { useMySignature } from '../../api/evidence'
 import { markStatusChangedOffline } from '../../db/repositories'
 import useReviewRequirements from '../../hooks/useReviewRequirements'
 import Icon from '../ui/Icon'
+import Modal from '../ui/Modal'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import Spinner from '../ui/Spinner'
 import { laEjecuto } from '../../utils/ejecutores'
 import { puede } from '../../utils/permisos'
+import {
+  esErrorFirmaRequerida,
+  estadoDialogoAprobar,
+  mensajeFirmaRequerida,
+} from '../../utils/aprobarFirma'
 
 // Cancelar usa otro endpoint que el motor de sincronizacion no reproduce,
 // asi que no se permite sin conexion en vez de encolar algo que fallaria.
@@ -37,6 +45,16 @@ export default function TransitionButton({ workOrder, onSuccess }) {
   const [cancelComment, setCancelComment] = useState('')
   const [transitionError, setTransitionError] = useState('')
   const [savingOffline, setSavingOffline] = useState(false)
+  const [showAprobarModal, setShowAprobarModal] = useState(false)
+  const [errorFirma, setErrorFirma] = useState(false)
+
+  // Firma guardada de quien aprueba: se muestra en el dialogo antes de aprobar.
+  const firma = useMySignature()
+  const firmaDataUrl = firma.data?.dataUrl ?? null
+  const estadoAprobar = estadoDialogoAprobar({
+    cargando: firma.isLoading,
+    dataUrl: firmaDataUrl,
+  })
 
   const closeCancelModal = useCallback(() => {
     setShowCancelModal(false)
@@ -62,15 +80,24 @@ export default function TransitionButton({ workOrder, onSuccess }) {
 
   async function doTransition(new_status, comment = '') {
     setTransitionError('')
+    setErrorFirma(false)
 
     if (isOnline) {
       try {
         await transitionMut.mutateAsync({ new_status, comment })
         onSuccess?.()
+        return true
       } catch (err) {
-        setTransitionError(extractBackendError(err))
+        if (esErrorFirmaRequerida(err)) {
+          // Puede que la firma se borrara en otra pestaña: se vuelve a consultar.
+          setErrorFirma(true)
+          setTransitionError(mensajeFirmaRequerida(err))
+          firma.refetch()
+        } else {
+          setTransitionError(extractBackendError(err))
+        }
+        return false
       }
-      return
     }
 
     // Sin red el cambio se anota en SQLite y el motor de sincronizacion lo
@@ -91,12 +118,31 @@ export default function TransitionButton({ workOrder, onSuccess }) {
       // pestaña activa y desmontar este componente.
       showOfflineNotice('Estado guardado. Se sincronizara al reconectar.')
       onSuccess?.()
+      return true
     } catch (err) {
       console.warn('[transition] fallo el guardado offline:', err?.message ?? err)
       setTransitionError('No se pudo guardar el cambio en el dispositivo.')
+      return false
     } finally {
       setSavingOffline(false)
     }
+  }
+
+  function abrirAprobar() {
+    setTransitionError('')
+    setErrorFirma(false)
+    setShowAprobarModal(true)
+  }
+
+  function cerrarAprobar() {
+    if (loading) return
+    setShowAprobarModal(false)
+    setErrorFirma(false)
+  }
+
+  async function aprobarConFirma() {
+    const ok = await doTransition('COMPLETED')
+    if (ok) setShowAprobarModal(false)
   }
 
   async function doCancel() {
@@ -157,7 +203,7 @@ export default function TransitionButton({ workOrder, onSuccess }) {
         {/* Quien revisa: Completar */}
         {puede(user, 'ot.revisar') && status === 'IN_REVIEW' && !rejecting && (
           <button
-            onClick={() => doTransition('COMPLETED')}
+            onClick={abrirAprobar}
             disabled={loading}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-60"
           >
@@ -223,8 +269,81 @@ export default function TransitionButton({ workOrder, onSuccess }) {
       )}
 
       {/* Error de transicion del backend */}
-      {transitionError && (
-        <p className="text-sm text-red-500">{transitionError}</p>
+      {transitionError && !showAprobarModal && (
+        <p className="text-sm text-red-500">
+          {transitionError}
+          {errorFirma && (
+            <>
+              {' '}
+              <Link to="/mi-perfil" className="underline font-medium text-brand hover:text-brand/80">
+                Ir a Mi perfil
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+
+      {/* Dialogo de aprobacion: se firma con la firma guardada de quien aprueba */}
+      {showAprobarModal && (
+        <Modal title="Aprobar orden" subtitle="La orden se cierra y queda firmada por ti." onClose={cerrarAprobar} width="max-w-md">
+          <div className="space-y-4">
+            {estadoAprobar.tipo === 'con_firma' && (
+              <>
+                <p className="text-sm text-gray-700">{estadoAprobar.texto}</p>
+                <div className="border border-gray-200 rounded-lg bg-white p-3 inline-block max-w-full">
+                  <img src={firmaDataUrl} alt="Vista previa de tu firma" className="max-h-20 max-w-full" />
+                </div>
+              </>
+            )}
+
+            {estadoAprobar.tipo === 'sin_firma' && (
+              <>
+                <p className="text-sm text-amber-700">{estadoAprobar.texto}.</p>
+                <Link to="/mi-perfil" className="inline-block text-sm font-medium text-brand underline hover:text-brand/80">
+                  {estadoAprobar.textoEnlace}
+                </Link>
+              </>
+            )}
+
+            {estadoAprobar.tipo === 'cargando' && (
+              <p className="text-sm text-gray-500">{estadoAprobar.texto}</p>
+            )}
+
+            {transitionError && (
+              <p className="text-sm text-red-500">
+                {transitionError}
+                {errorFirma && (
+                  <>
+                    {' '}
+                    <Link to="/mi-perfil" className="underline font-medium text-brand hover:text-brand/80">
+                      Ir a Mi perfil
+                    </Link>
+                  </>
+                )}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={cerrarAprobar}
+                disabled={loading}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={aprobarConFirma}
+                disabled={loading || !estadoAprobar.puedeAprobar}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-60"
+              >
+                {loading ? <Spinner /> : null}
+                {estadoAprobar.textoBoton ?? 'Aprobar'}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Modal de cancelacion */}

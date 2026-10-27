@@ -17,6 +17,7 @@ from model_bakery import baker
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.evidence.tests.firmas import firmar
 from apps.assets.models import Asset, Hospital
 from apps.checklists.models import (
     ChecklistField,
@@ -166,6 +167,7 @@ def test_cerrar_la_ot_deja_un_acta_que_verifica(ot_de_piso, tec, admin, django_c
         )
 
     with patch("apps.reports.tasks.generate_work_order_pdf.delay", side_effect=generar_acta),             django_capture_on_commit_callbacks(execute=True):
+        firmar(admin)
         apply_transition(ot_de_piso, WorkOrder.Status.COMPLETED, admin)
 
     assert set(ot_de_piso.tasks.values_list("status", flat=True)) == {Task.Status.DONE}
@@ -183,6 +185,7 @@ def test_cerrar_crea_la_siguiente_de_cada_activo(ot_de_piso, tec, admin):
     apply_transition(ot_de_piso, WorkOrder.Status.IN_REVIEW, tec)
 
     with patch("apps.reports.tasks.generate_work_order_pdf.delay"):
+        firmar(admin)
         apply_transition(ot_de_piso, WorkOrder.Status.COMPLETED, admin)
 
     pendientes = Task.objects.filter(status=Task.Status.PENDING)

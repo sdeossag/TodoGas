@@ -20,6 +20,7 @@ from django.utils import timezone
 from model_bakery import baker
 from rest_framework.test import APIClient
 
+from apps.evidence.tests.firmas import firmar
 from apps.assets.models import Asset, Hospital
 from apps.checklists.models import ChecklistField, ChecklistTemplate, ChecklistTemplateVersion
 from apps.evidence.models import Signature
@@ -182,6 +183,7 @@ def test_el_acta_dice_cuando_se_hizo_el_trabajo_no_cuando_se_aprobo(ot, tec, adm
     WorkOrder.objects.filter(pk=ot.pk).update(status=WorkOrder.Status.IN_REVIEW)
     ot.refresh_from_db()
     with patch("apps.reports.tasks.generate_work_order_pdf.delay"):
+        firmar(admin)
         apply_transition(ot, WorkOrder.Status.COMPLETED, admin)
 
     texto = acta_html(ot)
@@ -217,6 +219,7 @@ def test_validado_por_es_quien_aprobo_la_ot(ot, tec, admin):
     assert "Pendiente de aprobación" in acta_html(ot)
 
     with patch("apps.reports.tasks.generate_work_order_pdf.delay"):
+        firmar(admin)
         apply_transition(ot, WorkOrder.Status.COMPLETED, admin)
     texto = acta_html(ot)
     for rotulo in ("Realizado por", "Validado por", "Aceptado por"):
@@ -237,5 +240,6 @@ def test_el_acta_se_genera_con_la_aprobacion_ya_registrada(ot, admin, django_cap
         ).exists()
 
     with patch("apps.reports.tasks.generate_work_order_pdf.delay", side_effect=al_generar),             django_capture_on_commit_callbacks(execute=True):
+        firmar(admin)
         apply_transition(ot, WorkOrder.Status.COMPLETED, admin)
     assert visto["aprobacion"] is True

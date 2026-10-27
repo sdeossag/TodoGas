@@ -22,6 +22,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import status
 
+from apps.evidence.tests.firmas import firmar
 from apps.audit.models import AuditLog
 from apps.reports.generator import _render, field_facts
 from apps.reports.models import GeneratedReport
@@ -175,6 +176,7 @@ def test_el_acta_y_el_correo_usan_la_fecha_corregida_sin_marca(revision_antigua)
     e = revision_antigua
     inicio, fin = _ventana()
     assert corregir_fecha(e["admin"], e["wo_id"], inicio, fin).status_code == 200
+    firmar(e["admin"])
     assert transicion(client_for(e["admin"]), e["wo_id"], WorkOrder.Status.COMPLETED).status_code == 200
 
     wo = WorkOrder.objects.get(pk=e["wo_id"])
@@ -230,6 +232,7 @@ def test_solo_se_corrige_con_la_ot_en_revision(revision_antigua):
 
     # Cerrada: inalterable.
     assert transicion(client_for(e["tec"]), e["wo_id"], WorkOrder.Status.IN_REVIEW).status_code == 200
+    firmar(e["admin"])
     assert transicion(admin, e["wo_id"], WorkOrder.Status.COMPLETED).status_code == 200
     assert corregir_fecha(e["admin"], e["wo_id"], inicio, fin).status_code == 400
     wo = WorkOrder.objects.get(pk=e["wo_id"])
@@ -288,7 +291,7 @@ def test_quitar_la_correccion_vuelve_a_lo_calculado(revision_antigua):
 def test_el_hash_de_la_version_7_incluye_la_fecha_corregida_y_los_anteriores_no_cambian(revision_antigua):
     e = revision_antigua
     wo = WorkOrder.objects.get(pk=e["wo_id"])
-    assert integrity.INTEGRITY_ALGORITHM_VERSION == "7"
+    assert integrity.INTEGRITY_ALGORITHM_VERSION == "8"
     assert "7" in integrity.SUPPORTED_VERSIONS
     v5, v6, v7 = (integrity.compute_wo_content_hash(wo, v) for v in ("5", "6", "7"))
 
@@ -305,14 +308,15 @@ def test_el_hash_de_la_version_7_incluye_la_fecha_corregida_y_los_anteriores_no_
     assert integrity.compute_wo_content_hash(wo, "7") == v7
 
 
-def test_un_acta_nueva_sale_en_version_7_y_cambiar_la_fecha_despues_la_rompe(revision_antigua):
+def test_un_acta_nueva_sale_en_la_version_vigente_y_cambiar_la_fecha_despues_la_rompe(revision_antigua):
     e = revision_antigua
     inicio, fin = _ventana()
     assert corregir_fecha(e["admin"], e["wo_id"], inicio, fin).status_code == 200
+    firmar(e["admin"])
     assert transicion(client_for(e["admin"]), e["wo_id"], WorkOrder.Status.COMPLETED).status_code == 200
 
     reporte = GeneratedReport.objects.get(work_order_id=e["wo_id"])
-    assert reporte.integrity_version == "7"
+    assert reporte.integrity_version == integrity.INTEGRITY_ALGORITHM_VERSION
     wo = WorkOrder.objects.get(pk=e["wo_id"])
     assert integrity.verify_work_order(wo).verified is True
 
@@ -325,6 +329,7 @@ def test_un_acta_nueva_sale_en_version_7_y_cambiar_la_fecha_despues_la_rompe(rev
 @pytest.mark.parametrize("version", ["5", "6"])
 def test_un_acta_de_una_version_anterior_sigue_verificando_aunque_la_ot_tenga_fecha_corregida(revision_antigua, version):
     e = revision_antigua
+    firmar(e["admin"])
     assert transicion(client_for(e["admin"]), e["wo_id"], WorkOrder.Status.COMPLETED).status_code == 200
     wo = WorkOrder.objects.get(pk=e["wo_id"])
     # Se simula un acta firmada antes de la version 7.

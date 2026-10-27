@@ -1,3 +1,5 @@
+import { resumenPendientes } from './pendientes.js'
+
 /**
  * Bloques repetibles del checklist: la misma regla que ChecklistResponse.slots
  * en el servidor.
@@ -47,6 +49,7 @@ export function progress(response) {
     required_missing: esperadas.filter(
       (s) => s.field.is_required && !respondidas.has(slotKey(s.field.id, s.repetition))
     ).length,
+    ...resumenPendientes(response),
     block_changes: Object.entries(planeadas)
       .filter(([g, n]) => countFor(response, g) !== n)
       .map(([g, n]) => ({ group: g, planned: n, count: countFor(response, g) })),

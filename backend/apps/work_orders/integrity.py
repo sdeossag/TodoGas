@@ -53,6 +53,10 @@ lavada.
      que un administrador o supervisor fijo en revision (vacios si no hubo
      correccion). El acta imprime ese periodo, asi que cambiarlo despues de
      firmada la alteraria. Las actas v1 a v6 no lo conocen.
+  8  Firma de validacion. Igual que la 7, mas la firma que la aprobacion pone
+     con la firma guardada de quien aprueba (tipo VALIDATION, con el hash de su
+     archivo, quien firmo y cuando). Las versiones 1 a 7 son anteriores a ese
+     tipo de firma y no lo cubren: su contenido es el de siempre.
 """
 
 import hashlib
@@ -61,8 +65,8 @@ from dataclasses import dataclass
 
 # Version con la que se calculan las actas nuevas. Las anteriores se siguen
 # verificando con la suya (SUPPORTED_VERSIONS).
-INTEGRITY_ALGORITHM_VERSION = "7"
-SUPPORTED_VERSIONS = ("1", "2", "3", "4", "5", "6", "7")
+INTEGRITY_ALGORITHM_VERSION = "8"
+SUPPORTED_VERSIONS = ("1", "2", "3", "4", "5", "6", "7", "8")
 
 
 def _dt(value):
@@ -139,8 +143,16 @@ def _response_of(task):
     )
 
 
-def _signatures(work_order):
+def _signatures(work_order, con_validacion=False):
+    """
+    Las firmas de la OT. La de validacion solo entra desde la v8: las actas
+    anteriores se calcularon cuando ese tipo no existia.
+    """
     from apps.evidence.models import Signature
+
+    firmas = Signature.objects.filter(work_order=work_order)
+    if not con_validacion:
+        firmas = firmas.exclude(signature_type=Signature.SignatureType.VALIDATION)
 
     return sorted(
         (
@@ -152,7 +164,7 @@ def _signatures(work_order):
                 "signer_role": s.signer_role,
                 "signed_at": _dt(s.signed_at),
             }
-            for s in Signature.objects.filter(work_order=work_order)
+            for s in firmas
         ),
         key=lambda row: row["id"],
     )
@@ -361,9 +373,17 @@ def _payload_v7(work_order):
     return datos
 
 
+def _payload_v8(work_order):
+    """v7 mas la firma de validacion de la aprobacion."""
+    datos = _payload_v7(work_order)
+    datos["algorithm_version"] = "8"
+    datos["signatures"] = _signatures(work_order, con_validacion=True)
+    return datos
+
+
 _BUILDERS = {
     "1": _payload_v1, "2": _payload_v2, "3": _payload_v3, "4": _payload_v4, "5": _payload_v5,
-    "6": _payload_v6, "7": _payload_v7,
+    "6": _payload_v6, "7": _payload_v7, "8": _payload_v8,
 }
 
 

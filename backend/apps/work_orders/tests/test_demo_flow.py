@@ -22,6 +22,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.evidence.tests.firmas import firmar
 from apps.assets.models import Asset, Hospital
 from apps.checklists.models import (
     ChecklistField,
@@ -223,6 +224,7 @@ class TestFlujoCompletoDeLaDemo:
         assert resp.status_code == status.HTTP_200_OK, resp.data
 
         # ── 7. El ADMIN aprueba y se genera el acta ─────────────────────────
+        firmar(admin)
         # El acta se encola al confirmar la aprobacion (on_commit).
         with TestCase.captureOnCommitCallbacks(execute=True):
             resp = admin_c.post(

@@ -31,6 +31,32 @@ def _tareas_vigentes(work_order):
     return vigentes or tareas
 
 
+def _respuesta_de(tarea):
+    from django.core.exceptions import ObjectDoesNotExist
+
+    try:
+        return tarea.checklist_response
+    except ObjectDoesNotExist:
+        return None
+
+
+def pendientes_de_la_ot(work_order):
+    """
+    Lo que quedo pendiente en los checklists de la OT, con el texto que lee el
+    tecnico. Con varias tareas se antepone el activo. Es lo que impide enviarla
+    a revision (transitions.validate_transition).
+    """
+    tareas = [t for t in work_order.tasks.all() if t.status != Task.Status.CANCELLED]
+    textos = []
+    for tarea in tareas:
+        respuesta = _respuesta_de(tarea)
+        if respuesta is None or not respuesta.pendientes:
+            continue
+        for texto in respuesta.pendientes_texto():
+            textos.append(f"{tarea.asset.name} · {texto}" if len(tareas) > 1 else texto)
+    return textos
+
+
 class WorkOrderStatusHistorySerializer(serializers.ModelSerializer):
     changed_by = serializers.SerializerMethodField()
 
@@ -55,14 +81,25 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
     wo_code = serializers.CharField(read_only=True)
     assets_count = serializers.SerializerMethodField()
     location = serializers.SerializerMethodField()
+    # Cuantos items quedaron "pendientes: no se pudo revisar" en su checklist.
+    pending_count = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkOrder
         fields = [
             "id", "wo_number", "wo_code", "title", "task_type", "status", "priority",
             "scheduled_date", "assets", "assets_count", "hospital", "location", "assigned_to",
-            "created_at", "is_overdue", "has_report", "report_id",
+            "created_at", "is_overdue", "has_report", "report_id", "pending_count",
         ]
+
+    def get_pending_count(self, obj):
+        if obj.status in (WorkOrder.Status.COMPLETED, WorkOrder.Status.CANCELLED):
+            return 0
+        return sum(
+            len(r.pendientes or [])
+            for r in (_respuesta_de(t) for t in obj.tasks.all())
+            if r is not None
+        )
 
     def get_assets(self, obj):
         """Los activos de la visita, sin repetir y en el orden de las tareas."""
@@ -250,11 +287,8 @@ def _checklist_progress(tarea):
     Avance del checklist de la tarea, para la lista de tareas de la OT: cuantos
     campos van, cuantos obligatorios faltan y si ya se finalizo.
     """
-    from django.core.exceptions import ObjectDoesNotExist
-
-    try:
-        respuesta = tarea.checklist_response
-    except ObjectDoesNotExist:
+    respuesta = _respuesta_de(tarea)
+    if respuesta is None:
         return None
     # Un grupo repetible cuenta una vez por toma: 20 tomas de 9 preguntas son
     # 180 respuestas, no 9.
@@ -268,6 +302,9 @@ def _checklist_progress(tarea):
             1 for f, n in esperadas if f.is_required and (f.id, n) not in respondidas
         ),
         "completed_at": respuesta.completed_at,
+        # Lo que no se pudo revisar, para volver a ello: cuantos y cuales.
+        "pending_count": len(respuesta.pendientes or []),
+        "pending": respuesta.pendientes_texto(),
         # El tecnico encontro otra cantidad que la del plan: el administrador
         # lo ve en la OT para corregir el plan del activo.
         "block_changes": [

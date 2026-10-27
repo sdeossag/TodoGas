@@ -53,18 +53,14 @@ def verificar(r):
     assert r.data["detail"] == MENSAJE
 
 
-def test_submit_field_sobre_un_checklist_completado_trae_el_codigo(cerrado):
+def test_submit_field_sobre_un_checklist_completado_ya_se_corrige(cerrado):
+    """Revision del 2026-10-23: con la OT en curso se corrige aunque este cerrado."""
     r = cerrado["c"].post(
         f"/api/checklists/responses/{cerrado['r'].id}/submit-field/",
         {"field": str(cerrado["campo"].id), "value": "hola"}, format="json")
-    verificar(r)
-
-
-def test_block_count_sobre_un_checklist_completado_trae_el_codigo(cerrado):
-    r = cerrado["c"].post(
-        f"/api/checklists/responses/{cerrado['r'].id}/block-count/",
-        {"group": "Toma", "count": 2}, format="json")
-    verificar(r)
+    assert r.status_code == 200, r.data
+    cerrado["r"].refresh_from_db()
+    assert cerrado["r"].completed_at is None
 
 
 def test_complete_sobre_un_checklist_completado_trae_el_codigo(cerrado):

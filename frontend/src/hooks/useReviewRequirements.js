@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useWorkOrderPhotos, useWorkOrderSignatures } from '../api/evidence'
 import { countUnsyncedPhotos, getUnsyncedSignatures } from '../db/repositories'
 import useNetworkStore from '../store/networkStore'
+import { pendientesDeLaOt } from '../utils/pendientes'
 
 /**
  * Lo que falta para enviar la OT a revision, con los mismos tres requisitos
@@ -42,6 +43,9 @@ export default function useReviewRequirements(workOrder) {
   const sinCerrar = conChecklist.filter((t) => !t.checklist?.completed_at)
 
   const missing = []
+  // Lo que no se pudo revisar cuenta como incompleto y se nombra, como lo hace el servidor.
+  const conPendientes = pendientesDeLaOt(workOrder?.tasks)
+  missing.push(...conPendientes)
   if (conChecklist.length === 1 && sinCerrar.length === 1) {
     missing.push('completar el checklist')
   } else {

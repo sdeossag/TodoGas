@@ -3,6 +3,7 @@ from datetime import date
 
 from rest_framework.exceptions import ValidationError
 
+from apps.evidence.tests.firmas import firmar
 from apps.assets.models import Asset, Hospital
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder, WorkOrderStatusHistory
@@ -192,6 +193,7 @@ class TestApplyTransition:
         from django.utils import timezone
         wo_in_review.started_at = timezone.now()
         wo_in_review.save()
+        firmar(admin)
         wo = apply_transition(wo_in_review, WorkOrder.Status.COMPLETED, admin)
         assert wo.completed_at is not None
         assert wo.actual_duration is not None
@@ -221,6 +223,7 @@ class TestApplyTransitionAtomica:
                    side_effect=RuntimeError("caida a mitad")), \
                 patch("apps.reports.tasks.generate_work_order_pdf.delay") as pdf, \
                 pytest.raises(RuntimeError):
+            firmar(admin)
             apply_transition(wo_in_review, WorkOrder.Status.COMPLETED, admin)
 
         wo_in_review.refresh_from_db()
@@ -236,6 +239,7 @@ class TestApplyTransitionAtomica:
         primera = WorkOrder.objects.get(pk=wo_in_review.pk)
         segunda = WorkOrder.objects.get(pk=wo_in_review.pk)
         with patch("apps.reports.tasks.generate_work_order_pdf.delay"):
+            firmar(admin)
             apply_transition(primera, WorkOrder.Status.COMPLETED, admin)
             with pytest.raises(ValidationError):
                 apply_transition(segunda, WorkOrder.Status.COMPLETED, sup)
@@ -251,6 +255,7 @@ class TestApplyTransitionAtomica:
 
         with patch("apps.reports.tasks.generate_work_order_pdf.delay") as pdf:
             with django_capture_on_commit_callbacks(execute=False) as pendientes:
+                firmar(admin)
                 apply_transition(wo_in_review, WorkOrder.Status.COMPLETED, admin)
             pdf.assert_not_called()
 

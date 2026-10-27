@@ -108,6 +108,9 @@ export function isChecklistCompleted(error) {
   if (error?.response?.status !== 400) return false
   const data = error.response.data
   if (data?.code === 'checklist_completed') return true
+  // La OT ya no esta en curso (la enviaron a revision): el cambio en cola ya
+  // no tiene donde aplicarse.
+  if (data?.code === 'ot_no_editable') return true
   // Respaldo para servidores sin `code`.
   const texto = typeof data === 'string' ? data : (data?.detail ?? '')
   return /ya est. completado/i.test(texto)
@@ -118,6 +121,7 @@ export const ITEM_LABELS = {
   field_response: 'Una respuesta del checklist',
   checklist_completion: 'El cierre de un checklist',
   block_count: 'La cantidad de tomas de un checklist',
+  checklist_pending: 'Los pendientes de un checklist',
   finding: 'Un hallazgo',
   photo: 'Una foto',
   signature: 'Una firma',

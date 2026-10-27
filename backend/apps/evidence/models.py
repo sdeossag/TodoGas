@@ -74,6 +74,9 @@ class Signature(models.Model):
     class SignatureType(models.TextChoices):
         TECHNICIAN = "TECHNICIAN", "Firma del técnico"
         CLIENT = "CLIENT", "Firma del cliente"
+        # La pone la aprobacion de la OT con la firma guardada de quien aprueba;
+        # no se crea ni se borra por la API de firmas.
+        VALIDATION = "VALIDATION", "Firma de validación"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     work_order = models.ForeignKey(

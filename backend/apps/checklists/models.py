@@ -202,6 +202,12 @@ class ChecklistResponse(models.Model):
     # que dice el plan (planned_block_counts) y el tecnico lo ajusta en campo
     # si encuentra otra cantidad; la diferencia se le avisa al administrador.
     block_counts = models.JSONField(default=dict, blank=True)
+    # Lo que no se pudo revisar en campo (p. ej. un cubiculo aislado), cada uno
+    # con su motivo: [{"field": id|None, "group": "", "repetition": 0,
+    # "reason": "...", "marked_at": iso, "marked_by": id}]. Con `field` vacio es
+    # un bloque repetible completo (grupo + repeticion). Un pendiente cuenta como
+    # no completo: la OT no pasa a revision mientras haya alguno.
+    pendientes = models.JSONField(default=list, blank=True)
     planned_block_counts = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -219,6 +225,21 @@ class ChecklistResponse(models.Model):
         if not group or group not in self.version.repeatable_groups:
             return 1
         return max(1, int(self.block_counts.get(group, 1) or 1))
+
+    def pendientes_texto(self):
+        """Los pendientes como los lee el tecnico: "Cubículo 7: pendiente — motivo"."""
+        campos = {str(f.id): f for f in self.version.fields.all()}
+        textos = []
+        for p in self.pendientes or []:
+            if p.get("field"):
+                campo = campos.get(str(p["field"]))
+                nombre = campo.label if campo else "Campo"
+                if campo and campo.group and p.get("repetition"):
+                    nombre = f"{campo.group} {p['repetition']}: {nombre}"
+            else:
+                nombre = f"{p.get('group', '')} {p.get('repetition', '')}".strip()
+            textos.append(f"{nombre}: pendiente — {p.get('reason', '')}")
+        return textos
 
     def slots(self, fields=None):
         """

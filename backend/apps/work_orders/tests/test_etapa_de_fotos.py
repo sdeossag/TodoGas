@@ -18,6 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
+from apps.evidence.tests.firmas import firmar
 from apps.audit.models import AuditLog
 from apps.evidence.models import Photo
 from apps.reports.generator import _render
@@ -143,6 +144,7 @@ def test_la_etiqueta_en_revision_sigue_las_reglas_de_la_descripcion(en_revision)
     assert p.stage == ""
 
     # Cerrada ya no se cambia.
+    firmar(e["admin"])
     assert transicion(client_for(e["admin"]), e["wo_id"], WorkOrder.Status.COMPLETED).status_code == 200
     r = client_for(e["admin"]).patch(url_foto(p), {"stage": "BEFORE"}, format="json")
     assert r.status_code == 400
@@ -179,13 +181,14 @@ def test_el_acta_sin_etiquetas_sale_como_siempre(en_revision):
 
 # ── Integridad ───────────────────────────────────────────────────────────────
 
-def test_el_hash_nuevo_es_la_version_6_y_cubre_la_etiqueta(en_revision):
+def test_el_hash_vigente_cubre_la_etiqueta(en_revision):
     e = en_revision
-    assert integrity.INTEGRITY_ALGORITHM_VERSION == "7"
-    assert "7" in integrity.SUPPORTED_VERSIONS and "5" in integrity.SUPPORTED_VERSIONS
+    assert integrity.INTEGRITY_ALGORITHM_VERSION == "8"
+    assert "8" in integrity.SUPPORTED_VERSIONS and "5" in integrity.SUPPORTED_VERSIONS
 
+    firmar(e["admin"])
     assert transicion(client_for(e["admin"]), e["wo_id"], WorkOrder.Status.COMPLETED).status_code == 200
-    assert GeneratedReport.objects.get(work_order_id=e["wo_id"]).integrity_version == "7"
+    assert GeneratedReport.objects.get(work_order_id=e["wo_id"]).integrity_version == "8"
 
     wo = WorkOrder.objects.get(pk=e["wo_id"])
     assert integrity.verify_work_order(wo).verified is True

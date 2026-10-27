@@ -10,6 +10,7 @@ import { query, ready, run } from './database'
 import { contarPendientes, leerArchivo, listarPendientes, marcarSubida } from './photoQueue'
 import { PRIORITY_RANK_SQL } from './schema'
 import { progress, slotKey } from '../utils/checklistSlots'
+import { pendientesVigentes, textoPendiente } from '../utils/pendientes'
 
 const nowISO = () => new Date().toISOString()
 
@@ -209,15 +210,30 @@ export async function getOfflineChecklistResponse(responseId) {
       _local: local.synced === 0,
     })
   }
-  return {
+  const reabierta = row.reopened === 1 && !row.local_completed_at
+  const armada = {
     ...base,
     // La cantidad de tomas ajustada en el telefono gana sobre la descargada.
     block_counts: parse(row.local_block_counts, null) ?? base.block_counts ?? {},
     field_responses: [...porCampo.values()],
-    completed_at: base.completed_at ?? row.local_completed_at ?? null,
+    // Reabierto en el telefono: una lectura del servidor anterior a que la
+    // correccion subiera no lo vuelve a cerrar.
+    completed_at: reabierta ? null : (base.completed_at ?? row.local_completed_at ?? null),
+    // Lo que se dejo pendiente en el telefono gana sobre lo descargado.
+    pendientes: row.pendientes_pending === 1
+      ? parse(row.local_pendientes, [])
+      : (base.pendientes ?? []),
     _fromOffline: true,
     _completionPending: row.completion_pending === 1,
+    _reopened: row.reopened === 1,
   }
+  // Un pendiente de algo que ya se respondio no cuenta (tambien lo descarta el servidor).
+  const vigentes = pendientesVigentes(armada)
+  armada.pendientes = vigentes.map((p) => ({
+    ...p,
+    text: textoPendiente(p, armada.version_fields ?? []),
+  }))
+  return armada
 }
 
 /**
@@ -249,7 +265,8 @@ export async function getOfflineWorkOrderDetail(workOrderId) {
         // Cada toma de un bloque repetible cuenta aparte, como en el servidor.
         ...progress(respuesta),
         // El detalle descargado tambien sabe si el servidor ya lo cerro.
-        completed_at: respuesta.completed_at ?? tarea.checklist?.completed_at ?? null,
+        completed_at:
+          respuesta.completed_at ?? (respuesta._reopened ? null : tarea.checklist?.completed_at) ?? null,
       },
     })
   }
@@ -318,7 +335,7 @@ export async function markWorkOrderStatusSynced(workOrderId) {
 export async function saveChecklistResponse(response) {
   if (!(await ready()) || !response?.id) return
   // Las marcas de la lectura offline no se guardan como si vinieran del servidor.
-  const { _fromOffline, _completionPending, ...limpia } = response
+  const { _fromOffline, _completionPending, _reopened, ...limpia } = response
   // El WHERE final: un checklist cerrado no se reabre. Varias lecturas del
   // servidor se guardan en paralelo (la consulta, el formulario, el paquete
   // offline) y una anterior al cierre puede terminar de escribirse despues:
@@ -329,12 +346,16 @@ export async function saveChecklistResponse(response) {
     `INSERT OR REPLACE INTO offline_checklist_responses (
       id, work_order_id, version_id, started_at, completed_at, version_fields_json,
       task_id, response_json, local_completed_at, completion_pending,
-      local_block_counts, counts_pending
+      local_block_counts, counts_pending, local_pendientes, pendientes_pending, reopened
     ) SELECT ?,?,?,?,?,?,?,?,
       (SELECT local_completed_at FROM offline_checklist_responses WHERE id = ?),
       COALESCE((SELECT completion_pending FROM offline_checklist_responses WHERE id = ?), 0),
       (SELECT local_block_counts FROM offline_checklist_responses WHERE id = ? AND counts_pending = 1),
-      COALESCE((SELECT counts_pending FROM offline_checklist_responses WHERE id = ?), 0)
+      COALESCE((SELECT counts_pending FROM offline_checklist_responses WHERE id = ?), 0),
+      (SELECT local_pendientes FROM offline_checklist_responses WHERE id = ? AND pendientes_pending = 1),
+      COALESCE((SELECT pendientes_pending FROM offline_checklist_responses WHERE id = ?), 0),
+      CASE WHEN ? IS NULL THEN 0
+           ELSE COALESCE((SELECT reopened FROM offline_checklist_responses WHERE id = ?), 0) END
     WHERE ? IS NOT NULL OR NOT EXISTS (
       SELECT 1 FROM offline_checklist_responses WHERE id = ? AND completed_at IS NOT NULL
     )`,
@@ -350,6 +371,10 @@ export async function saveChecklistResponse(response) {
       response.id,
       response.id,
       response.id,
+      response.id,
+      response.id,
+      response.id,
+      response.completed_at ?? null,
       response.id,
       response.completed_at ?? null,
       response.id,
@@ -371,6 +396,87 @@ export async function markChecklistCompletedOffline(responseId) {
     [nowISO(), responseId]
   )
   await logSync({ entityType: 'checklist', entityId: responseId, action: 'complete', status: 'pending' })
+  await run('UPDATE offline_checklist_responses SET reopened = 0 WHERE id = ?', [responseId])
+}
+
+/** Reescribe el JSON guardado de la respuesta con `cambiar(objeto)`. */
+async function parchearRespuesta(responseId, cambiar) {
+  const [row] = await query('SELECT response_json FROM offline_checklist_responses WHERE id = ?', [
+    responseId,
+  ])
+  const base = parse(row?.response_json, null)
+  if (!base) return
+  await run('UPDATE offline_checklist_responses SET response_json = ? WHERE id = ?', [
+    JSON.stringify(cambiar(base)),
+    responseId,
+  ])
+}
+
+/**
+ * El tecnico cambio una respuesta de un checklist ya cerrado, con la OT en
+ * curso: queda por cerrar de nuevo, en el telefono y (al subir la correccion)
+ * en el servidor. Sin esto una lectura anterior lo volveria a dar por cerrado.
+ */
+export async function reopenChecklistOffline(responseId) {
+  if (!(await ready())) return
+  const [row] = await query(
+    'SELECT completed_at, local_completed_at FROM offline_checklist_responses WHERE id = ?',
+    [responseId]
+  )
+  if (!row || (!row.completed_at && !row.local_completed_at)) return
+  await run(
+    `UPDATE offline_checklist_responses
+     SET completed_at = NULL, local_completed_at = NULL, completion_pending = 0, reopened = 1
+     WHERE id = ?`,
+    [responseId]
+  )
+  await parchearRespuesta(responseId, (r) => ({ ...r, completed_at: null, completed_by: null }))
+}
+
+/** El checklist se cerro con red: ya no hay nada que reabrir. */
+export async function clearChecklistReopened(responseId) {
+  if (!(await ready())) return
+  await run('UPDATE offline_checklist_responses SET reopened = 0 WHERE id = ?', [responseId])
+}
+
+/**
+ * Los pendientes ("no se pudo revisar") que dejo el tecnico, sin red. Se manda
+ * la lista completa, como la recibe el servidor: reenviarla es idempotente.
+ * Un checklist con pendientes no esta cerrado.
+ */
+export async function setPendientesOffline(responseId, lista) {
+  if (!(await ready())) return
+  await run(
+    `UPDATE offline_checklist_responses
+     SET local_pendientes = ?, pendientes_pending = 1
+     WHERE id = ?`,
+    [JSON.stringify(lista), responseId]
+  )
+  if (lista.length) await reopenChecklistOffline(responseId)
+}
+
+export async function getPendingPendientes() {
+  if (!(await ready())) return []
+  return query(
+    'SELECT id, local_pendientes FROM offline_checklist_responses WHERE pendientes_pending = 1'
+  )
+}
+
+export async function markPendientesSynced(responseId) {
+  if (!(await ready())) return
+  const [row] = await query(
+    'SELECT local_pendientes FROM offline_checklist_responses WHERE id = ?',
+    [responseId]
+  )
+  const subidos = parse(row?.local_pendientes, [])
+  await run(
+    `UPDATE offline_checklist_responses
+     SET pendientes_pending = 0, local_pendientes = NULL
+     WHERE id = ?`,
+    [responseId]
+  )
+  // Lo descargado queda al dia hasta la proxima lectura del servidor.
+  await parchearRespuesta(responseId, (r) => ({ ...r, pendientes: subidos }))
 }
 
 /**
@@ -617,6 +723,7 @@ export async function countPendingSync() {
        (SELECT COUNT(*) FROM offline_signatures WHERE synced = 0) +
        (SELECT COUNT(*) FROM offline_checklist_responses WHERE completion_pending = 1) +
        (SELECT COUNT(*) FROM offline_checklist_responses WHERE counts_pending = 1) +
+       (SELECT COUNT(*) FROM offline_checklist_responses WHERE pendientes_pending = 1) +
        (SELECT COUNT(*) FROM offline_findings WHERE pending_action IS NOT NULL) +
        (SELECT COUNT(*) FROM offline_work_orders WHERE local_status_changed = 1)
      AS total`
@@ -638,7 +745,7 @@ export async function getWorkOrderIdsWithPendingSync() {
       WHERE f.synced = 0
      UNION
      SELECT DISTINCT work_order_id AS id FROM offline_checklist_responses
-      WHERE completion_pending = 1
+      WHERE completion_pending = 1 OR pendientes_pending = 1
      UNION
      SELECT id FROM offline_work_orders WHERE local_status_changed = 1
      UNION

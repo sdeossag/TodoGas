@@ -294,12 +294,12 @@
       {% if op.firma_validado %}
       <td>
         <div class="label">Validado por</div>
-        {# La aprobacion de la OT en el sistema, autenticada y en el historial: no se dibuja. #}
+        {# La firma guardada de quien aprobo, copiada a la OT al aprobar. Las OT anteriores no la tienen: llevan solo el nombre. #}
         {% if validation %}
-          <br><div class="validated">Aprobado en TodoGas CMMS</div>
+          {% if validation_signature %}<br><img src="{{ validation_signature.file_url }}" alt="Firma de validación">{% else %}<br><div class="validated">Aprobado en TodoGas CMMS</div>{% endif %}
           <br><strong>{{ validation.name }}</strong>
           <br><span class="label">{{ validation.role }}</span>
-          <br><span class="label">{{ validation.at|date:"d/m/Y H:i" }}</span>
+          <br><span class="label">{{ validation.at|date:"d/m/Y" }}</span>
         {% else %}<br><span class="no-data">Pendiente de aprobación</span>{% endif %}
       </td>
       {% endif %}

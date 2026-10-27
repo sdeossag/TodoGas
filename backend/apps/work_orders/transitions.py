@@ -1,10 +1,24 @@
 from django.db import transaction
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, ValidationError
 
 from apps.users import permisos
 
 from .models import WorkOrder, WorkOrderStatusHistory
+
+
+class FirmaRequerida(APIException):
+    """Quien aprueba no tiene firma guardada: HTTP 400 con el cuerpo fijado con el frontend."""
+
+    status_code = 400
+    default_code = "firma_requerida"
+
+    def __init__(self):
+        super().__init__({
+            "code": "firma_requerida",
+            "detail": "Registra tu firma en Mi perfil para aprobar esta orden.",
+        })
+
 
 # Quien puede quedar como asignado de una OT y ejecutarla. Ademas del tecnico,
 # el administrador y el supervisor (decision del 2026-10-01): hacen reportes de
@@ -95,6 +109,11 @@ def validate_transition(work_order, new_status, user, comment=""):
             t for t in work_order.tasks.select_related("asset")
             if t.checklist_version_id and t.status != "CANCELLED"
         ]
+        # Lo que quedo pendiente (no se pudo revisar) cuenta como incompleto y se
+        # nombra: "Cubiculo 7: pendiente - aislado por aerosoles".
+        from .serializers import pendientes_de_la_ot
+
+        faltantes.extend(pendientes_de_la_ot(work_order))
         for tarea in tareas:
             try:
                 completo = bool(tarea.checklist_response.completed_at)
@@ -113,7 +132,9 @@ def validate_transition(work_order, new_status, user, comment=""):
         if not work_order.photos.filter(hidden=False).exists():
             faltantes.append("subir al menos una foto de evidencia")
 
-        if not work_order.signatures.exists():
+        # Solo cuenta la del tecnico: la de validacion la pone la aprobacion
+        # despues, y no puede hacer pasar por firmada una OT sin firma.
+        if not work_order.signatures.filter(signature_type="TECHNICIAN").exists():
             faltantes.append("capturar la firma digital")
 
         if faltantes:
@@ -157,6 +178,16 @@ def apply_transition(work_order, new_status, user, comment=""):
 def _aplicar(work_order, new_status, user, comment):
     validate_transition(work_order, new_status, user, comment)
 
+    # Aprobar firma con la firma guardada de quien aprueba (tambien el
+    # administrador que ejecuto la OT). Sin ella no se aprueba nada.
+    firma_bytes = None
+    if new_status == WorkOrder.Status.COMPLETED:
+        from apps.evidence.copia_firma import leer_firma_guardada
+
+        firma_bytes = leer_firma_guardada(user)
+        if firma_bytes is None:
+            raise FirmaRequerida()
+
     from_status = work_order.status
     now = timezone.now()
 
@@ -191,3 +222,33 @@ def _aplicar(work_order, new_status, user, comment):
         changed_by=user,
         comment=comment,
     )
+
+    if firma_bytes is not None:
+        _firmar_validacion(work_order, user, firma_bytes, now)
+
+
+def _firmar_validacion(work_order, user, firma_bytes, now):
+    """
+    La firma de validacion de la OT: copia propia de la firma guardada de quien
+    aprueba. Va en la misma transaccion que la aprobacion, asi una aprobacion
+    que falla no deja firma huerfana, y antes del acta, que la imprime.
+    """
+    from apps.evidence.copia_firma import guardar_copia_de_firma
+    from apps.evidence.models import Signature
+
+    key, file_hash = guardar_copia_de_firma(work_order, Signature.SignatureType.VALIDATION, firma_bytes)
+    try:
+        Signature.objects.create(
+            work_order=work_order,
+            signature_type=Signature.SignatureType.VALIDATION,
+            file_url=key,
+            signer_name=(f"{user.first_name} {user.last_name}".strip() or user.email)[:200],
+            signer_role=user.get_role_display(),
+            file_hash=file_hash,
+            signed_at=now,
+        )
+    except Exception:
+        from django.core.files.storage import default_storage
+
+        default_storage.delete(key)
+        raise

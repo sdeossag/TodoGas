@@ -250,7 +250,12 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             action=AuditLog.Action.STATUS_CHANGE,
             entity_type="WorkOrder",
             entity_id=wo.id,
-            changes={"new_status": new_status, "comment": comment},
+            changes={
+                "new_status": new_status,
+                "comment": comment,
+                # La aprobacion se firma con la firma guardada de quien aprueba.
+                **({"firma_guardada": True} if new_status == WorkOrder.Status.COMPLETED else {}),
+            },
             ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )

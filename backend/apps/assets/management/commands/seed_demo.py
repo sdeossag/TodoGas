@@ -499,6 +499,7 @@ class Command(BaseCommand):
 
         self._fijar(self._en(dias, 11, 0))
         apply_transition(ot, WorkOrder.Status.IN_REVIEW, self.u["tec"])
+        self._firma_guardada_de(self.u["sup"])
         self._fijar(self._en(dias, 16, 0))
         apply_transition(ot, WorkOrder.Status.COMPLETED, self.u["sup"], comment="Revisada y aprobada.")
 
@@ -637,6 +638,22 @@ class Command(BaseCommand):
                 signer_role=rol, file_hash=hashlib.sha256(contenido).hexdigest(),
                 signed_at=cuando, latitude=ot.hospital.latitude, longitude=ot.hospital.longitude,
             )
+
+    def _firma_guardada_de(self, user):
+        """Aprobar firma con la firma guardada de quien aprueba: el supervisor de la demo tiene una."""
+        from PIL import Image, ImageDraw
+
+        from apps.evidence.models import UserSignature
+
+        if UserSignature.objects.filter(user=user).exists():
+            return
+        img = Image.new("RGB", (500, 200), (255, 255, 255))
+        ImageDraw.Draw(img).line([(20 + i * 22, 100 + (-1) ** i * 35) for i in range(21)], fill=(20, 30, 90), width=3)
+        salida = io.BytesIO()
+        img.save(salida, "PNG")
+        contenido = salida.getvalue()
+        clave = self._guardar(f"firmas-guardadas/{user.id}.png", contenido)
+        UserSignature.objects.create(user=user, file_url=clave, file_hash=hashlib.sha256(contenido).hexdigest())
 
     def _hallazgo(self, ot, dias, datos):
         from apps.work_orders.models import Finding

@@ -20,6 +20,8 @@ import {
   countPendingSync,
   getPendingBlockCounts,
   getPendingChecklistCompletions,
+  getPendingPendientes,
+  markPendientesSynced,
   getUnsyncedFieldResponses,
   getPendingFindings,
   getPhotoFile,
@@ -116,6 +118,7 @@ async function nuevoContexto() {
     // Lo que no subio en esta pasada y bloquea a sus dependientes.
     sinCantidad: new Set(), // checklists con la cantidad de tomas sin subir
     sinRespuestas: new Set(), // checklists con alguna respuesta sin subir
+    sinPendientes: new Set(), // checklists con la lista de pendientes sin subir
     sinHallazgo: new Set(), // hallazgos sin subir (sus fotos esperan)
     sinSubir: new Set(), // OT con algo sin subir (su cambio de estado espera)
   }
@@ -214,6 +217,63 @@ export async function syncFieldResponses(ctx, onItemDone) {
 }
 
 /**
+ * Pendientes ("no se pudo revisar") dejados sin red. Van despues de las
+ * respuestas (el servidor descarta el pendiente de lo que ya tiene respuesta)
+ * y antes del cierre (con pendientes el servidor no cierra el checklist).
+ */
+export async function syncPendientes(ctx, onItemDone) {
+  const pending = await getPendingPendientes()
+  const resumen = resumenVacio(pending.length)
+
+  for (const row of pending) {
+    const workOrderId = ctx.checklistOT.get(row.id)
+    let lista = []
+    try {
+      lista = JSON.parse(row.local_pendientes ?? '[]')
+    } catch {
+      lista = []
+    }
+    const resultado = await intentar(
+      ctx,
+      {
+        type: 'checklist_pending',
+        key: row.id,
+        workOrderId,
+        log: { entityType: 'checklist', entityId: row.id, action: 'pending' },
+      },
+      {
+        logOk: false,
+        bloqueado: ctx.sinCantidad.has(row.id) || ctx.sinRespuestas.has(row.id),
+        alNoSubir: () => {
+          ctx.sinPendientes.add(row.id)
+          ctx.sinSubir.add(workOrderId)
+        },
+      },
+      async () => {
+        try {
+          await client.post(`/api/checklists/responses/${row.id}/pending/`, {
+            pendientes: lista.map((p) => ({
+              field: p.field ?? null,
+              group: p.group ?? '',
+              repetition: p.repetition ?? 0,
+              reason: p.reason,
+              marked_at: p.marked_at ?? null,
+            })),
+          })
+        } catch (error) {
+          // La OT ya salio de en curso: no hay nada que reintentar.
+          if (!isChecklistCompleted(error)) throw error
+        }
+        await markPendientesSynced(row.id)
+      }
+    )
+    contar(resumen, resultado)
+    onItemDone?.()
+  }
+  return resumen
+}
+
+/**
  * Checklists finalizados sin red. Van despues de las respuestas (el servidor
  * rechaza cerrar uno con obligatorios sin responder) y antes del estado de la
  * OT (pasar a revision exige todos los checklists cerrados).
@@ -233,7 +293,8 @@ export async function syncChecklistCompletions(ctx, onItemDone) {
         log: { entityType: 'checklist', entityId: row.id, action: 'complete' },
       },
       {
-        bloqueado: ctx.sinCantidad.has(row.id) || ctx.sinRespuestas.has(row.id),
+        bloqueado:
+          ctx.sinCantidad.has(row.id) || ctx.sinRespuestas.has(row.id) || ctx.sinPendientes.has(row.id),
         alNoSubir: () => ctx.sinSubir.add(workOrderId),
       },
       async () => {
@@ -462,19 +523,20 @@ export async function syncOfflineData({ onProgress } = {}) {
     onProgress?.(remaining)
   }
 
-  // El orden es deliberado: cantidad de tomas, respuestas, cierre de cada
+  // El orden es deliberado: cantidad de tomas, respuestas, pendientes, cierre de cada
   // checklist, hallazgos (antes que las fotos que los referencian), evidencia
   // y al final el estado de la OT, que valida todo lo anterior.
   const ctx = await nuevoContexto()
   const counts = await syncBlockCounts(ctx, tick)
   const fields = await syncFieldResponses(ctx, tick)
+  const pendientes = await syncPendientes(ctx, tick)
   const checklists = await syncChecklistCompletions(ctx, tick)
   const findings = await syncFindings(ctx, tick)
   const photos = await syncPhotos(ctx, tick)
   const signatures = await syncSignatures(ctx, tick)
   const workOrders = await syncWorkOrderStatuses(ctx, tick)
 
-  const result = { counts, fields, checklists, findings, photos, signatures, workOrders }
+  const result = { counts, fields, pendientes, checklists, findings, photos, signatures, workOrders }
   const fases = Object.values(result)
   const failed = fases.reduce((acc, f) => acc + f.failed, 0)
   const synced = fases.reduce((acc, f) => acc + f.ok, 0)

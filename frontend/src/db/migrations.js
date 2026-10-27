@@ -160,6 +160,18 @@ export const MIGRATIONS = [
       )
     },
   },
+  {
+    // Pendientes del checklist y checklist reabierto (revision del 23-oct-2026):
+    // lo que el tecnico deja "pendiente, no se pudo revisar" sin red, y la marca
+    // de que reabrio un checklist ya cerrado al corregir una respuesta. Solo
+    // columnas nuevas en la tabla del checklist; nada de lo que esta en cola se toca.
+    version: 8,
+    async up(driver) {
+      await addColumn(driver, 'offline_checklist_responses', 'local_pendientes', 'TEXT')
+      await addColumn(driver, 'offline_checklist_responses', 'pendientes_pending', 'INTEGER DEFAULT 0')
+      await addColumn(driver, 'offline_checklist_responses', 'reopened', 'INTEGER DEFAULT 0')
+    },
+  },
 ]
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

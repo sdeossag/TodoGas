@@ -114,6 +114,24 @@ export function useSetBlockCount(responseId) {
   })
 }
 
+/**
+ * Deja como "Pendiente — no se pudo revisar" un campo o un bloque repetible
+ * (cada uno con su motivo). Se manda la lista completa.
+ */
+export function useSetPendientes(responseId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (pendientes) =>
+      client
+        .post(`/api/checklists/responses/${responseId}/pending/`, { pendientes })
+        .then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['checklist-responses', responseId] })
+      qc.invalidateQueries({ queryKey: ['work-orders'] })
+    },
+  })
+}
+
 export function useCompleteChecklist(responseId) {
   const qc = useQueryClient()
   return useMutation({

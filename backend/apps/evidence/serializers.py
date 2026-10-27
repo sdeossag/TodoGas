@@ -11,6 +11,7 @@ from apps.maintenance.models import Task
 from apps.work_orders.device_time import device_time
 from apps.work_orders.models import Finding, WorkOrder
 
+from .copia_firma import guardar_copia_de_firma, leer_firma_guardada
 from .models import Photo, Signature, UserSignature
 
 MAX_PHOTO_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -201,7 +202,11 @@ class SignatureCreateSerializer(serializers.Serializer):
     signer_name = serializers.CharField(max_length=200)
     signer_role = serializers.CharField(max_length=100, required=False, default="", allow_blank=True)
     signature_type = serializers.ChoiceField(
-        choices=Signature.SignatureType.choices,
+        # VALIDATION no se pide por la API: solo la crea la aprobacion de la OT.
+        choices=[
+            c for c in Signature.SignatureType.choices
+            if c[0] != Signature.SignatureType.VALIDATION
+        ],
         default=Signature.SignatureType.TECHNICIAN,
         required=False,
     )
@@ -257,17 +262,16 @@ class SignatureCreateSerializer(serializers.Serializer):
         if validated_data.get("use_saved"):
             # Copia de la firma guardada: otro archivo y otra fila, para que
             # cambiarla o borrarla despues no toque esta OT ni su acta.
-            saved = UserSignature.objects.get(user=self.context["request"].user)
-            with default_storage.open(saved.file_url) as f:
-                img_bytes = f.read()
+            img_bytes = leer_firma_guardada(self.context["request"].user)
+            if img_bytes is None:
+                raise serializers.ValidationError(
+                    {"use_saved": "No tienes una firma guardada. Registrala en tu perfil."}
+                )
         else:
             img_bytes = base64.b64decode(validated_data["image_data"])
-        file_hash = hashlib.sha256(img_bytes).hexdigest()
-
         work_order = validated_data["work_order"]
         sig_type = validated_data.get("signature_type", Signature.SignatureType.TECHNICIAN)
-        s3_key = f"evidence/signatures/{work_order.id}/{sig_type}_{uuid.uuid4().hex}.png"
-        saved_key = default_storage.save(s3_key, ContentFile(img_bytes))
+        saved_key, file_hash = guardar_copia_de_firma(work_order, sig_type, img_bytes)
 
         return Signature.objects.create(
             work_order=work_order,

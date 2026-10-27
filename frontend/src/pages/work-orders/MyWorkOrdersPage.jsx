@@ -128,6 +128,15 @@ function WorkOrderCard({ wo, onTransition, navigate, hasPendingSync = false }) {
       {/* Status */}
       <div className="flex items-center gap-2">
         <StatusBadge status={wo.status} />
+        {wo.pending_count > 0 && (
+          <span
+            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800"
+            title="Hay que volver a revisar lo que quedó pendiente"
+          >
+            <Icon name="warning" className="w-3 h-3" />
+            {wo.pending_count} pendiente{wo.pending_count !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       {/* Fecha límite */}

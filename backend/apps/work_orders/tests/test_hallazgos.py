@@ -19,6 +19,7 @@ from django.utils import timezone
 from model_bakery import baker
 from rest_framework.test import APIClient
 
+from apps.evidence.tests.firmas import firmar
 from apps.assets.models import Asset, AssetNode, Hospital
 from apps.evidence.models import Photo
 from apps.maintenance import services
@@ -235,6 +236,7 @@ def test_al_aprobar_con_uno_grave_se_avisa_al_hospital(mundo, django_capture_on_
     a_estado(mundo["ot"], WorkOrder.Status.IN_REVIEW)
     # El correo sale cuando la aprobacion ya esta guardada.
     with patch("apps.reports.tasks.generate_work_order_pdf.delay"),             django_capture_on_commit_callbacks(execute=True):
+        firmar(mundo["admin"])
         apply_transition(mundo["ot"], WorkOrder.Status.COMPLETED, mundo["admin"])
     assert len(mail.outbox) == 1
     correo = mail.outbox[0]
@@ -246,6 +248,7 @@ def test_sin_hallazgos_graves_no_hay_correo(mundo, django_capture_on_commit_call
     reportar(mundo, severity="HIGH")
     a_estado(mundo["ot"], WorkOrder.Status.IN_REVIEW)
     with patch("apps.reports.tasks.generate_work_order_pdf.delay"),             django_capture_on_commit_callbacks(execute=True):
+        firmar(mundo["admin"])
         apply_transition(mundo["ot"], WorkOrder.Status.COMPLETED, mundo["admin"])
     assert mail.outbox == []
 

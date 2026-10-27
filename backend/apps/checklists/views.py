@@ -128,6 +128,49 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
             )
         return None
 
+    # Mientras la OT esta programada o en curso el checklist se llena y se
+    # corrige (revision del 2026-10-23: "si uno se equivoco, no se puede volver
+    # a corregir"). En revision lo corrige quien revisa (correct-field) y,
+    # devuelta a en curso, el tecnico vuelve a editar.
+    _ESTADOS_EDITABLES = ("PENDING", "IN_PROGRESS")
+
+    def _ot_no_editable(self, response):
+        if response.task.work_order.status in self._ESTADOS_EDITABLES:
+            return None
+        return Response(
+            {
+                "detail": "La OT ya no está en curso: el checklist no admite cambios. "
+                          "Si hay que corregir algo, que la devuelvan a en curso.",
+                "code": "ot_no_editable",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    @staticmethod
+    def _reabrir(response):
+        """Un cambio deja el checklist por cerrar de nuevo."""
+        if response.completed_at or response.completed_by_id:
+            response.completed_at = None
+            response.completed_by = None
+            response.save(update_fields=["completed_at", "completed_by"])
+
+    @staticmethod
+    def _quitar_pendientes_de(response, field, repeticion):
+        """Responder el item (o algo de su bloque) lo saca de los pendientes."""
+        grupo = field.group if field.group in response.version.repeatable_groups else ""
+        restantes = [
+            p for p in response.pendientes
+            if not (
+                (p.get("field") and str(p["field"]) == str(field.id)
+                 and p.get("repetition", 0) == repeticion)
+                or (not p.get("field") and grupo and p.get("group") == grupo
+                    and p.get("repetition") == repeticion)
+            )
+        ]
+        if len(restantes) != len(response.pendientes):
+            response.pendientes = restantes
+            response.save(update_fields=["pendientes"])
+
     def destroy(self, request, *args, **kwargs):
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
@@ -142,11 +185,8 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         response = self.get_object()
         if (bloqueo := self._solo_quien_ejecuta(request, response)) is not None:
             return bloqueo
-        if response.completed_at:
-            return Response(
-                {"detail": "El checklist ya está completado.", "code": "checklist_completed"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if (bloqueo := self._ot_no_editable(response)) is not None:
+            return bloqueo
 
         serializer = ChecklistFieldResponseCreateSerializer(
             data=request.data,
@@ -156,10 +196,15 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
 
         field = serializer.validated_data["field"]
         value = serializer.validated_data.get("value", "")
+        repeticion = serializer.validated_data.get("repetition", 0)
         try:
             extra = validate_field_value(field, value)
         except ValueError as e:
             return Response({"value": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        previa = response.field_responses.filter(field=field, repetition=repeticion).first()
+        notas = serializer.validated_data.get("notes", "")
+        cambio = previa is None or previa.value != value or previa.notes != notas
 
         field_response = serializer.save()
         field_response._out_of_range = extra.get("out_of_range", False)
@@ -168,6 +213,9 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         if response.started_at is None:
             response.started_at = timezone.now()
             response.save(update_fields=["started_at"])
+        self._quitar_pendientes_de(response, field, repeticion)
+        if cambio:
+            self._reabrir(response)
 
         return Response(ChecklistFieldResponseSerializer(field_response).data)
 
@@ -237,11 +285,8 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         response = self.get_object()
         if (bloqueo := self._solo_quien_ejecuta(request, response)) is not None:
             return bloqueo
-        if response.completed_at:
-            return Response(
-                {"detail": "El checklist ya está completado.", "code": "checklist_completed"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if (bloqueo := self._ot_no_editable(response)) is not None:
+            return bloqueo
         grupo = request.data.get("group", "")
         if grupo not in response.version.repeatable_groups:
             return Response(
@@ -266,8 +311,109 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
                 {"count": f"La {grupo.lower()} {mayor} tiene respuestas; no se puede quitar."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if cuantas != response.count_for(grupo):
+            self._reabrir(response)
         response.block_counts = {**response.block_counts, grupo: cuantas}
-        response.save(update_fields=["block_counts"])
+        # Un pendiente de una toma que ya no existe se va con ella.
+        response.pendientes = [
+            p for p in response.pendientes
+            if not (p.get("group") == grupo and (p.get("repetition") or 0) > cuantas)
+        ]
+        response.save(update_fields=["block_counts", "pendientes"])
+        return Response(ChecklistResponseSerializer(response).data)
+
+    @action(detail=True, methods=["post"], url_path="pending")
+    def set_pending(self, request, pk=None):
+        """
+        Deja como "Pendiente - no se pudo revisar" un campo o un bloque
+        repetible completo (p. ej. el cubiculo 7, aislado por aerosoles), con
+        su motivo. Recibe la lista completa de pendientes: reenviarla es
+        idempotente, como lo necesita la cola sin red. Responder el item
+        despues lo quita solo.
+        """
+        response = self.get_object()
+        if (bloqueo := self._solo_quien_ejecuta(request, response)) is not None:
+            return bloqueo
+        if (bloqueo := self._ot_no_editable(response)) is not None:
+            return bloqueo
+        entrada = request.data.get("pendientes")
+        if not isinstance(entrada, list):
+            return Response({"pendientes": "Manda la lista de pendientes."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        campos = {str(f.id): f for f in response.version.fields.all()}
+        repetibles = response.version.repeatable_groups
+        respondidas = {
+            (str(fid), rep)
+            for fid, rep in response.field_responses.values_list("field_id", "repetition")
+        }
+        previos = {
+            (str(p.get("field") or ""), p.get("group", ""), p.get("repetition", 0)): p
+            for p in response.pendientes
+        }
+        nuevos, vistos = [], set()
+        for item in entrada:
+            if not isinstance(item, dict):
+                return Response({"pendientes": "Pendiente inválido."}, status=status.HTTP_400_BAD_REQUEST)
+            motivo = str(item.get("reason") or "").strip()
+            if not motivo:
+                return Response({"reason": "Di por qué quedó pendiente."}, status=status.HTTP_400_BAD_REQUEST)
+            if len(motivo) > 200:
+                return Response({"reason": "El motivo es muy largo (máximo 200 letras)."},
+                                status=status.HTTP_400_BAD_REQUEST)
+            try:
+                rep = int(item.get("repetition") or 0)
+            except (TypeError, ValueError):
+                return Response({"repetition": "Número de repetición inválido."},
+                                status=status.HTTP_400_BAD_REQUEST)
+            campo_id = str(item.get("field") or "")
+            if campo_id:
+                campo = campos.get(campo_id)
+                if campo is None:
+                    return Response({"field": "El campo no pertenece a este checklist."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                grupo = campo.group if campo.group in repetibles else ""
+                if grupo:
+                    if not 1 <= rep <= response.count_for(grupo):
+                        return Response({"repetition": f"«{grupo}» va de 1 a {response.count_for(grupo)}."},
+                                        status=status.HTTP_400_BAD_REQUEST)
+                elif rep != 0:
+                    return Response({"repetition": f"«{campo.label}» no se repite."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                if (campo_id, rep) in respondidas:
+                    continue  # ya tiene respuesta: no esta pendiente
+                grupo_p = ""
+            else:
+                grupo_p = str(item.get("group") or "")
+                if grupo_p not in repetibles:
+                    return Response({"group": f"«{grupo_p}» no es un grupo que se repita en este checklist."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                if not 1 <= rep <= response.count_for(grupo_p):
+                    return Response({"repetition": f"«{grupo_p}» va de 1 a {response.count_for(grupo_p)}."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+            clave = (campo_id, grupo_p, rep)
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            previo = previos.get(clave)
+            if previo is not None:
+                nuevos.append({**previo, "reason": motivo})
+                continue
+            cuando = item.get("marked_at")
+            cuando = parse_datetime(cuando) if isinstance(cuando, str) else None
+            nuevos.append({
+                "field": campo_id or None,
+                "group": grupo_p,
+                "repetition": rep,
+                "reason": motivo,
+                "marked_at": device_time(cuando, response.task.work_order).isoformat(),
+                "marked_by": str(request.user.id),
+            })
+
+        response.pendientes = nuevos
+        response.save(update_fields=["pendientes"])
+        if nuevos:
+            self._reabrir(response)
         return Response(ChecklistResponseSerializer(response).data)
 
     @action(detail=True, methods=["post"])
@@ -278,6 +424,14 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         if response.completed_at:
             return Response(
                 {"detail": "El checklist ya está completado.", "code": "checklist_completed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Un pendiente es lo que no se pudo revisar: mientras siga ahi el
+        # checklist no esta completo.
+        if response.pendientes:
+            return Response(
+                {"detail": "Hay pendientes por resolver: " + "; ".join(response.pendientes_texto()) + "."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

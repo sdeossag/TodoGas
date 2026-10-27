@@ -167,7 +167,8 @@ def test_complete_marks_completed_at(client_tec, work_order, version, tec):
 
 
 @pytest.mark.django_db
-def test_cannot_submit_field_after_complete(client_tec, work_order, version, tec):
+def test_submit_field_after_complete_reopens_while_in_progress(client_tec, work_order, version, tec):
+    """Revision del 2026-10-23: con la OT en curso se corrige aunque este cerrado."""
     cr = ChecklistResponse.objects.create(
         task=work_order.tasks.first(),
         version=version,
@@ -179,4 +180,6 @@ def test_cannot_submit_field_after_complete(client_tec, work_order, version, tec
         f"/api/checklists/responses/{cr.id}/submit-field/",
         {"field": str(field.id), "value": "100"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    cr.refresh_from_db()
+    assert cr.completed_at is None
