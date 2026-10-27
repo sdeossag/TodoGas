@@ -42,6 +42,7 @@ import AdminLayout from '../layouts/AdminLayout'
 import TechnicianLayout from '../layouts/TechnicianLayout'
 import ClientLayout from '../layouts/ClientLayout'
 import { esGestor } from '../utils/permisos'
+import { layoutPerfil } from '../utils/layoutPerfil'
 
 const ROLE_HOME = {
   ADMIN: '/dashboard',
@@ -56,6 +57,12 @@ function Spinner() {
       <UiSpinner className="h-8 w-8 text-brand" label="Cargando la aplicacion" />
     </div>
   )
+}
+
+/** "Mi perfil" usa el layout del rol: el técnico el suyo, admin y supervisor el de administración. */
+function PerfilLayout() {
+  const role = useAuthStore((s) => s.user?.role)
+  return layoutPerfil(role) === 'tecnico' ? <TechnicianLayout /> : <AdminLayout />
 }
 
 function ProtectedRoute({ allowedRoles, gestion = false, redirectTo }) {
@@ -113,7 +120,6 @@ export const router = createBrowserRouter(
             { path: '/reportes', element: <ReportsPage /> },
             { path: '/inventario', element: <InventoryPage /> },
             { path: '/inventario/:id/movimientos', element: <ItemMovementsPage /> },
-            { path: '/mi-perfil', element: <ProfilePage /> },
 
             // Gestion de usuarios y auditoria: ADMIN, no SUP.
             {
@@ -130,6 +136,18 @@ export const router = createBrowserRouter(
       ],
     },
 
+    // Mi perfil compartido: ADMIN y SUP con AdminLayout, TEC con TechnicianLayout.
+    {
+      element: <ProtectedRoute allowedRoles={['ADMIN', 'SUP', 'TEC']} />,
+      children: [
+        {
+          path: '/mi-perfil',
+          element: <PerfilLayout />,
+          children: [{ index: true, element: <ProfilePage /> }],
+        },
+      ],
+    },
+
     // Rutas para TEC
     {
       element: <ProtectedRoute allowedRoles={['TEC']} />,
@@ -139,7 +157,6 @@ export const router = createBrowserRouter(
           children: [
             { path: '/mis-ordenes', element: <MyWorkOrdersPage /> },
             { path: '/mis-ordenes/:id', element: <WorkOrderDetailPage /> },
-            { path: '/mi-perfil', element: <ProfilePage /> },
           ],
         },
       ],
