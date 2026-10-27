@@ -5,7 +5,7 @@ titulo: "OT generada automáticamente desde plan preventivo"
 tipo: functional
 prioridad: must-have
 modulo: ordenes-trabajo
-estado: OPEN
+estado: CLOSED
 etiquetas: ['priority: must-have', 'type: functional', 'mod: ordenes-trabajo']
 ---
 
@@ -28,3 +28,24 @@ Las OTs preventivas se generan automáticamente por el sistema según la periodi
 ---
 
 ## MÓDULO PM — Planes de Mantenimiento Preventivo
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `OT - Órdenes de Trabajo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] Tarea Celery diaria a las 06:00 Colombia — config/celery.py: crontab 11:00 UTC, maintenance.generate_preventive_work_orders. Repone las tareas pendientes.
+- [ ] ~~Crear OT sola con plan, activo, checklist, técnico y fecha límite~~ (ya no aplica: Decisión del cliente: las OT preventivas no se crean solas; el planificador agrupa las tareas pendientes en OT. La creación automática existe pero está apagada (MAINTENANCE_AUTO_CREATE_WORK_ORDERS=False).)
+- [ ] ~~Alerta al ADMIN si no hay técnico~~ (ya no aplica: La OT se asigna al armarla, no al generarse.)
+- [x] Anti-duplicados con alerta al ADMIN — Una tarea con OT activa se omite y se avisa (engine.py); a nivel de tarea, no de plan.
+- [ ] ~~Ícono para OT automáticas~~ (ya no aplica: No hay OT automáticas en el flujo actual.)
+- [x] Log de generación — MaintenancePlanExecution y AuditLog por corrida.
+
+Commits: c7e3046, 804f2c5
+Archivos: `backend/apps/maintenance/engine.py`, `backend/config/celery.py`, `backend/apps/maintenance/tasks.py`

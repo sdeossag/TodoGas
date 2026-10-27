@@ -29,3 +29,13 @@ La implementación de firma digital cumple con los requisitos mínimos de la Ley
 ---
 
 ## MÓDULO PDF — Generación de Documentos
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `FD - Firma Digital`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

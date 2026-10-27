@@ -23,3 +23,13 @@ El `ADMIN` gestiona un catálogo centralizado de repuestos e insumos disponibles
 - La búsqueda en el catálogo por nombre o código retorna resultados en ≤ 2 segundos.
 - El stock actual no puede ser editado directamente: solo se modifica mediante entradas y salidas registradas formalmente.
 - El `ADMIN` puede exportar el catálogo completo con stock actual a CSV.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `IN - Inventario de Repuestos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

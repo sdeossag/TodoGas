@@ -27,3 +27,13 @@ El sistema organiza los activos en una jerarquía de hasta 5 niveles: **Hospital
 - Cada nivel tiene campos diferenciados: el nivel "Hospital" incluye NIT, dirección, ciudad, correo de contacto; el nivel "Equipo" incluye número de serie, modelo, marca, y datos técnicos específicos.
 - Un activo puede ser reasignado a otro padre mediante una operación de "mover", que registra automáticamente el movimiento en el log de trazabilidad (quién, cuándo, de dónde, hacia dónde).
 - La búsqueda de activos respeta la jerarquía: buscar en un nodo padre retorna resultados de todos sus descendientes.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `AC - Gestión de Activos y Equipos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

@@ -28,3 +28,13 @@ El flujo de ejecución de una OT por parte del técnico está completamente disp
 - El técnico tiene la opción de capturar la firma del receptor/cliente del hospital (opcional).
 - El botón "Enviar para revisión" valida en tiempo real que todos los requisitos estén cumplidos antes de habilitarse; si falta algo, muestra una lista específica de elementos pendientes.
 - La interfaz usa fuente mínima de 16px, áreas de toque mínimas de 48px, y colores de alto contraste para legibilidad en exteriores.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `OT - Órdenes de Trabajo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

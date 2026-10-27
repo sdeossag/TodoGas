@@ -27,3 +27,13 @@ Todos los roles pueden buscar activos con búsqueda por texto libre y filtros co
 - La búsqueda retorna resultados en ≤ 2 segundos sobre el universo completo de activos con los filtros aplicados.
 - Desde los resultados se puede acceder directamente a la ficha del activo.
 - Si la búsqueda no retorna resultados, el sistema muestra un mensaje descriptivo (no una pantalla vacía sin contexto).
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `AC - Gestión de Activos y Equipos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

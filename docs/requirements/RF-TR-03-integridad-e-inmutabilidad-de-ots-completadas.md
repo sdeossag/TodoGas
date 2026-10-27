@@ -27,3 +27,13 @@ Una OT en estado "Completada" es un registro sellado que no puede ser modificado
 ---
 
 ## MÓDULO US — Usuarios, Roles y Permisos
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `TR - Trazabilidad e Historial Inmutable`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

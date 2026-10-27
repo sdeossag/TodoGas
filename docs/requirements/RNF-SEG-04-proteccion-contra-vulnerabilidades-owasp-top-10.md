@@ -26,4 +26,28 @@ El sistema implementa contramedidas contra las vulnerabilidades más comunes en 
 - **A07 - Identification and Authentication Failures:** cubierto por RF-US-03 (bloqueo por intentos fallidos, JWT, política de contraseñas).
 - **A08 - Software and Data Integrity Failures:** las dependencias de Python y JavaScript se gestionan con versiones fijas en `requirements.txt` y `package-lock.json`. Se usa `pip audit` y `npm audit` en el pipeline de CI para detectar dependencias con vulnerabilidades conocidas.
 - **A09 - Security Logging and Monitoring Failures:** cubierto por RF-TR-01 y RNF-MAN-02.
-- **A10 - Server-Side Request Forgery (SSRF):** el sistema no realiza peticiones HTTP a URLs proporcionadas por usuarios. Las únicas URLs externas son endpoints fijos configurados en variables de entorno.
+- **A10 - Server-Side Request Forgery (SSRF):** el sistema no realiza peticiones HTTP a URLs proporcionadas por usuarios. Las únicas URLs externas son endpoints fijos configurados en variables de entorno.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `SEG - Seguridad`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] Sin raw() ni cursor.execute con interpolación — Solo ORM
+- [x] DEBUG=False, ALLOWED_HOSTS, nosniff, X-Frame-Options, HSTS — production.py
+- [ ] Content-Security-Policy — No hay CSP en Django, y la política gestionada de CloudFront no la incluye
+- [x] Versiones fijas de dependencias — requirements.txt con versiones exactas y package-lock.json
+- [ ] pip audit y npm audit en CI — El CI solo tiene ruff y pytest
+- [x] Control de acceso con pruebas de autorización — Correcciones de alcance y pruebas
+- [ ] Revisión de código por un segundo revisor — Es proceso; no hay regla de rama verificable
+
+Commits: a4b5ef1, 5fd3e08, 20e2b35
+Archivos: `backend/config/settings/production.py`, `backend/requirements.txt`, `.github/workflows/ci.yml`

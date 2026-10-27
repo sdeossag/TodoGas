@@ -23,3 +23,13 @@ El `ADMIN` crea planes de mantenimiento que definen qué se hace, en qué activo
 - Al guardar el plan, el sistema calcula y muestra las próximas 5 fechas de ejecución para validación visual del ADMIN antes de confirmar.
 - Un plan puede estar en estado: **Activo** (genera OTs automáticamente) o **Pausado** (no genera OTs; las OTs ya generadas y pendientes no se cancelan automáticamente, requiere acción manual).
 - El nombre del plan debe ser único en el sistema.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `PM - Planes de Mantenimiento Preventivo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

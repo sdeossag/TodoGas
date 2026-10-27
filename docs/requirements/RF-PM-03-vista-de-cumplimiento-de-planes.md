@@ -25,3 +25,13 @@ El sistema ofrece una vista específica del estado de cumplimiento de cada plan 
   - 🔴 **Crítico:** al menos 1 OT del mes sin completar (vencida) o 2 ejecuciones consecutivas sin completar en el historial.
 - El ADMIN puede ver el histórico de cumplimiento mes a mes por plan (tabla con el % por mes de los últimos 12 meses).
 - Esta información alimenta el KPI de "Cumplimiento de Planes Preventivos" del dashboard de BI.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `PM - Planes de Mantenimiento Preventivo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

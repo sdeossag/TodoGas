@@ -28,3 +28,13 @@ Los técnicos reciben notificaciones push en la app Android para todos los event
 - Al tocar la notificación, la app se abre directamente en el detalle de la OT correspondiente.
 - El técnico puede ver el historial de las últimas 50 notificaciones recibidas en una sección de la app.
 - Las notificaciones respetan la configuración de notificaciones del sistema operativo Android del dispositivo.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `NT - Notificaciones y Comunicaciones`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

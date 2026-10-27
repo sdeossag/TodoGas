@@ -23,3 +23,13 @@ El sistema distingue 3 tipos de OT con comportamientos y flujos diferenciados: *
 - Las OTs predictivas tienen un campo "motivo de generación predictiva" de texto libre, obligatorio al crear la OT, donde el ADMIN documenta la lectura o condición que motivó su creación.
 - El tipo de OT se muestra en todos los listados, reportes PDF, y en el dashboard de KPIs.
 - El tipo alimenta los cálculos diferenciados de KPIs: el MTTR se calcula solo sobre OTs correctivas; el cumplimiento de planes solo sobre OTs preventivas.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `OT - Órdenes de Trabajo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

@@ -33,3 +33,13 @@ Pendiente ──► En Progreso ──► En Revisión ──► Completada
 - **Cualquier estado activo → Cancelada:** solo `ADMIN`, requiere motivo de cancelación obligatorio (texto libre). Al cancelar: se revierten las salidas de inventario asociadas, se cancela el envío pendiente de PDF.
 - Ninguna transición puede retroceder un estado completado. Una OT en "Completada" o "Cancelada" no puede cambiar de estado bajo ninguna circunstancia.
 - Cada cambio de estado se registra en el log de trazabilidad con: usuario que realizó la transición, estado anterior, estado nuevo, fecha/hora UTC exacta, comentarios si aplica.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `OT - Órdenes de Trabajo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

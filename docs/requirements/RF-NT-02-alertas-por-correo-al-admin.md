@@ -27,3 +27,13 @@ El `ADMIN` recibe alertas por correo electrónico agrupadas y organizadas para l
   - Repuestos con stock bajo el mínimo (agrupados en un único correo).
 - El `ADMIN` puede configurar desde la interfaz cuáles tipos de alerta desea recibir por correo (activar/desactivar individualmente por tipo de alerta).
 - Los correos de alerta no se envían repetidamente por el mismo evento si el estado no cambia (ej: una OT vencida que sigue vencida al día siguiente genera solo una nueva entrada en el correo diario, no correos repetidos).
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `NT - Notificaciones y Comunicaciones`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

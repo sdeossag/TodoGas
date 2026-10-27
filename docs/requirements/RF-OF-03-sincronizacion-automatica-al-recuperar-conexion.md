@@ -29,3 +29,25 @@ Al recuperar la conexión a internet, la app sincroniza automáticamente toda la
 ---
 
 ## MÓDULO CL — Portal del Cliente
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `OF - Modo Offline (App Android)`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] Sincroniza sola al volver la red, en menos de 10 s — networkStatusChange dispara triggerSync al instante; además reintento cada 60 s.
+- [ ] ~~Orden: fotos, luego datos, luego estados~~ (ya no aplica: Orden distinto y deliberado: datos, hallazgos, fotos, firmas y al final el estado, porque el servidor valida lo anterior al cambiar el estado.)
+- [x] Indicador de progreso — Banner Sincronizando con elementos pendientes (no dice 3 de 5 fotos).
+- [x] Continuar sin duplicar tras un corte — offline_uuid único, sync_state con reintentos y espera creciente.
+- [ ] ~~Botón Enviar para revisión se habilita al terminar~~ (ya no aplica: Superado: se puede enviar a revisión sin red.)
+- [ ] Confirmación visual Sincronización completada — Al terminar el banner solo desaparece; no hay mensaje de éxito.
+- [ ] Conflictos: avisar al técnico y alerta al ADMIN — Un rechazo devuelve la OT a su estado con aviso al técnico (SyncAttentionNotice), pero no hay alerta al ADMIN.
+
+Commits: f57ddb2, 0a360e0, b065c1d
+Archivos: `frontend/src/sync/syncEngine.js`, `frontend/src/store/networkStore.js`, `frontend/src/components/ui/OfflineBanner.jsx`

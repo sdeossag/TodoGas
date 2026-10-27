@@ -23,3 +23,13 @@ Al finalizar la visita en el hospital, el técnico puede ofrecer el dispositivo 
 - Los datos almacenados son: trazo de firma del receptor (PNG), nombre del receptor (ingresado por el técnico), cargo del receptor, fecha y hora UTC, ID de la OT.
 - Si el técnico no solicita la firma del receptor, se muestra un campo "Motivo de no firma del receptor" (texto libre, ejemplos sugeridos: "Cliente no disponible", "Revisión sin intervención física", "Diagnóstico previo sin ejecución") que es obligatorio completar para documentar la razón.
 - La firma del receptor y la firma del técnico se muestran en secciones separadas del PDF del reporte.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `FD - Firma Digital`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

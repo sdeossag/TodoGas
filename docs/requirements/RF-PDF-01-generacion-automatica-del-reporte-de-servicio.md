@@ -32,3 +32,13 @@ Al completar una OT, el sistema genera automáticamente el PDF del acta/reporte 
   - Pie de página: número de versión del sistema, hash de integridad del documento, nota legal de firma electrónica.
 - El PDF se almacena en S3 vinculado permanentemente a la OT. No se puede eliminar ni sobrescribir.
 - El formato del PDF debe respetar los templates actuales de la empresa. **Antes de implementar el generador, se realizará una sesión de trabajo con el cliente para revisar los formatos existentes y mapear exactamente los campos.**
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `PDF - Generación de Documentos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

@@ -30,3 +30,13 @@ El `ADMIN` y `SUP` tienen una vista organizada por hospital que muestra el estad
 ---
 
 ## MÓDULO OT — Órdenes de Trabajo
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `AC - Gestión de Activos y Equipos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

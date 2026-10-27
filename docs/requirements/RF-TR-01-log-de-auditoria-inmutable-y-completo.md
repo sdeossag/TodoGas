@@ -24,3 +24,13 @@ El sistema mantiene un log de auditoría completo e inmutable de todas las accio
 - El log es consultable por el `ADMIN` con filtros por: usuario, tipo de acción, entidad, rango de fechas. Retorna resultados paginados.
 - El sistema retiene el log por **mínimo 5 años** sin purga automática.
 - En un escenario de auditoría, el `ADMIN` puede exportar el log filtrado a CSV.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `TR - Trazabilidad e Historial Inmutable`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

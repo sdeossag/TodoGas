@@ -28,3 +28,13 @@ El cliente puede consultar el historial completo de intervenciones en sus activo
 ---
 
 ## MÓDULO MI — Migración de Datos desde Fracttal
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `CL - Portal del Cliente`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

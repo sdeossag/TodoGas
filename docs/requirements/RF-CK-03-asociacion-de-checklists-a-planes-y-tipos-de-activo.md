@@ -22,3 +22,13 @@ Las plantillas de checklist se asocian a planes de mantenimiento y pueden defini
 - Un tipo de activo puede tener configurado hasta 3 "checklists por defecto" según el tipo de intervención: uno para correctivo, uno para preventivo, uno para predictivo. Al crear una OT correctiva sobre ese activo, la plantilla correspondiente se preselecciona automáticamente (el ADMIN puede cambiarla antes de guardar).
 - Al crear una OT sin checklist asociado, el ADMIN ve una advertencia visual clara. Puede proceder igualmente (la OT sin checklist solo requiere foto + firma del técnico para cerrarse).
 - El ADMIN puede ver qué planes y OTs están usando actualmente cada plantilla de checklist (vista de uso).
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `CK - Checklists Dinámicos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

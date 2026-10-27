@@ -31,3 +31,22 @@ El sistema genera y envía automáticamente un reporte mensual de cumplimiento d
 ---
 
 ## MÓDULO IN — Inventario de Repuestos
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `BI - Dashboard y Reportes de Gestión`
+- Prioridad: `S`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] Generación automática el día 1 a las 08:00 Colombia — El calendario de Celery solo tiene la generación diaria y los avisos de contratos.
+- [ ] Contenido: activos con plan, OT del mes, vencidas, próxima fecha, % cumplimiento, gráfico — No existe plantilla.
+- [ ] Envío al correo del hospital con copia al ADMIN
+- [ ] Pausar el envío por hospital — El modelo Hospital no tiene ese campo.
+- [ ] Generar y enviar a mano para un periodo pasado
+
+Archivos: `backend/config/celery.py`, `backend/apps/assets/models.py`

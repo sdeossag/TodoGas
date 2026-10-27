@@ -25,3 +25,13 @@ Cada activo tiene un historial completo, cronológico e inmutable de todas las i
 - Se puede filtrar el historial por: tipo de evento (OT correctiva / preventiva / predictiva / cambio de estado / cambio de datos), rango de fechas, y técnico.
 - `ADMIN` y `SUP` ven el historial completo incluyendo cambios de datos. `TEC` ve solo las OTs de sus intervenciones propias en ese activo. `CLI` ve únicamente las OTs completadas de sus activos.
 - El historial puede exportarse como PDF consolidado del activo completo (útil para auditorías o cuando un cliente solicita el expediente completo).
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `AC - Gestión de Activos y Equipos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

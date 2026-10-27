@@ -26,4 +26,26 @@ La interfaz web es usable sin entrenamiento extenso para usuarios con conocimien
 
 ---
 
-## RNF-COM — Cumplimiento Normativo
+## RNF-COM — Cumplimiento Normativo
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `USA - Usabilidad en Campo`
+- Prioridad: `S`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] Prueba de usabilidad con 2 usuarios — No hay evidencia formal; hubo una revisión con el cliente el 23 de octubre
+- [ ] Errores por campo y guías de formato — Varía según la pantalla; sin revisión completa
+- [x] Responsive para tablet de 10 pulgadas — Tailwind responsive
+- [x] Mensajes en español colombiano — Textos de la UI en español
+- [x] Confirmación en acciones de consecuencia — Baja masiva con vista previa y confirmación
+
+Commits: 0a647bf, 16c6079
+Archivos: `frontend/src/components/assets/DecommissionPreview.jsx`, `docs/REVISION-2026-10-23.md`

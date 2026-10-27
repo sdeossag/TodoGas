@@ -22,4 +22,26 @@ La app Android soporta un rango de versiones que cubre los dispositivos que los 
 - **Versión objetivo (compilación): Android 14 (API Level 34).** El APK se compila con el `targetSdkVersion` más reciente estable.
 - La app se prueba explícitamente en Android 8.0, Android 10, Android 12, y Android 14 antes de cada release.
 - Funcionalidades que dependen de versiones específicas de Android (ej: Biometric API, Keystore) se implementan con comprobación de versión en runtime y fallback para versiones anteriores.
-- **No se soporta Android inferior a 8.0.** Si un técnico tiene un dispositivo con Android 7 o anterior, la app no le permite instalarla y muestra un mensaje claro de requisito mínimo.
+- **No se soporta Android inferior a 8.0.** Si un técnico tiene un dispositivo con Android 7 o anterior, la app no le permite instalarla y muestra un mensaje claro de requisito mínimo.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `AND - Compatibilidad de la App Android`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] Versión mínima Android 8.0 (API 26) — minSdkVersion está en 24 (Android 7.0)
+- [x] Versión objetivo API 34 o más reciente — targetSdk y compileSdk en 36
+- [ ] Pruebas en Android 8, 10, 12 y 14 — No hay registro
+- [ ] Comprobación de versión para funciones específicas — No verificado
+- [ ] Instalación bloqueada bajo Android 8 — Con minSdk 24 sí se instala en Android 7
+
+Commits: 042cab5
+Archivos: `frontend/android/variables.gradle`, `frontend/android/app/build.gradle`, `docs/RELEASE-ANDROID.md`

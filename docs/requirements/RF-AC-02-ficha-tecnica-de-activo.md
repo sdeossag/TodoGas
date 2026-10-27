@@ -24,3 +24,13 @@ Cada activo en nivel "Equipo" o "Componente" tiene una ficha técnica completa c
 - La ficha es visible (solo lectura) para `ADMIN`, `SUP`, y `TEC` cuando el activo tiene OTs asignadas a ese técnico.
 - El `CLI` solo puede ver la ficha de los activos de su propio hospital.
 - La ficha muestra el último mantenimiento registrado y la próxima fecha de mantenimiento preventivo programado.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `AC - Gestión de Activos y Equipos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

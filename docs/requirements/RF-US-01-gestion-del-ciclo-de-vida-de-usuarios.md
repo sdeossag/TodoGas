@@ -26,3 +26,13 @@ Solo el `ADMIN` puede gestionar los usuarios del sistema: crear, editar, activar
 - Un usuario desactivado conserva todo su historial en el sistema (OTs ejecutadas, log de acciones, etc.).
 - No existe eliminación de usuarios bajo ninguna circunstancia.
 - El `ADMIN` puede restablecer la contraseña de cualquier usuario (genera nueva contraseña temporal y envía correo).
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `US - Usuarios, Roles y Permisos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

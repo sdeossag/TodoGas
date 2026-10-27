@@ -28,3 +28,28 @@ El `ADMIN` tiene un dashboard con los KPIs operativos clave, actualizado con dat
 - Cada KPI tiene: valor actual, comparativa con período anterior (flecha + porcentaje de cambio), y al hacer clic en el valor numérico, filtra el listado de OTs correspondiente.
 - El dashboard tiene filtros globales de: hospital (multi-selección), tipo de OT, rango de fechas. Al aplicar un filtro, todos los KPIs se recalculan.
 - Los gráficos son interactivos: click en un segmento filtra el listado debajo del dashboard.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `BI - Dashboard y Reportes de Gestión`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] KPI cumplimiento preventivo del mes — calculate_compliance_percentage más historial de 12 meses.
+- [ ] Comparativa con mes anterior y flecha de tendencia — Solo hay gráfico de barras mensual, sin flecha ni % de cambio en los KPI.
+- [x] OT vencidas — calculate_overdue_count.
+- [x] OT por estado en gráfico — Gráfico circular en DashboardPage.
+- [x] MTTR de correctivas — Sin comparar con el mes anterior.
+- [ ] Activos sin mantenimiento reciente, X configurable — Lista con 90 días fijos; el ADMIN no puede cambiar X.
+- [x] OT por técnico: asignadas, completadas, vencidas — calculate_ots_by_technician.
+- [x] Datos con retraso máximo de 5 minutos — Caché de 300 s.
+- [ ] Filtros globales: hospital multi, tipo de OT, rango de fechas — Hay un solo hospital y periodos de 30/90 días; sin tipo de OT ni fechas libres.
+- [ ] Clic en KPI o gráfico filtra el listado de OT — Los enlaces llevan a activos, no a un listado de OT filtrado.
+
+Commits: 16c6079, 5ed8863, 308967d
+Archivos: `backend/apps/work_orders/dashboard.py`, `backend/apps/work_orders/views_dashboard.py`, `frontend/src/pages/dashboard/DashboardPage.jsx`

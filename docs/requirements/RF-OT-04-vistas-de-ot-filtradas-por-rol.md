@@ -24,3 +24,13 @@ Cada rol tiene una vista de OTs filtrada automáticamente según sus permisos de
 - La vista principal al iniciar sesión para cada rol es su lista de OTs activas por defecto.
 - **Orden por defecto** del listado: primero OTs con prioridad Alta, luego por fecha límite ascendente (las más urgentes primero).
 - El listado muestra columnas: número de OT, tipo, nombre del activo, hospital, estado (con color diferenciador), técnico asignado, fecha límite, e indicador visual de "VENCIDA" si la fecha límite ya pasó y la OT no está completada.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `OT - Órdenes de Trabajo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

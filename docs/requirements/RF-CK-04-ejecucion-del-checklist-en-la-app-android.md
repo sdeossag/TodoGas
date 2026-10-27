@@ -29,3 +29,13 @@ La ejecución del checklist desde la app está optimizada para campo: fuente gra
 ---
 
 ## MÓDULO EV — Captura de Evidencia Fotográfica
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `CK - Checklists Dinámicos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

@@ -24,3 +24,13 @@ El `ADMIN` tiene control total sobre la asignación de técnicos a OTs, con noti
 - El sistema registra el historial completo de asignaciones de la OT: técnico original, fecha de asignación original, técnico nuevo, fecha de reasignación, motivo (campo opcional para el ADMIN).
 - Una OT solo puede tener un técnico asignado a la vez (no asignación múltiple).
 - Si se crea una OT sin técnico asignado (campo opcional en el formulario), el ADMIN recibe una alerta y la OT aparece en el listado como "Sin asignar" con color diferenciador.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `OT - Órdenes de Trabajo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

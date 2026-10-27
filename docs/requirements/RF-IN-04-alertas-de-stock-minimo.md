@@ -26,3 +26,13 @@ El sistema alerta automáticamente al ADMIN cuando el stock de un repuesto alcan
 ---
 
 ## MÓDULO OF — Modo Offline (App Android)
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `IN - Inventario de Repuestos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

@@ -23,3 +23,13 @@ El cliente ve el listado de sus activos con indicadores de estado de mantenimien
 - El `CLI` no ve: código interno del sistema, campos de costo, campos de configuración interna, ni el log de auditoría.
 - Desde la ficha del activo, el `CLI` puede acceder al historial de OTs completadas de ese activo.
 - El `CLI` puede buscar sus activos por nombre, área o tipo.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `CL - Portal del Cliente`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

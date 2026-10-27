@@ -25,4 +25,26 @@ El API de Django REST Framework debe responder en tiempos aceptables para todos 
 - **Endpoints de escritura** (crear OT, cambiar estado, guardar checklist): ≤ 600 ms.
 - **Búsqueda de activos por texto libre:** ≤ 2,000 ms (con índices de texto completo en PostgreSQL).
 - Las consultas SQL individuales no deben superar los 200 ms. Ninguna vista del API debe ejecutar más de 10 queries SQL (evitar N+1 con select_related/prefetch_related en Django ORM).
-- Los tiempos se verifican con pruebas de carga usando **Locust** o **k6** antes de cada release a producción.
+- Los tiempos se verifican con pruebas de carga usando **Locust** o **k6** antes de cada release a producción.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `REN - Rendimiento`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] P95/P99, detalle y escritura dentro de los límites — No hay medición; la infraestructura no está desplegada
+- [x] Listados paginados de 50 registros — Paginación por defecto de 50
+- [x] Búsqueda de texto con índices GIN/trigram — Índices trigram en activos
+- [ ] Máximo 10 consultas SQL por vista (sin N+1) — Hay select_related/prefetch_related, pero solo 2 pruebas de número de consultas
+- [ ] Pruebas de carga con Locust o k6 antes de cada release — No existe ningún script ni paso de CI
+
+Commits: 03f69e8
+Archivos: `backend/config/settings/base.py`, `backend/apps/assets/models.py`, `backend/config/pagination.py`

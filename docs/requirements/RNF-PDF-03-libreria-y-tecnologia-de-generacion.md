@@ -24,4 +24,24 @@ La librería de generación de PDFs es madura, compatible con el stack de Django
 
 ---
 
-## RNF-BAK — Respaldo y Retención de Datos
+## RNF-BAK — Respaldo y Retención de Datos
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `PDF - Generación de Documentos PDF`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] WeasyPrint o ReportLab — WeasyPrint 69, ADR-001
+- [x] Imágenes de S3, caracteres del español, tablas y pie repetido — Acta con tablas y pie en cada página
+- [ ] Worker de Celery de PDFs separado del general — Un solo worker (--concurrency 2) y una sola cola
+
+Commits: 45090aa
+Archivos: `docs/adr/ADR-001-pdf-library.md`, `infra/terraform/ecs.tf`, `backend/requirements.txt`

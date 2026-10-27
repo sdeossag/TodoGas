@@ -34,3 +34,13 @@ El `ADMIN` puede crear y editar plantillas de checklist desde una interfaz visua
 - El constructor permite agrupar campos en secciones con título (ej: "Inspección visual", "Pruebas de presión", "Lectura de manómetros").
 - Existe una previsualización del checklist tal como lo verá el técnico en la app Android antes de guardar.
 - El nombre del checklist debe ser único en el sistema.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `CK - Checklists Dinámicos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

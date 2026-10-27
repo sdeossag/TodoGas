@@ -25,3 +25,13 @@ El `ADMIN` gestiona completamente el ciclo de vida de los activos. El `SUP` pued
 - No existe eliminación física de activos; únicamente baja lógica (soft delete).
 - Cada edición de la ficha técnica queda registrada automáticamente en el log de trazabilidad con: usuario, fecha/hora, campo modificado, valor anterior, valor nuevo.
 - El `SUP` puede editar campos de la ficha técnica pero no puede cambiar el estado del activo ni darlo de baja.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `AC - Gestión de Activos y Equipos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

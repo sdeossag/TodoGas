@@ -23,3 +23,23 @@ El sistema calcula el MTBF por activo y permite el registro de costos por OT par
 - El registro de costos es opcional; las OTs sin costo registrado se muestran como "Costo no registrado" en los reportes.
 - El dashboard muestra: costo total de mantenimiento del mes, desglosado por tipo de OT y por hospital.
 - El costo promedio por OT correctiva vs. preventiva es un KPI adicional en el dashboard.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `BI - Dashboard y Reportes de Gestión`
+- Prioridad: `S`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] MTBF por activo en 12 meses, con Datos insuficientes — No existe el cálculo ni la pantalla.
+- [ ] ~~Registrar costo de la OT: mano de obra, materiales, otros~~ (ya no aplica: Decisión del cliente (octubre 2026): sin costo en la OT; se quitó de pantalla y acta.)
+- [ ] ~~Costo opcional, Costo no registrado en reportes~~ (ya no aplica: Mismo motivo.)
+- [ ] ~~Dashboard con costo total por tipo y hospital~~ (ya no aplica: Mismo motivo.)
+- [ ] ~~Costo promedio correctiva vs preventiva~~ (ya no aplica: Mismo motivo.)
+
+Commits: 5ed8863
+Archivos: `backend/apps/work_orders/models.py`, `backend/apps/work_orders/dashboard.py`

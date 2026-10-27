@@ -27,3 +27,13 @@ Las fotos de una OT se presentan en galería organizada en la web y en la app, c
 ---
 
 ## MÓDULO FD — Firma Digital
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `EV - Captura de Evidencia Fotográfica`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

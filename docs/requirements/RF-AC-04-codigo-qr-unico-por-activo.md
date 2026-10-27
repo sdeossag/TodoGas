@@ -24,3 +24,13 @@ Cada activo en nivel "Equipo" recibe un código QR único generado automáticame
 - El código QR nunca cambia aunque se edite cualquier dato del activo.
 - Desde la ficha del activo en la web, el ADMIN o SUP puede descargar un PDF de etiqueta para impresión. La etiqueta contiene: código QR imprimible, nombre del activo, código interno, hospital al que pertenece, y una instrucción de texto "Escanear para ver ficha técnica".
 - El PDF de etiqueta está optimizado para impresión en formato 5x5 cm (etiqueta adhesiva estándar).
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `AC - Gestión de Activos y Equipos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

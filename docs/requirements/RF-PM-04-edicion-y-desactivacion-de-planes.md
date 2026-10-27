@@ -27,3 +27,13 @@ El `ADMIN` puede modificar planes existentes con control sobre el impacto en las
 ---
 
 ## MÓDULO CK — Checklists Dinámicos
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `PM - Planes de Mantenimiento Preventivo`
+- Prioridad: `S`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

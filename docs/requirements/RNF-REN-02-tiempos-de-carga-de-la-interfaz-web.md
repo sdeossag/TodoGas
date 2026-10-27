@@ -24,4 +24,25 @@ La aplicación web debe cargar y ser interactiva en tiempos razonables para usua
 - **Navegación entre vistas** (rutas ya cargadas, sin recarga completa): ≤ 300 ms (React Router client-side navigation).
 - El bundle de JavaScript de producción no supera los **400 KB gzip** (excluyendo las librerías CDN). Se aplica code splitting por ruta.
 - Los assets estáticos (JS, CSS, imágenes de UI) se sirven desde **CloudFront** con caché de largo plazo (cache-control: max-age=31536000, immutable para assets con hash en el nombre).
-- Las puntuaciones de **Lighthouse en producción** deben ser: Performance ≥ 75, Accessibility ≥ 85, Best Practices ≥ 90. Se mide mensualmente.
+- Las puntuaciones de **Lighthouse en producción** deben ser: Performance ≥ 75, Accessibility ≥ 85, Best Practices ≥ 90. Se mide mensualmente.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `REN - Rendimiento`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] FCP/LCP/TTI en 4G y Lighthouse en producción — Sin mediciones; sin despliegue
+- [ ] Paquete menor a 400 KB gzip con code splitting por ruta — No se usa React.lazy; todo va en un solo paquete
+- [x] Assets desde CloudFront con caché larga — CloudFront con CachingOptimized y OAC (escrito, no desplegado)
+- [x] Cabeceras de seguridad en el sitio web — Política gestionada de CloudFront
+
+Commits: 45090aa
+Archivos: `infra/terraform/web.tf`, `frontend/vite.config.js`

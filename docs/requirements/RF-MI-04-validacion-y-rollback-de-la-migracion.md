@@ -26,3 +26,22 @@ El proceso de migración es validable y reversible antes de la puesta en producc
 ---
 
 ## MÓDULO NT — Notificaciones y Comunicaciones
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `MI - Migración de Datos desde Fracttal`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] Ejecutar primero en staging — Existe configuración de staging en infra (backend-staging.hcl) y el comando se puede correr allí; no hay procedimiento escrito.
+- [x] El ADMIN revisa reportes antes de aplicar — Vista previa sin escribir; con errores no aplica nada.
+- [ ] Rollback de una ejecución, solo en staging — Solo es atómico (todo o nada). No hay deshacer una ejecución ya aplicada; la auditoría guarda conteos, no los ids creados.
+- [ ] Plan con ventana de tiempo para producción — No hay documento.
+
+Commits: 8fcd0b1, 45090aa
+Archivos: `backend/apps/assets/importacion_fracttal.py`, `infra/README.md`, `infra/terraform/backend-staging.hcl`

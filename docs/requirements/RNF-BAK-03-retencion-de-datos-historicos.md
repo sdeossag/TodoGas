@@ -36,4 +36,26 @@ El sistema define claramente cuánto tiempo se retiene cada tipo de dato, combin
 
 ---
 
-## RNF-MAN — Mantenibilidad y Operaciones
+## RNF-MAN — Mantenibilidad y Operaciones
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `BAK - Respaldo y Retención de Datos`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] Sin purgas automáticas de datos operacionales — No hay tareas de borrado; PROTECT
+- [x] Eliminaciones manuales y auditadas — Auditoría append-only con triggers
+- [x] OTs, auditoría y registros por 5 años — Object Lock de 5 años y claves protegidas
+- [ ] Anonimización en vez de eliminación (Habeas Data) — No existe
+- [ ] Dumps de 90 días y política de usuarios inactivos de 2 años — No hay dumps ni política
+
+Commits: 8a5b2a9
+Archivos: `infra/terraform/s3.tf`, `backend/apps/audit/migrations/0002_auditlog_append_only_triggers.py`

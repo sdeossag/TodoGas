@@ -23,3 +23,13 @@ El `ADMIN` registra las compras y entradas de stock con trazabilidad completa de
 - Al guardar la entrada, el stock actual del repuesto se incrementa en la cantidad indicada automáticamente.
 - La entrada queda registrada en el historial del repuesto como un movimiento con: tipo "Entrada", cantidad, stock resultante, usuario que la registró, fecha, referencia.
 - No existe límite de stock máximo.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `IN - Inventario de Repuestos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

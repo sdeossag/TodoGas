@@ -26,3 +26,23 @@ El historial de OTs anteriores de Fracttal se importa al nuevo sistema para pres
 - Dependencia: **la migración de OTs solo puede ejecutarse después de completar y validar la migración de activos** (RF-MI-02), ya que las OTs referencian activos.
 
 > ⚠️ El alcance exacto de la migración de OTs depende de qué campos y formatos permite exportar Fracttal con rol administrador. Definir tras revisión del módulo de reportes/exportación de Fracttal.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `MI - Migración de Datos desde Fracttal`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] Importar OT históricas como Completada con marca Migrado desde Fracttal — La importación solo cubre ubicaciones, equipos y protocolos.
+- [ ] Observaciones de migración
+- [ ] PDF a S3 o nota con la referencia
+- [ ] Historial inmutable — Existe para OT nuevas, no aplica a migradas.
+- [ ] Reporte de migración de OT
+- [ ] Ejecutar solo tras validar activos
+
+Archivos: `backend/apps/assets/importacion_fracttal.py`, `backend/apps/work_orders/models.py`

@@ -23,3 +23,13 @@ El sistema calcula automáticamente las fechas de ejecución, genera OTs con ant
 - El `ADMIN` puede ver un **calendario mensual interactivo** con todas las OTs preventivas programadas, filtrable por hospital, activo, y técnico.
 - **Detección de sobrecarga:** si un técnico tiene más de N OTs asignadas para un mismo día (N configurable por el ADMIN, por defecto 4), el sistema marca ese día como "sobrecargado" en el calendario y envía una alerta al ADMIN para que redistribuya manualmente.
 - El calendario permite ver semanas y meses, y al hacer clic en una OT programada abre su detalle.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `PM - Planes de Mantenimiento Preventivo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

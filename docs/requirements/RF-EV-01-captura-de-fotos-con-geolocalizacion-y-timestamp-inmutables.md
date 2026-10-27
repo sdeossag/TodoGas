@@ -25,3 +25,13 @@ El técnico captura fotos desde la app Android vinculadas a una OT. La geolocali
 - Se permiten hasta **20 fotos por OT** (combinando fotos de campos de checklist y fotos de evidencia general).
 - Las fotos se almacenan en AWS S3 en una ruta organizada: `evidencias/{año}/{mes}/{ot_id}/{uuid_foto}.jpg`. El acceso a las fotos se realiza mediante URLs pre-firmadas con expiración de 24 horas (no son URLs públicas permanentes).
 - El técnico no puede eliminar fotos una vez capturadas; solo el `ADMIN` puede eliminar fotos de OTs que aún no estén completadas, con registro en el log de trazabilidad.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `EV - Captura de Evidencia Fotográfica`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

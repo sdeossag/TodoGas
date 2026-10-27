@@ -26,4 +26,26 @@ El esquema de base de datos tiene los índices y optimizaciones necesarias para 
 
 ---
 
-## RNF-USA — Usabilidad en Campo
+## RNF-USA — Usabilidad en Campo
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `ESC - Escalabilidad`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] Índices en campos de filtro — Índices en OT, activos y auditoría
+- [x] Búsqueda de texto con GIN — GinIndex trigram en activos
+- [ ] Paginación por cursor en el log de auditoría — Usa paginación por página (offset)
+- [ ] EXPLAIN ANALYZE documentado — No hay documento
+- [x] Mantenimiento en ventana nocturna de RDS — maintenance_window y backup a las 02:00 de Colombia
+
+Commits: 03f69e8
+Archivos: `backend/apps/assets/models.py`, `backend/apps/audit/models.py`, `backend/apps/audit/views.py`

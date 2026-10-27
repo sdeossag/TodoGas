@@ -23,3 +23,13 @@ Las salidas de inventario se registran principalmente cuando el técnico reporta
 - El sistema no permite registrar salidas que lleven el stock por debajo de cero. Si el técnico selecciona más cantidad que el stock disponible, el sistema le alerta y bloquea la operación.
 - Si una OT se cancela después de haberse registrado repuestos como usados, la salida de inventario se revierte automáticamente con nota "Revertido por cancelación de OT-{número}".
 - Cada salida queda en el historial del repuesto: tipo "Salida", cantidad, stock resultante, referencia (número de OT o "Ajuste manual"), usuario, fecha.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `IN - Inventario de Repuestos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

@@ -24,3 +24,13 @@ Las entidades principales del sistema (Activos, OTs, Planes, Checklists) muestra
 - **`TEC`:** ve el timeline solo de las OTs asignadas a él.
 - **`CLI`:** no ve el timeline de ninguna entidad.
 - El timeline de la OT incluye específicamente: creación, asignaciones/reasignaciones de técnico, cada cambio de estado con el usuario y hora, adición de cada foto (sin mostrar la foto, solo el evento), captura de cada firma, generación del PDF, cada envío del PDF al cliente con resultado.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `TR - Trazabilidad e Historial Inmutable`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

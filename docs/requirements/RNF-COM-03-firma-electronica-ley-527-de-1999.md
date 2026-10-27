@@ -27,4 +27,25 @@ La implementación técnica de la firma digital en el sistema cumple los requisi
 - La firma implementada cumple los 3 criterios del Art. 7 de la Ley 527 y el Decreto 2364: (1) es **única** respecto al firmante (vinculada al usuario autenticado), (2) es susceptible de **verificación** (hash de integridad verificable), (3) está bajo el **control exclusivo** del firmante en el momento de firmar (sesión autenticada del técnico).
 - El sistema conserva la evidencia de respaldo de cada firma (log de autenticación + metadatos de la firma + hash) por **mínimo 5 años**, plazo suficiente para cualquier disputa legal o proceso contractual con hospitales.
 - La implementación es de **firma electrónica simple** (no firma digital certificada con PKI). Este nivel es suficiente para documentos de mantenimiento interno y relaciones contractuales B2B. Si en el futuro la empresa requiere firma con mayor fuerza probatoria (ej: documentos con valor notarial), se puede evolucionar sin rediseño del sistema.
-- El PDF de reporte incluye una nota al pie con el aviso legal: *"Este documento ha sido firmado electrónicamente en cumplimiento de la Ley 527 de 1999. El hash de integridad garantiza que el documento no ha sido alterado desde su firma."*
+- El PDF de reporte incluye una nota al pie con el aviso legal: *"Este documento ha sido firmado electrónicamente en cumplimiento de la Ley 527 de 1999. El hash de integridad garantiza que el documento no ha sido alterado desde su firma."*
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `COM - Cumplimiento Normativo`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] Firma única, verificable y bajo control del firmante — Firma vinculada al usuario autenticado con hash; firma guardada
+- [x] Evidencia de la firma conservada 5 años — Firmas inmutables, Object Lock de 5 años y auditoría append-only
+- [x] Firma electrónica simple — Implementada así
+- [ ] Aviso legal en el PDF — El acta solo trae el código de verificación; no está el texto de la Ley 527
+
+Commits: 5e92475, 8a5b2a9, 2721e08
+Archivos: `backend/apps/work_orders/integrity.py`, `backend/apps/reports/templates/reports/service_report.html`, `backend/apps/evidence/migrations/0002_signature_immutable_triggers.py`

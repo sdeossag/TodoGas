@@ -55,3 +55,13 @@ Los permisos del sistema están definidos por rol sin posibilidad de personaliza
 - Descargar PDFs de reportes de sus OTs.
 - No puede crear, editar, ni eliminar ningún tipo de entidad.
 - Acceso solo vía web (no app Android).
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `US - Usuarios, Roles y Permisos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

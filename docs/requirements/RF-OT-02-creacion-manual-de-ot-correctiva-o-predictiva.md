@@ -25,3 +25,13 @@ Solo el `ADMIN` puede crear OTs correctivas y predictivas manualmente. El formul
 - Al guardar, el número de OT se genera automáticamente con formato `OT-{AÑO}-{SECUENCIAL_5_DÍGITOS}` (ej: `OT-2026-00001`). El secuencial es global (no por hospital).
 - El estado inicial de toda OT creada manualmente es **"Pendiente"**.
 - Al crear la OT, el sistema envía inmediatamente: notificación push a la app Android del técnico asignado y correo electrónico al mismo técnico con el detalle de la OT.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `OT - Órdenes de Trabajo`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

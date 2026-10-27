@@ -26,3 +26,13 @@ Flujos seguros para el primer acceso de un usuario y para la recuperación de co
 ---
 
 ## MÓDULO BI — Dashboard y Reportes de Gestión
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `US - Usuarios, Roles y Permisos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

@@ -24,3 +24,13 @@ Al cerrar una OT, el técnico captura su firma digital en la pantalla táctil de
 - Al confirmar la firma, el sistema captura y almacena de forma inmutable: imagen PNG del trazo de firma (300x150px mínimo), nombre completo del firmante (del perfil autenticado en el sistema), rol ("Técnico de campo"), fecha y hora UTC de la confirmación, identificador único de la OT firmada, hash SHA-256 del estado actual del contenido de la OT (checklist + fotos + observaciones + datos de OT) en el momento de firmar.
 - Una vez confirmada, la firma no puede modificarse ni eliminarse por ningún rol.
 - La imagen de firma se almacena en S3 y se incrusta en el PDF del reporte.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `FD - Firma Digital`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

@@ -24,3 +24,13 @@ El cliente (representante del hospital) accede al portal web con credenciales ha
 - La sesión del `CLI` expira tras 8 horas de inactividad.
 - La interfaz del portal del cliente es diferente visualmente al dashboard del ADMIN/TEC (más simple, centrada en consulta y descarga, sin menús de administración).
 - El portal del cliente puede ser accedido desde dispositivo móvil vía navegador (diseño responsive).
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `CL - Portal del Cliente`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

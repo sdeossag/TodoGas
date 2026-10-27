@@ -29,4 +29,25 @@ El sistema cumple con la Ley 1581 de 2012 y el Decreto 1377 de 2013 de Colombia 
 - El sistema soporta la **supresión de datos personales de un usuario** (anonimización): el ADMIN puede anonimizar un usuario inactivo reemplazando nombre, correo, y teléfono con valores genéricos (ej: "Usuario Anonimizado #123"), preservando el resto del historial de actividad para la trazabilidad regulatoria de las OTs. Esta función está disponible solo para usuarios con más de 2 años de inactividad.
 - Los datos personales de representantes de hospitales (nombre + cargo del firmante en OTs) no pueden anonimizarse si están vinculados a registros de mantenimiento auditables, dada la superposición con el requisito regulatorio de GMP. Se documenta esta tensión en la política de privacidad de la empresa.
 - En caso de un **incidente de seguridad** que comprometa datos personales, el sistema tiene un procedimiento documentado para notificar a la SIC dentro de los **15 días hábiles** siguientes al conocimiento del incidente (requisito del Art. 17 de la Ley 1581). El sistema facilita esto manteniendo logs de acceso que permiten determinar el alcance de una brecha.
-- La política de privacidad de la empresa (documento externo al CMMS) debe mencionar el uso del CMMS como herramienta de tratamiento de datos y ser accesible a los titulares.
+- La política de privacidad de la empresa (documento externo al CMMS) debe mencionar el uso del CMMS como herramienta de tratamiento de datos y ser accesible a los titulares.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `COM - Cumplimiento Normativo`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] Inventario de tratamiento de datos documentado — No hay documento
+- [ ] Texto informativo al ADMIN al crear usuarios — No se encontró
+- [ ] Anonimización de usuarios inactivos de más de 2 años — No hay función ni comando
+- [x] Datos del firmante no anonimizables si están en registros auditables — Firmas y actas inmutables por triggers
+- [ ] Política de privacidad accesible — No hay referencia en la app
+
+Archivos: `backend/apps/users/models.py`, `backend/apps/evidence/migrations/0002_signature_immutable_triggers.py`

@@ -23,3 +23,13 @@ Las plantillas tienen control de versiones automático para garantizar la trazab
 - Las OTs futuras creadas desde planes o manualmente usan siempre la versión más reciente activa de la plantilla.
 - El ADMIN puede ver el historial de versiones de una plantilla: fecha de cada versión, usuario que la modificó, descripción del cambio (campo opcional al guardar una nueva versión).
 - No se puede eliminar una versión de checklist que haya sido usada en al menos una OT.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `CK - Checklists Dinámicos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

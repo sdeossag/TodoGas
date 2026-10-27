@@ -28,4 +28,27 @@ El sistema soporta los requisitos de trazabilidad de las Buenas Prácticas de Ma
 - El historial de mantenimiento de cada activo puede exportarse como PDF consolidado que sirve como "expediente del equipo" presentable ante auditores (ver RF-AC-06).
 - Los perfiles de usuarios en el sistema incluyen el nombre completo del técnico, que aparece en todos los registros de mantenimiento, cumpliendo el requisito de identificación del personal.
 - El sistema mantiene los registros por **mínimo 5 años** desde la fecha de la intervención (ver RNF-BAK-03). Esto excede el mínimo típico de registros GMP (generalmente 2-3 años para equipos médicos) para dar margen de seguridad.
-- El ADMIN puede generar un reporte de "todas las intervenciones sobre un activo específico" en un rango de fechas, directamente útil para responder a solicitudes de auditoría INVIMA o habilitación hospitalaria.
+- El ADMIN puede generar un reporte de "todas las intervenciones sobre un activo específico" en un rango de fechas, directamente útil para responder a solicitudes de auditoría INVIMA o habilitación hospitalaria.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `COM - Cumplimiento Normativo`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] Acta con los elementos de ISO 7396-1 — Equipo, fecha, ejecutor, checklist y firmas
+- [x] Registros inalterables con hash — Triggers en OT cerradas y firmas, hash de contenido y de PDF
+- [ ] Expediente consolidado del equipo en PDF — Hay historial en pantalla y reporte consolidado de OT, no un PDF por activo
+- [x] Nombre completo del técnico en los registros — Ejecutor en el acta
+- [x] Conservación mínima de 5 años — PROTECT en claves y Object Lock de 5 años en prod
+- [ ] Reporte de intervenciones por activo y rango de fechas — Hay historial por equipo con filtros; sin exportación
+
+Commits: 8a5b2a9, 1ba2e09, ba517d2
+Archivos: `backend/apps/work_orders/integrity.py`, `backend/apps/evidence/migrations/0002_signature_immutable_triggers.py`, `backend/apps/reports/generator.py`

@@ -26,3 +26,13 @@ El sistema implementa autenticación mediante JWT con políticas de seguridad ro
 - El logout invalida el refresh token en el servidor (lista negra de tokens revocados). Un access token válido pero cuyo refresh fue revocado no puede renovarse.
 - El usuario puede ver sus sesiones activas (dispositivo, IP, última actividad) y cerrarlas de forma remota individualmente o todas a la vez.
 - La sesión del `CLI` expira tras 8 horas de inactividad (sin actividad de API); no puede usar refresh token después de ese tiempo de inactividad.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `US - Usuarios, Roles y Permisos`
+- Prioridad: `M`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`

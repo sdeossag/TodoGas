@@ -22,4 +22,26 @@ La app es usable en los tamaños de pantalla más comunes de los smartphones And
 - Los layouts usan dimensiones en `dp` (density-independent pixels) y textos en `sp` (scale-independent pixels), adaptándose automáticamente a diferentes densidades de pantalla (mdpi, hdpi, xhdpi, xxhdpi).
 - La interfaz funciona correctamente tanto en orientación **vertical (portrait)** como horizontal (landscape), aunque la orientación principal es portrait. Las vistas críticas (checklist, captura de firma) se diseñan primero para portrait.
 - En pantallas de 720p (HD) el texto es legible sin zoom manual.
-- La app no tiene layouts que se rompan (texto cortado, elementos superpuestos) en ninguno de los tamaños de pantalla objetivo. Esto se verifica en emuladores de Android Studio con múltiples resoluciones antes de cada release.
+- La app no tiene layouts que se rompan (texto cortado, elementos superpuestos) en ninguno de los tamaños de pantalla objetivo. Esto se verifica en emuladores de Android Studio con múltiples resoluciones antes de cada release.
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `AND - Compatibilidad de la App Android`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] Pantallas de 5,0 a 6,7 pulgadas, 720x1280 — No hay evidencia de pruebas
+- [x] Layouts adaptables a densidades — Web en Capacitor con unidades relativas
+- [x] Portrait y landscape — El manifiesto no bloquea la orientación
+- [ ] Texto legible en 720p — No verificado
+- [ ] Sin layouts rotos, verificado en emuladores — Pruebas puntuales con emulador, sin matriz de resoluciones
+
+Commits: 042cab5
+Archivos: `frontend/android/app/src/main/AndroidManifest.xml`, `docs/RELEASE-ANDROID.md`

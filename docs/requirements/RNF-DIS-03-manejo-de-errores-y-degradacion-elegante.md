@@ -27,4 +27,27 @@ El sistema maneja los errores de forma que el usuario siempre recibe retroalimen
 
 ---
 
-## RNF-SEG — Seguridad
+## RNF-SEG — Seguridad
+
+---
+
+---
+
+**Metadatos de importacion**
+- Tipo: `Requisito no funcional`
+- Fase: `2`
+- Repositorio destino: `sdeossag/TodoGas`
+- Categoria: `DIS - Disponibilidad y Confiabilidad`
+- Prioridad: `M`
+- Fuente: `CMMS Gases Medicinales - Fase 2: Requisitos No Funcionales`
+
+**Implementación (revisión del 2026-10-27):**
+- [ ] Sin 5xx visibles y mensaje amigable en español — No hay manejador global ni pantalla de error; no se encontró el texto pedido
+- [x] Errores 5xx a Sentry o CloudWatch sin datos sensibles — Sentry con send_default_pii=False y logs a CloudWatch
+- [x] Si falla el PDF la OT queda completada y el ADMIN ve el fallo — Registro del fallo en auditoría (failures.py) y regeneración manual
+- [x] Reintentos con espera creciente en tareas de correo — max_retries=3 con espera creciente
+- [ ] Tiempo máximo de ejecución en tareas Celery — No hay time_limit ni soft_time_limit
+- [x] App Android: error de sincronización con Reintentar — SyncAttentionNotice con Reintentar
+
+Commits: 45090aa, f57ddb2
+Archivos: `backend/apps/reports/tasks.py`, `backend/apps/reports/failures.py`, `frontend/src/components/ui/SyncAttentionNotice.jsx`

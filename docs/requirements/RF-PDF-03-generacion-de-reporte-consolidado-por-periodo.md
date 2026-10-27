@@ -26,3 +26,25 @@ El `ADMIN` puede generar reportes consolidados en PDF para un hospital específi
 ---
 
 ## MÓDULO TR — Trazabilidad e Historial Inmutable
+
+---
+
+---
+
+**Metadatos de importacion**
+- Repositorio destino: `sdeossag/TodoGas`
+- Modulo: `PDF - Generación de Documentos`
+- Prioridad: `S`
+- Fuente: `CMMS_Fase1_Requisitos_Funcionales.md`
+
+**Implementación (revisión del 2026-10-27):**
+- [x] Filtros: hospital o todos, fechas, tipo de OT — ReportsPage.jsx y ConsolidatedReportView (solo ADMIN).
+- [x] Resumen ejecutivo: total, % completadas, activos intervenidos — consolidated_report.html.
+- [x] Tabla de OT con número, tipo, activo, técnico, fecha, estado
+- [ ] Referencia al PDF individual en la tabla — No aparece.
+- [ ] Gráfico de cumplimiento si es un solo hospital — El PDF solo trae una tabla de estados.
+- [ ] Máximo 60 s para 12 meses con 3.940 activos — Sin prueba ni medición.
+- [ ] Descargar directo o enviar por correo a quien indique el ADMIN — La tarea guarda el PDF y devuelve un enlace, pero la pantalla no lo muestra ni se envía correo, aunque el texto dice que sí. No hay campo de destinatario.
+
+Commits: 334d516
+Archivos: `backend/apps/reports/tasks.py`, `backend/apps/reports/templates/reports/consolidated_report.html`, `frontend/src/pages/reports/ReportsPage.jsx`
