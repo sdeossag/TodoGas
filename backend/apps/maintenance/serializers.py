@@ -319,15 +319,37 @@ class TaskSerializer(serializers.ModelSerializer):
     is_overdue = serializers.SerializerMethodField()
     is_rescheduled = serializers.SerializerMethodField()
     meter_trigger = serializers.SerializerMethodField()
+    task_type_display = serializers.SerializerMethodField()
+    task_type_counts_as = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = [
             "id", "status", "status_display", "title", "description", "task_type",
+            "task_type_display", "task_type_counts_as",
             "priority", "calculated_date", "scheduled_date", "completed_at",
             "estimated_duration", "cancellation_note", "is_overdue", "is_rescheduled",
             "asset", "hospital", "plan", "plan_task", "work_order", "meter_trigger",
         ]
+
+    def _tipo_del_catalogo(self, code):
+        """
+        El catalogo se lee una vez por serializador (en una lista, uno solo
+        para todas las tareas), no una vez por tarea.
+        """
+        if not hasattr(self, "_catalogo_tipos"):
+            self._catalogo_tipos = {
+                t.code: t for t in TaskTypeCatalog.objects.only("code", "name", "counts_as")
+            }
+        return self._catalogo_tipos.get(code)
+
+    def get_task_type_display(self, obj):
+        tipo = self._tipo_del_catalogo(obj.task_type)
+        return tipo.name if tipo else (obj.task_type or "")
+
+    def get_task_type_counts_as(self, obj):
+        tipo = self._tipo_del_catalogo(obj.task_type)
+        return tipo.counts_as if tipo else TaskTypeCatalog.CountsAs.OTHER
 
     def get_asset(self, obj):
         a = obj.asset

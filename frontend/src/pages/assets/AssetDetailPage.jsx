@@ -6,6 +6,8 @@ import client from '../../api/client'
 import { useReportDownload } from '../../api/reports'
 import { useAssetTasks } from '../../api/tasks'
 import { TASK_STATUS, formatDate as fechaCorta, formatFrequency } from '../../utils/maintenance'
+import { CeldaTipo, FiltroTiposDeTarea } from '../../components/assets/TiposDeTarea'
+import { filtrarPorCategoria } from '../../utils/tiposDeTarea'
 import { CoberturaEquipo } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
 import DecommissionPreview from '../../components/assets/DecommissionPreview'
@@ -181,8 +183,8 @@ export default function AssetDetailPage() {
               <>
                 <h3 className="text-lg font-semibold text-gray-800">Confirmar baja del activo</h3>
                 <p className="text-sm text-gray-600">
-                  El activo queda <strong>dado de baja</strong>: no se le programan m�s tareas ni
-                  puede entrar en nuevas �rdenes de trabajo.
+                  El activo queda <strong>dado de baja</strong>: no se le programan más tareas ni
+                  puede entrar en nuevas órdenes de trabajo.
                 </p>
                 <DecommissionPreview assetId={id} />
                 {decommissionMut.isError && (
@@ -361,12 +363,14 @@ function CustomFieldsTab({ asset }) {
 function TasksTab({ assetId, hospitalId }) {
   const { data, isLoading, isError } = useAssetTasks(assetId)
   const download = useReportDownload()
+  const [filtro, setFiltro] = useState('ALL')
 
   if (isLoading) return <div className="flex justify-center py-12"><Spinner className="w-6 h-6 text-brand" /></div>
   if (isError) return <p className="text-sm text-red-600 text-center py-8">No se pudieron cargar las tareas del activo.</p>
 
   const abiertas = data?.open ?? []
   const historial = data?.history ?? []
+  const historialFiltrado = filtrarPorCategoria(historial, filtro)
 
   return (
     <div className="space-y-8">
@@ -380,6 +384,7 @@ function TasksTab({ assetId, hospitalId }) {
               <thead className="bg-gray-50">
                 <tr className="text-left text-xs font-medium text-gray-500">
                   <th className="px-3 py-2">Tarea</th>
+                  <th className="px-3 py-2">Tipo</th>
                   <th className="px-3 py-2">Cuándo</th>
                   <th className="px-3 py-2">Fecha programada</th>
                   <th className="px-3 py-2">Estado</th>
@@ -392,6 +397,7 @@ function TasksTab({ assetId, hospitalId }) {
                       <p className="text-gray-800">{t.title}</p>
                       {t.plan && <p className="text-xs text-gray-500">{t.plan.name}</p>}
                     </td>
+                    <td className="px-3 py-2"><CeldaTipo tarea={t} /></td>
                     <td className="px-3 py-2 text-gray-600">{formatFrequency(t.plan_task)}</td>
                     <td className="px-3 py-2">
                       <p className={t.is_overdue ? 'text-red-700 font-medium' : 'text-gray-800'}>{fechaCorta(t.scheduled_date)}</p>
@@ -428,6 +434,9 @@ function TasksTab({ assetId, hospitalId }) {
         <p className="text-xs text-gray-500 mb-3">
           Calculada: la que puso la frecuencia. Programada: la que quedó tras reprogramar. Realización: cuando se cerró.
         </p>
+        {historial.length > 0 && (
+          <FiltroTiposDeTarea tareas={historial} valor={filtro} onChange={setFiltro} />
+        )}
         {historial.length === 0 ? (
           <p className="text-sm text-gray-500">Todavía no tiene tareas cerradas.</p>
         ) : (
@@ -436,6 +445,7 @@ function TasksTab({ assetId, hospitalId }) {
               <thead className="bg-gray-50">
                 <tr className="text-left text-xs font-medium text-gray-500">
                   <th className="px-3 py-2">Tarea</th>
+                  <th className="px-3 py-2">Tipo</th>
                   <th className="px-3 py-2">Calculada</th>
                   <th className="px-3 py-2">Programada</th>
                   <th className="px-3 py-2">Realización</th>
@@ -444,13 +454,17 @@ function TasksTab({ assetId, hospitalId }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {historial.map((t) => (
+                {historialFiltrado.length === 0 && (
+                  <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-gray-500">No hay tareas de este tipo.</td></tr>
+                )}
+                {historialFiltrado.map((t) => (
                   <tr key={t.id} className="align-top">
                     <td className="px-3 py-2">
                       <p className="text-gray-800">{t.title}</p>
                       {t.plan && <p className="text-xs text-gray-500">{t.plan.name}</p>}
                       {t.cancellation_note && <p className="text-xs text-gray-500 italic">{t.cancellation_note}</p>}
                     </td>
+                    <td className="px-3 py-2"><CeldaTipo tarea={t} /></td>
                     <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{fechaCorta(t.calculated_date)}</td>
                     <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{fechaCorta(t.scheduled_date)}</td>
                     <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{t.completed_at ? fechaCorta(t.completed_at) : '—'}</td>

@@ -428,3 +428,30 @@ def test_tareas_del_activo_con_las_tres_fechas_y_el_acta(admin, hospital):
     assert hecha["completed_at"] is not None
     assert hecha["work_order"]["wo_code"] == ot.wo_code
     assert hecha["work_order"]["report_id"] == str(acta.id)
+
+
+def test_tareas_del_activo_dicen_su_tipo_y_si_cuenta_como_preventivo_o_correctivo(admin, hospital):
+    a = activo(hospital)
+    plan = make_plan("Tipos", assets=[a], next_due_date=HOY + timedelta(days=10))
+    preventiva = pending_task(plan, a)
+    # Las tareas hechas a mano no tienen plan_task (y solo puede haber una abierta por plan_task y activo).
+    correctiva = Task.objects.create(
+        asset=a, title="Fuga", task_type="CORRECTIVE", calculated_date=HOY, scheduled_date=HOY,
+    )
+    desconocida = Task.objects.create(
+        asset=a, title="Tipo borrado", task_type="CODIGO_BORRADO", calculated_date=HOY, scheduled_date=HOY,
+    )
+
+    resp = cliente(admin).get(f"/api/assets/{a.id}/tasks/")
+
+    assert resp.status_code == status.HTTP_200_OK
+    por_id = {t["id"]: t for t in resp.json()["open"]}
+    prev = por_id[str(preventiva.id)]
+    assert prev["task_type_display"] == "Preventivo"
+    assert prev["task_type_counts_as"] == "PREVENTIVE"
+    corr = por_id[str(correctiva.id)]
+    assert corr["task_type_display"] == "Correctivo"
+    assert corr["task_type_counts_as"] == "CORRECTIVE"
+    desc = por_id[str(desconocida.id)]
+    assert desc["task_type_display"] == "CODIGO_BORRADO"
+    assert desc["task_type_counts_as"] == "OTHER"

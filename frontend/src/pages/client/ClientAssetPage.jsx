@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { useAsset } from '../../api/assets'
@@ -10,6 +11,8 @@ import Icon from '../../components/ui/Icon'
 import Spinner from '../../components/ui/Spinner'
 import { ASSET_STATUS_COLORS, assetStatusLabel } from '../../constants/labels'
 import { formatDate } from '../../utils/maintenance'
+import { CeldaTipo, FiltroTiposDeTarea } from '../../components/assets/TiposDeTarea'
+import { filtrarPorCategoria } from '../../utils/tiposDeTarea'
 
 /**
  * Un equipo visto por la biomédica del hospital: su ficha, lo que viene y
@@ -21,6 +24,7 @@ export default function ClientAssetPage() {
   const { data: activo, isLoading, isError } = useAsset(id)
   const { data: tareas, isLoading: cargandoTareas } = useAssetTasks(id)
   const descargar = useReportDownload()
+  const [filtro, setFiltro] = useState('ALL')
 
   if (isLoading) return <div className="flex justify-center py-20"><Spinner /></div>
   if (isError || !activo) {
@@ -29,6 +33,7 @@ export default function ClientAssetPage() {
 
   const proximas = tareas?.open ?? []
   const historial = tareas?.history ?? []
+  const historialFiltrado = filtrarPorCategoria(historial, filtro)
   const ficha = [
     ['Ubicación', activo.node?.path || activo.equipment_location],
     ['Tipo', activo.asset_type],
@@ -89,6 +94,11 @@ export default function ClientAssetPage() {
 
       <section className="bg-white rounded-xl border border-gray-200 shadow-card">
         <h2 className="px-5 py-4 border-b border-gray-100 font-semibold text-gray-700 text-sm">Historial</h2>
+        {!cargandoTareas && historial.length > 0 && (
+          <div className="px-5 pt-4">
+            <FiltroTiposDeTarea tareas={historial} valor={filtro} onChange={setFiltro} />
+          </div>
+        )}
         {cargandoTareas ? (
           <div className="flex justify-center py-8"><Spinner /></div>
         ) : historial.length === 0 ? (
@@ -101,16 +111,21 @@ export default function ClientAssetPage() {
                   <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Realizado</th>
                   <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Programado</th>
                   <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Mantenimiento</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Tipo</th>
                   <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Orden</th>
                   <th className="px-4 py-2.5" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {historial.map((t) => (
+                {historialFiltrado.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">No hay tareas de este tipo.</td></tr>
+                )}
+                {historialFiltrado.map((t) => (
                   <tr key={t.id}>
                     <td className="px-4 py-3 text-gray-800 whitespace-nowrap">{t.completed_at ? formatDate(t.completed_at) : '—'}</td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatDate(t.scheduled_date)}</td>
                     <td className="px-4 py-3 text-gray-800">{t.title}</td>
+                    <td className="px-4 py-3"><CeldaTipo tarea={t} /></td>
                     <td className="px-4 py-3">
                       {t.work_order ? (
                         <Link to={`/historial/${t.work_order.id}`} className="font-mono text-xs text-brand hover:underline">
