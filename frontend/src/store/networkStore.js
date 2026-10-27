@@ -144,6 +144,16 @@ const useNetworkStore = create((set, get) => ({
     return { offline: false, sent: keys.length - failed, failed }
   },
 
+  /**
+   * "Entendido": quita del aviso lo que el servidor rechazo y ya no se puede
+   * reintentar (la OT volvio a su estado; hay que hacer el cambio de nuevo).
+   */
+  dismissAttention: async (items) => {
+    await requeueAttentionItems(items)
+    await get().refreshPendingCount()
+    queryClient.invalidateQueries()
+  },
+
   /** Sube todo lo que quedo guardado sin conexion. Nunca corre dos veces a la vez. */
   triggerSync: async () => {
     if (get().isSyncing) return null
@@ -161,7 +171,8 @@ const useNetworkStore = create((set, get) => ({
       // La pantalla pudo pedirle datos al servidor al volver la red, antes de
       // que esto subiera: sin refrescar, el tecnico veria el checklist vacio
       // durante los 5 minutos que TanStack da por frescos esos datos.
-      if (Object.values(result).some((fase) => fase.ok > 0)) {
+      // Un cambio de estado rechazado vuelve la OT a su estado anterior: tambien se refresca.
+      if (Object.values(result).some((fase) => fase.ok > 0) || result.workOrders?.failed > 0) {
         queryClient.invalidateQueries()
       }
       return result

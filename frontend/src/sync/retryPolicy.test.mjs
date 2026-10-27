@@ -93,3 +93,14 @@ test('etiquetas en lenguaje claro', () => {
   assert.equal(itemLabel('photo'), 'Una foto')
   assert.equal(itemLabel('raro'), 'Un dato')
 })
+
+test('esRechazoDeTransicion: 4xx de validacion si; red, 5xx y sesion no', async () => {
+  const { esRechazoDeTransicion } = await import('./retryPolicy.js')
+  assert.equal(esRechazoDeTransicion(http(400, { code: 'firma_requerida' })), true)
+  assert.equal(esRechazoDeTransicion(http(403)), true)
+  assert.equal(esRechazoDeTransicion(http(409)), true)
+  assert.equal(esRechazoDeTransicion(http(500)), false)
+  assert.equal(esRechazoDeTransicion(http(401)), false)
+  assert.equal(esRechazoDeTransicion(http(429)), false)
+  assert.equal(esRechazoDeTransicion({ isAxiosError: true, request: {} }), false)
+})

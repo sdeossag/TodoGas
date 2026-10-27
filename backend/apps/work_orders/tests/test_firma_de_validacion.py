@@ -285,3 +285,93 @@ def test_la_firma_de_validacion_no_estira_el_periodo_de_trabajo_en_campo(en_revi
     firmar(e["admin"])
     assert aprobar(e["admin"], e["wo_id"]).status_code == 200
     assert field_facts(WorkOrder.objects.get(pk=e["wo_id"]))["field_work"]["end"] == antes["end"]
+
+
+# ── Hora del telefono al aprobar sin red ─────────────────────────────────────
+
+def aprobar_con_hora(user, wo_id, hora):
+    from django.db import transaction  # noqa: F401
+    from django.test import TestCase
+
+    with TestCase.captureOnCommitCallbacks(execute=True):
+        return client_for(user).post(
+            reverse("work-orders-transition", kwargs={"pk": wo_id}),
+            {"new_status": WorkOrder.Status.COMPLETED, "client_timestamp": hora.isoformat()},
+            format="json",
+        )
+
+
+def test_aprobar_sin_red_usa_la_hora_del_telefono_dentro_de_la_tolerancia(en_revision):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.work_orders.models import WorkOrderStatusHistory
+
+    e = en_revision
+    firmar(e["admin"])
+    # La OT existia desde antes: una hora anterior a su creacion no seria creible.
+    WorkOrder.objects.filter(pk=e["wo_id"]).update(created_at=timezone.now() - timedelta(days=1))
+    hora = timezone.now() - timedelta(hours=2)
+    r = aprobar_con_hora(e["admin"], e["wo_id"], hora)
+    assert r.status_code == 200, r.data
+    wo = WorkOrder.objects.get(pk=e["wo_id"])
+    assert wo.completed_at == hora
+    assert de_validacion(e["wo_id"]).get().signed_at == hora
+    h = WorkOrderStatusHistory.objects.filter(work_order=wo, to_status="COMPLETED").get()
+    assert h.changed_at == hora
+    # El acta se genero y su hash verifica con la fecha del telefono.
+    assert GeneratedReport.objects.filter(work_order=wo).exists()
+    assert integrity.verify_work_order(wo).verified is True
+
+
+def test_hora_en_el_futuro_o_anterior_a_la_ot_se_ignora(en_revision):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    e = en_revision
+    firmar(e["admin"])
+    antes = timezone.now()
+    futura = antes + timedelta(hours=3)
+    r = aprobar_con_hora(e["admin"], e["wo_id"], futura)
+    assert r.status_code == 200, r.data
+    wo = WorkOrder.objects.get(pk=e["wo_id"])
+    assert antes <= wo.completed_at <= timezone.now()
+    assert de_validacion(e["wo_id"]).get().signed_at == wo.completed_at
+
+
+def test_hora_anterior_a_la_creacion_de_la_ot_se_ignora(en_revision):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    e = en_revision
+    firmar(e["admin"])
+    wo = WorkOrder.objects.get(pk=e["wo_id"])
+    r = aprobar_con_hora(e["admin"], e["wo_id"], wo.created_at - timedelta(days=1))
+    assert r.status_code == 200, r.data
+    wo.refresh_from_db()
+    assert wo.completed_at >= wo.created_at
+    assert wo.completed_at <= timezone.now()
+
+
+def test_hora_mal_formada_o_sin_zona_usa_la_del_servidor(en_revision):
+    e = en_revision
+    firmar(e["admin"])
+    r = client_for(e["admin"]).post(
+        reverse("work-orders-transition", kwargs={"pk": e["wo_id"]}),
+        {"new_status": WorkOrder.Status.COMPLETED, "client_timestamp": "no-es-fecha"},
+        format="json",
+    )
+    assert r.status_code == 200, r.data
+
+
+def test_sin_firma_la_hora_del_telefono_no_cambia_el_rechazo(en_revision):
+    from django.utils import timezone
+
+    e = en_revision
+    r = aprobar_con_hora(e["admin"], e["wo_id"], timezone.now())
+    assert r.status_code == 400
+    assert r.data["code"] == "firma_requerida"
+    assert WorkOrder.objects.get(pk=e["wo_id"]).status == WorkOrder.Status.IN_REVIEW

@@ -54,6 +54,7 @@ export default function TransitionButton({ workOrder, onSuccess }) {
   const estadoAprobar = estadoDialogoAprobar({
     cargando: firma.isLoading,
     dataUrl: firmaDataUrl,
+    enLinea: useNetworkStore((st) => st.isOnline),
   })
 
   const closeCancelModal = useCallback(() => {

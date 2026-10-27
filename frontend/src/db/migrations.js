@@ -172,6 +172,18 @@ export const MIGRATIONS = [
       await addColumn(driver, 'offline_checklist_responses', 'reopened', 'INTEGER DEFAULT 0')
     },
   },
+  {
+    // Cambio de estado hecho sin red (revision de aprobacion): la hora del
+    // telefono al hacerlo (el acta dice cuando se aprobo, no cuando volvio la
+    // red) y el estado del que partio (para volver a el si el servidor rechaza
+    // el cambio al sincronizar). Solo columnas nuevas; lo que esta en cola no
+    // se toca (queda sin hora: el servidor usa la suya, como antes).
+    version: 9,
+    async up(driver) {
+      await addColumn(driver, 'offline_work_orders', 'local_status_at', 'TEXT')
+      await addColumn(driver, 'offline_work_orders', 'local_status_from', 'TEXT')
+    },
+  },
 ]
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

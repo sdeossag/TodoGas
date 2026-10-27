@@ -22,9 +22,12 @@ export function mensajeFirmaRequerida(err) {
 /**
  * Que mostrar en el dialogo de aprobar.
  *   cargando: la firma guardada todavia se esta consultando
- *   dataUrl:  la firma guardada (data URL) o null si no hay
+ *   dataUrl:  la firma guardada (data URL) o null si no hay; sin red es la
+ *             copia local del telefono
+ *   enLinea:  false si no hay red (por defecto true). Con copia local se puede
+ *             aprobar igual; sin ella no se puede registrar la firma sin red.
  */
-export function estadoDialogoAprobar({ cargando, dataUrl }) {
+export function estadoDialogoAprobar({ cargando, dataUrl, enLinea = true }) {
   if (cargando) {
     return { tipo: 'cargando', puedeAprobar: false, texto: 'Cargando tu firma...' }
   }
@@ -32,8 +35,18 @@ export function estadoDialogoAprobar({ cargando, dataUrl }) {
     return {
       tipo: 'con_firma',
       puedeAprobar: true,
-      texto: 'Se firmará con tu firma guardada',
+      texto: enLinea
+        ? 'Se firmará con tu firma guardada'
+        : 'Se firmará con tu firma guardada. Sin conexión, la aprobación se enviará al reconectar.',
       textoBoton: 'Aprobar y firmar',
+    }
+  }
+  if (!enLinea) {
+    return {
+      tipo: 'sin_firma',
+      puedeAprobar: false,
+      texto: 'Para aprobar necesitas registrar tu firma, y registrarla requiere conexión',
+      textoEnlace: 'Ir a Mi perfil (necesitas conexión para registrar la firma)',
     }
   }
   return {

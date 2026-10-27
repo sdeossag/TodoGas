@@ -40,8 +40,9 @@ import {
   markPhotoSynced,
   markSignatureSynced,
   markWorkOrderStatusSynced,
+  revertRejectedStatusChange,
 } from '../db/repositories'
-import { dueNow, isChecklistCompleted, nextState, serverMessage } from './retryPolicy'
+import { dueNow, esRechazoDeTransicion, isChecklistCompleted, nextState, serverMessage } from './retryPolicy'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -477,6 +478,25 @@ export async function syncSignatures(ctx, onItemDone) {
   return resumen
 }
 
+/**
+ * El servidor rechazo el cambio de estado (ej. aprobar sin firma guardada): la
+ * OT deja de mostrarse en el estado que el servidor no acepto. Se consulta el
+ * estado real; si no se puede, se vuelve al de origen guardado. El motivo queda
+ * en el aviso de "requiere atencion" (intentar() anota el fallo al relanzar).
+ */
+async function volverAlEstadoDelServidor(row) {
+  let estado = null
+  try {
+    const { data } = await client.get(`/api/work-orders/${row.id}/`)
+    estado = data?.status ?? null
+  } catch {
+    estado = null
+  }
+  // Si no hay origen guardado (cola anterior a la v9), aprobar vuelve a revision.
+  if (!estado && !row.local_status_from && row.status === 'COMPLETED') estado = 'IN_REVIEW'
+  await revertRejectedStatusChange(row.id, estado)
+}
+
 export async function syncWorkOrderStatuses(ctx, onItemDone) {
   const pending = await getWorkOrdersWithLocalStatusChange()
   const resumen = resumenVacio(pending.length)
@@ -493,10 +513,18 @@ export async function syncWorkOrderStatuses(ctx, onItemDone) {
       // El servidor valida que todo lo de la OT este arriba antes de moverla.
       { bloqueado: ctx.sinSubir.has(row.id) },
       async () => {
-        await client.post(`/api/work-orders/${row.id}/transition/`, {
-          new_status: row.status,
-          comment: row.local_status_comment ?? 'Cambio realizado sin conexion',
-        })
+        try {
+          await client.post(`/api/work-orders/${row.id}/transition/`, {
+            new_status: row.status,
+            comment: row.local_status_comment ?? 'Cambio realizado sin conexion',
+            // Hora del telefono al hacerlo sin red: el servidor la acepta con
+            // tolerancia (device_time) para el acta; sin ella usa la suya.
+            ...(row.local_status_at ? { client_timestamp: row.local_status_at } : {}),
+          })
+        } catch (error) {
+          if (esRechazoDeTransicion(error)) await volverAlEstadoDelServidor(row)
+          throw error
+        }
         await markWorkOrderStatusSynced(row.id)
       }
     )

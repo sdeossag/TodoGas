@@ -116,6 +116,17 @@ export function isChecklistCompleted(error) {
   return /ya est. completado/i.test(texto)
 }
 
+/**
+ * ¿El servidor leyo la transicion de estado y la rechazo (4xx que no es de
+ * sesion ni de espera)? Repetirla da lo mismo y el estado local ya no es
+ * verdad: hay que volver al del servidor. Un fallo de red o un 5xx no cuenta:
+ * esos se reintentan solos.
+ */
+export function esRechazoDeTransicion(error) {
+  const { kind, status } = classifyError(error)
+  return kind === PERMANENT && status != null
+}
+
 /** Que es cada elemento, en palabras del tecnico. */
 export const ITEM_LABELS = {
   field_response: 'Una respuesta del checklist',
@@ -125,7 +136,7 @@ export const ITEM_LABELS = {
   finding: 'Un hallazgo',
   photo: 'Una foto',
   signature: 'Una firma',
-  work_order: 'El cambio de estado de la orden',
+  work_order: 'El cambio de estado de la orden (el servidor lo rechazó y la orden volvió a su estado anterior)',
 }
 
 export const itemLabel = (entityType) => ITEM_LABELS[entityType] ?? 'Un dato'

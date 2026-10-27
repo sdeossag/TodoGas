@@ -23,6 +23,7 @@ function ordenDe(item) {
 export default function SyncAttentionNotice() {
   const items = useNetworkStore((s) => s.attentionItems)
   const retryAttention = useNetworkStore((s) => s.retryAttention)
+  const dismissAttention = useNetworkStore((s) => s.dismissAttention)
 
   // Lo que se esta reintentando ahora: el boton responde al toque, no al resultado.
   const [busy, setBusy] = useState(() => new Set())
@@ -112,7 +113,7 @@ export default function SyncAttentionNotice() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => retry([item])}
+                    onClick={() => (item.entity_type === 'work_order' ? dismissAttention([item]) : retry([item]))}
                     disabled={working}
                     className="flex-shrink-0 min-h-[44px] min-w-[96px] inline-flex items-center justify-center gap-1.5 px-3 rounded-lg text-sm font-medium text-white bg-red-600 active:scale-[0.97] active:bg-red-700 transition-transform disabled:opacity-70 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-500/25"
                   >
@@ -122,7 +123,7 @@ export default function SyncAttentionNotice() {
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                       </svg>
                     )}
-                    {working ? 'Reintentando…' : 'Reintentar'}
+                    {item.entity_type === 'work_order' ? 'Entendido' : working ? 'Reintentando…' : 'Reintentar'}
                   </button>
                 </li>
               )

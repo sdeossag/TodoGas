@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
@@ -145,12 +147,16 @@ def validate_transition(work_order, new_status, user, comment=""):
     return True
 
 
-def apply_transition(work_order, new_status, user, comment=""):
+def apply_transition(work_order, new_status, user, comment="", client_time=None):
     """
     Todo o nada: la OT, el ciclo de sus tareas y el historial se guardan juntos.
     La fila de la OT queda bloqueada hasta el final, asi dos aprobaciones a la
     vez no pasan las dos la validacion. El acta y el correo salen despues del
     commit: un worker que los tome antes leeria la OT sin aprobar.
+
+    client_time: hora del telefono cuando la transicion se hizo sin red. Se
+    acepta con la misma politica que el resto de datos de campo (device_time);
+    fuera de tolerancia o ausente, vale la hora del servidor.
     """
     with transaction.atomic():
         # El estado que vale es el de la fila bloqueada, no el que traia el
@@ -158,7 +164,7 @@ def apply_transition(work_order, new_status, user, comment=""):
         work_order.status = (
             WorkOrder.objects.select_for_update().values_list("status", flat=True).get(pk=work_order.pk)
         )
-        _aplicar(work_order, new_status, user, comment)
+        _aplicar(work_order, new_status, user, comment, client_time)
 
     if new_status == WorkOrder.Status.COMPLETED:
         from apps.reports.tasks import generate_work_order_pdf, send_serious_findings_email
@@ -175,7 +181,7 @@ def apply_transition(work_order, new_status, user, comment=""):
     return work_order
 
 
-def _aplicar(work_order, new_status, user, comment):
+def _aplicar(work_order, new_status, user, comment, client_time=None):
     validate_transition(work_order, new_status, user, comment)
 
     # Aprobar firma con la firma guardada de quien aprueba (tambien el
@@ -189,7 +195,9 @@ def _aplicar(work_order, new_status, user, comment):
             raise FirmaRequerida()
 
     from_status = work_order.status
-    now = timezone.now()
+    from .device_time import device_time
+
+    now = device_time(client_time, work_order)
 
     work_order.status = new_status
 
@@ -199,7 +207,9 @@ def _aplicar(work_order, new_status, user, comment):
     if new_status == WorkOrder.Status.COMPLETED:
         work_order.completed_at = now
         if work_order.started_at:
-            work_order.actual_duration = now - work_order.started_at
+            # started_at puede haberse puesto con la hora del servidor al
+            # sincronizar: la duracion nunca queda negativa.
+            work_order.actual_duration = max(now - work_order.started_at, timedelta(0))
 
     work_order.save()
 
@@ -221,6 +231,7 @@ def _aplicar(work_order, new_status, user, comment):
         to_status=new_status,
         changed_by=user,
         comment=comment,
+        changed_at=now,
     )
 
     if firma_bytes is not None:

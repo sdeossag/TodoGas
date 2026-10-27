@@ -42,7 +42,8 @@ export async function saveWorkOrdersOffline(workOrders = []) {
           hospital_id, assigned_to_id, checklist_version_id,
           checklist_response_id, notes, synced_at, offline_uuid, raw_json,
           location_name, assets_count,
-          local_status_changed, local_status_comment, detail_json
+          local_status_changed, local_status_comment, detail_json,
+          local_status_at, local_status_from
         ) VALUES (?,?,?,?,?,
           -- Un estado cambiado sin red y aun sin subir gana al del servidor: si
           -- no, la sincronizacion mandaria el estado viejo y el cambio se perderia.
@@ -50,7 +51,9 @@ export async function saveWorkOrdersOffline(workOrders = []) {
           ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
           COALESCE((SELECT local_status_changed FROM offline_work_orders WHERE id = ?), 0),
           (SELECT local_status_comment FROM offline_work_orders WHERE id = ?),
-          (SELECT detail_json FROM offline_work_orders WHERE id = ?)
+          (SELECT detail_json FROM offline_work_orders WHERE id = ?),
+          (SELECT local_status_at FROM offline_work_orders WHERE id = ?),
+          (SELECT local_status_from FROM offline_work_orders WHERE id = ?)
         )`,
         [
           wo.id,
@@ -83,6 +86,8 @@ export async function saveWorkOrdersOffline(workOrders = []) {
           // INSERT OR REPLACE borra y reinserta la fila: lo que solo existe en
           // el telefono (estado cambiado sin red, detalle descargado) se copia
           // de la fila anterior o se perderia al refrescar la lista.
+          wo.id,
+          wo.id,
           wo.id,
           wo.id,
           wo.id,
@@ -294,13 +299,18 @@ export async function updateWorkOrderStatus(workOrderId, newStatus, { markLocal 
  */
 export async function markStatusChangedOffline(workOrderId, newStatus, comment = '') {
   if (!(await ready())) return false
+  // La hora es la del telefono al hacer el cambio; el servidor la acepta con
+  // tolerancia (device_time). El estado de origen se conserva del primer
+  // cambio sin subir: es el que tiene el servidor.
   await run(
     `UPDATE offline_work_orders
-     SET local_status_changed = 1,
+     SET local_status_from = CASE WHEN local_status_changed = 1 THEN local_status_from ELSE status END,
+         local_status_changed = 1,
          local_status_comment = ?,
+         local_status_at = ?,
          status = ?
      WHERE id = ?`,
-    [comment || null, newStatus, workOrderId]
+    [comment || null, nowISO(), newStatus, workOrderId]
   )
   await logSync({
     entityType: 'work_order',
@@ -314,7 +324,7 @@ export async function markStatusChangedOffline(workOrderId, newStatus, comment =
 export async function getWorkOrdersWithLocalStatusChange() {
   if (!(await ready())) return []
   return query(
-    `SELECT id, status, local_status_comment
+    `SELECT id, status, local_status_comment, local_status_at, local_status_from
      FROM offline_work_orders
      WHERE local_status_changed = 1`
   )
@@ -324,9 +334,28 @@ export async function markWorkOrderStatusSynced(workOrderId) {
   if (!(await ready())) return
   await run(
     `UPDATE offline_work_orders
-     SET local_status_changed = 0, local_status_comment = NULL
+     SET local_status_changed = 0, local_status_comment = NULL,
+         local_status_at = NULL, local_status_from = NULL
      WHERE id = ?`,
     [workOrderId]
+  )
+}
+
+/**
+ * El servidor rechazo un cambio de estado hecho sin red (ej. aprobar sin firma
+ * guardada): la OT vuelve al estado que tiene el servidor y deja de estar en
+ * cola. `estado` es ese estado si se pudo consultar; si no, el de origen
+ * guardado al hacer el cambio.
+ */
+export async function revertRejectedStatusChange(workOrderId, estado = null) {
+  if (!(await ready())) return
+  await run(
+    `UPDATE offline_work_orders
+     SET status = COALESCE(?, local_status_from, status),
+         local_status_changed = 0, local_status_comment = NULL,
+         local_status_at = NULL, local_status_from = NULL
+     WHERE id = ?`,
+    [estado, workOrderId]
   )
 }
 

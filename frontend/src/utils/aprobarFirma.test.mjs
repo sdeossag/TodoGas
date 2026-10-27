@@ -48,3 +48,24 @@ test('mientras se consulta la firma no se puede aprobar', () => {
   assert.equal(estado.tipo, 'cargando')
   assert.equal(estado.puedeAprobar, false)
 })
+
+test('sin red y con copia local de la firma: se puede aprobar', () => {
+  const estado = estadoDialogoAprobar({ cargando: false, dataUrl: 'data:image/png;base64,AAAA', enLinea: false })
+  assert.equal(estado.tipo, 'con_firma')
+  assert.equal(estado.puedeAprobar, true)
+  assert.match(estado.texto, /al reconectar/)
+  assert.equal(estado.textoBoton, 'Aprobar y firmar')
+})
+
+test('sin red y sin copia local: no se aprueba y se avisa que registrarla necesita conexion', () => {
+  const estado = estadoDialogoAprobar({ cargando: false, dataUrl: null, enLinea: false })
+  assert.equal(estado.tipo, 'sin_firma')
+  assert.equal(estado.puedeAprobar, false)
+  assert.match(estado.texto, /requiere conexión/)
+  assert.match(estado.textoEnlace, /necesitas conexión/)
+})
+
+test('con red el comportamiento es el de siempre', () => {
+  const estado = estadoDialogoAprobar({ cargando: false, dataUrl: null, enLinea: true })
+  assert.equal(estado.texto, 'Para aprobar necesitas registrar tu firma')
+})

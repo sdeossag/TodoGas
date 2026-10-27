@@ -301,7 +301,7 @@ test('la v8 agrega los pendientes del checklist sin tocar lo que esta en cola', 
   const antes = await pendientes(d)
 
   assert.equal(await migrate(d), LATEST_VERSION)
-  assert.equal(LATEST_VERSION, 8)
+  assert.ok(LATEST_VERSION >= 8)
   assert.deepEqual(await pendientes(d), antes)
   const cols = await columnas(d, 'offline_checklist_responses')
   for (const c of ['local_pendientes', 'pendientes_pending', 'reopened']) assert.ok(cols.includes(c), c)
@@ -335,4 +335,15 @@ test('la v8 se puede repetir sobre una base que ya la tiene', async () => {
   assert.equal(await migrate(d), LATEST_VERSION)
   const [fila] = await d.query("SELECT pendientes_pending FROM offline_checklist_responses WHERE id = 'cr-1'")
   assert.equal(fila.pendientes_pending, 1)
+})
+
+test('la v9 agrega la hora y el estado de origen del cambio de estado sin red', async () => {
+  const { d } = await baseV1ConPendientes()
+  await d.execute('PRAGMA user_version = 8')
+  assert.equal(await migrate(d), LATEST_VERSION)
+  assert.ok(LATEST_VERSION >= 9)
+  const cols = await columnas(d, 'offline_work_orders')
+  for (const c of ['local_status_at', 'local_status_from']) assert.ok(cols.includes(c), c)
+  // Repetirla no falla.
+  assert.equal(await migrate(d), LATEST_VERSION)
 })

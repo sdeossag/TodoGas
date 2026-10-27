@@ -244,7 +244,19 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         comment = request.data.get("comment", "")
-        wo = apply_transition(wo, new_status, request.user, comment)
+        # Hora del telefono si la transicion se hizo sin red (client_timestamp).
+        client_time = None
+        raw_time = request.data.get("client_timestamp")
+        if raw_time:
+            from django.utils.dateparse import parse_datetime
+
+            try:
+                client_time = parse_datetime(str(raw_time))
+            except ValueError:
+                client_time = None
+            if client_time is not None and timezone.is_naive(client_time):
+                client_time = None
+        wo = apply_transition(wo, new_status, request.user, comment, client_time)
         AuditLog.objects.create(
             user=request.user,
             action=AuditLog.Action.STATUS_CHANGE,
