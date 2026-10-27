@@ -123,6 +123,8 @@ class MaintenancePlanCreateUpdateSerializer(serializers.ModelSerializer):
 
 
 class AssetIdsSerializer(serializers.Serializer):
+    # Fecha de la primera ocurrencia; vacia = la del protocolo o la heredada.
+    start_date = serializers.DateField(required=False, allow_null=True)
     asset_ids = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Asset.objects.select_related("plan"), allow_empty=False,
     )
@@ -132,6 +134,7 @@ class NodeIdsSerializer(ScopedFieldsMixin, serializers.Serializer):
     """Ubicaciones a las que se asigna un protocolo (dentro del alcance)."""
 
     scoped_fields = {"node_ids": "nodes"}
+    start_date = serializers.DateField(required=False, allow_null=True)
     node_ids = serializers.PrimaryKeyRelatedField(
         many=True, queryset=AssetNode.objects.select_related("hospital"), allow_empty=False,
     )

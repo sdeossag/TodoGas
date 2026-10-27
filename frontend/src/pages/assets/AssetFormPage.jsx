@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useHospitals, useAsset, useAssetTree, useCreateAsset, useUpdateAsset } from '../../api/assets'
 import { useMaintenancePlans } from '../../api/maintenance'
+import { useChecklistTemplates } from '../../api/checklists'
+import { avisoFechaInicio } from '../../utils/inicioProtocolo'
 import DecommissionPreview from '../../components/assets/DecommissionPreview'
 import Icon from '../../components/ui/Icon'
 import { flattenTree, indentedLabel } from '../../utils/locationTree'
@@ -15,6 +17,8 @@ const EMPTY = {
   status: 'ACTIVE',
   priority: 'MEDIUM',
   plan: '',
+  plan_start_date: '',
+  default_checklist_template: '',
   manufacturer: '',
   model: '',
   serial_number: '',
@@ -51,6 +55,8 @@ export default function AssetFormPage() {
   const { data: tree = [] } = useAssetTree(form.hospital || null, { refetchOnWindowFocus: 'always' })
   const { data: existing, isLoading: loadingExisting } = useAsset(id)
   const { data: plans = [] } = useMaintenancePlans()
+  const { data: plantillas = [] } = useChecklistTemplates({ is_active: true })
+  const publicadas = plantillas.filter((t) => t.current_version_id)
 
   const createMut = useCreateAsset()
   const updateMut = useUpdateAsset(id)
@@ -78,6 +84,8 @@ export default function AssetFormPage() {
         status: existing.status ?? 'ACTIVE',
         priority: existing.priority ?? 'MEDIUM',
         plan: existing.plan?.id ?? '',
+        plan_start_date: '',
+        default_checklist_template: existing.default_checklist_template ?? '',
         manufacturer: existing.manufacturer ?? '',
         model: existing.model ?? '',
         serial_number: existing.serial_number ?? '',
@@ -90,6 +98,9 @@ export default function AssetFormPage() {
       })
     }
   }, [isEdit, existing])
+
+  // Fecha de la primera tarea: solo tiene sentido al asignar o cambiar el protocolo.
+  const pideFechaInicio = !!form.plan && (!isEdit || form.plan !== existing?.plan?.id)
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -114,7 +125,13 @@ export default function AssetFormPage() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const payload = { ...form, plan: form.plan || null }
+    const payload = {
+      ...form,
+      plan: form.plan || null,
+      default_checklist_template: form.default_checklist_template || null,
+    }
+    // La fecha solo viaja si se está asignando un protocolo (nuevo o cambiado).
+    if (!payload.plan || !pideFechaInicio || !payload.plan_start_date) delete payload.plan_start_date
     if (!payload.node) delete payload.node
     if (!payload.avg_daily_usage_hours) delete payload.avg_daily_usage_hours
     if (!payload.purchase_date) delete payload.purchase_date
@@ -145,7 +162,8 @@ export default function AssetFormPage() {
       }
       setErrors(serverErrors)
       // Si el error es del paso 1, volver atrás
-      const step1Fields = ['hospital', 'node', 'name', 'code', 'asset_type', 'status', 'priority', 'plan']
+      const step1Fields = ['hospital', 'node', 'name', 'code', 'asset_type', 'status', 'priority', 'plan',
+        'model', 'serial_number', 'plan_start_date', 'default_checklist_template']
       if (step1Fields.some((f) => serverErrors[f])) setStep(1)
     }
   }
@@ -232,6 +250,17 @@ export default function AssetFormPage() {
               </Field>
 
               <div className="grid grid-cols-2 gap-4">
+                <Field label="Modelo" error={errors.model}>
+                  <input value={form.model} onChange={(e) => set('model', e.target.value)}
+                    className={inp(errors.model)} placeholder="V60" />
+                </Field>
+                <Field label="Número de serie" error={errors.serial_number}>
+                  <input value={form.serial_number} onChange={(e) => set('serial_number', e.target.value)}
+                    className={inp(errors.serial_number)} placeholder="SN-ABC-12345" />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <Field label="Código interno *" error={errors.code}>
                   <div className="flex gap-1">
                     <input value={form.code} onChange={(e) => set('code', e.target.value)}
@@ -287,6 +316,41 @@ export default function AssetFormPage() {
                     : 'Qué tareas se le hacen y cada cuánto. Se le asigna una vez y el sistema lleva sus fechas.'}
                 </p>
               </Field>
+
+              {pideFechaInicio && (
+                <Field label="Fecha de la primera tarea (opcional)" error={errors.plan_start_date}>
+                  <input type="date" value={form.plan_start_date}
+                    onChange={(e) => set('plan_start_date', e.target.value)}
+                    className={`${inp(errors.plan_start_date)} sm:w-48`} />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Vacía, se usa la fecha del protocolo (o hoy). Puede ser pasada, si ya van atrasados.
+                  </p>
+                  {avisoFechaInicio(form.plan_start_date) && (
+                    <p className="text-xs text-amber-700 mt-1">{avisoFechaInicio(form.plan_start_date)}</p>
+                  )}
+                </Field>
+              )}
+
+              <Field label="Checklist predeterminado" error={errors.default_checklist_template}>
+                <select value={form.default_checklist_template}
+                  onChange={(e) => set('default_checklist_template', e.target.value)}
+                  className={sel(errors.default_checklist_template)}>
+                  <option value="">Ninguno</option>
+                  {existing?.default_checklist_template
+                    && !publicadas.some((t) => t.id === existing.default_checklist_template) && (
+                    <option value={existing.default_checklist_template}>
+                      {existing.default_checklist_template_name ?? 'Checklist actual'} (sin versión publicada)
+                    </option>
+                  )}
+                  {publicadas.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Se preselecciona al crear una OT manual de este activo (se puede cambiar ahí) y se usa en las
+                  tareas del protocolo que no traen un checklist propio.
+                </p>
+              </Field>
             </div>
           )}
 
@@ -298,14 +362,6 @@ export default function AssetFormPage() {
                 <Field label="Fabricante" error={errors.manufacturer}>
                   <input value={form.manufacturer} onChange={(e) => set('manufacturer', e.target.value)}
                     className={inp()} placeholder="Philips" />
-                </Field>
-                <Field label="Modelo" error={errors.model}>
-                  <input value={form.model} onChange={(e) => set('model', e.target.value)}
-                    className={inp()} placeholder="V60" />
-                </Field>
-                <Field label="Número de serie" error={errors.serial_number}>
-                  <input value={form.serial_number} onChange={(e) => set('serial_number', e.target.value)}
-                    className={inp()} placeholder="SN-ABC-12345" />
                 </Field>
                 <Field label="Proveedor" error={errors.supplier}>
                   <input value={form.supplier} onChange={(e) => set('supplier', e.target.value)}

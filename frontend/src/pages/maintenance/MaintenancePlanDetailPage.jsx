@@ -23,6 +23,7 @@ import { taskTypeLabel } from '../../constants/labels'
 import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
 import { apiErrorMessage } from '../../utils/apiError'
 import { flattenTree, indentedLabel } from '../../utils/locationTree'
+import { avisoFechaInicio } from '../../utils/inicioProtocolo'
 import {
   FREQ_UNITS,
   PRIORITIES,
@@ -809,6 +810,24 @@ function AssetsTab({ plan, puedeGestionar }) {
   )
 }
 
+/** Fecha opcional de la primera ocurrencia al asignar; vacía = la del protocolo. */
+function StartDateField({ value, onChange }) {
+  const aviso = avisoFechaInicio(value)
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="fecha-inicio-protocolo">
+        Fecha de la primera tarea <span className="text-gray-400 font-normal">(opcional)</span>
+      </label>
+      <input id="fecha-inicio-protocolo" type="date" value={value}
+        onChange={(e) => onChange(e.target.value)} className={`${input} sm:w-48`} />
+      <p className="text-xs text-gray-500 mt-1">
+        Vacía, se usa la fecha del protocolo (o hoy). Puede ser pasada, si ya van atrasados.
+      </p>
+      {aviso && <p className="text-xs text-amber-700 mt-1">{aviso}</p>}
+    </div>
+  )
+}
+
 function AssignAssetsModal({ plan, onClose }) {
   const fijo = plan.restrict_to_hospital?.id
   const { data: hospitals = [] } = useHospitals({ is_active: true })
@@ -819,6 +838,7 @@ function AssignAssetsModal({ plan, onClose }) {
   const [soloSinPlan, setSoloSinPlan] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
   const [result, setResult] = useState(null)
+  const [fechaInicio, setFechaInicio] = useState('')
   const assignMut = useAssignPlanAssets(plan.id)
 
   const { data: tree = [] } = useAssetTree(hospital)
@@ -858,7 +878,7 @@ function AssignAssetsModal({ plan, onClose }) {
 
   async function handleAssign() {
     try {
-      setResult(await assignMut.mutateAsync([...selected]))
+      setResult(await assignMut.mutateAsync({ ids: [...selected], fechaInicio }))
       setSelected(new Set())
     } catch {
       // el error se muestra abajo
@@ -960,9 +980,10 @@ function AssignAssetsModal({ plan, onClose }) {
         {cambian.length > 0 && (
           <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
             {cambian.length} de los marcados ya tienen otro protocolo: se cambian a este. Si tenían una tarea
-            pendiente, la nueva conserva su fecha.
+            pendiente, la nueva conserva su fecha, salvo que elijas una fecha de inicio.
           </p>
         )}
+        <StartDateField value={fechaInicio} onChange={setFechaInicio} />
         {assignMut.isError && <p className="text-sm text-red-600" role="alert">{apiErrorMessage(assignMut.error)}</p>}
 
         <div className="flex justify-end gap-3">
@@ -989,6 +1010,7 @@ function AssignLocationsModal({ plan, onClose }) {
   const [filtro, setFiltro] = useState('')
   const [selected, setSelected] = useState(() => new Set())
   const [result, setResult] = useState(null)
+  const [fechaInicio, setFechaInicio] = useState('')
   const assignMut = useAssignPlanLocations(plan.id)
 
   const { data: tree = [], isFetching } = useAssetTree(hospital)
@@ -1011,7 +1033,7 @@ function AssignLocationsModal({ plan, onClose }) {
 
   async function handleAssign() {
     try {
-      setResult(await assignMut.mutateAsync([...selected]))
+      setResult(await assignMut.mutateAsync({ ids: [...selected], fechaInicio }))
       setSelected(new Set())
     } catch {
       // el error se muestra abajo
@@ -1082,8 +1104,10 @@ function AssignLocationsModal({ plan, onClose }) {
         </div>
 
         <p className="text-xs text-gray-500">
-          Si la ubicación tenía otro protocolo, se cambia a este y conserva la fecha de su pendiente.
+          Si la ubicación tenía otro protocolo, se cambia a este y conserva la fecha de su pendiente,
+          salvo que elijas una fecha de inicio.
         </p>
+        <StartDateField value={fechaInicio} onChange={setFechaInicio} />
         {assignMut.isError && <p className="text-sm text-red-600" role="alert">{apiErrorMessage(assignMut.error)}</p>}
 
         <div className="flex justify-end gap-3">

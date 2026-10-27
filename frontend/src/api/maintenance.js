@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
 import { fetchAllPages } from './pagination'
+import { cuerpoAsignacion } from '../utils/inicioProtocolo'
 
 const BASE = '/api/maintenance/plans'
 const TASKS = '/api/maintenance/plan-tasks'
@@ -77,8 +78,8 @@ export function useComplianceData(id) {
 export function useAssignPlanAssets(planId) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (assetIds) =>
-      client.post(`${BASE}/${planId}/assign-assets/`, { asset_ids: assetIds }).then((r) => r.data),
+    mutationFn: ({ ids, fechaInicio }) =>
+      client.post(`${BASE}/${planId}/assign-assets/`, cuerpoAsignacion('asset_ids', ids, fechaInicio)).then((r) => r.data),
     onSuccess: () => invalidatePlanning(qc),
   })
 }
@@ -87,8 +88,8 @@ export function useAssignPlanAssets(planId) {
 export function useAssignPlanLocations(planId) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (nodeIds) =>
-      client.post(`${BASE}/${planId}/assign-locations/`, { node_ids: nodeIds }).then((r) => r.data),
+    mutationFn: ({ ids, fechaInicio }) =>
+      client.post(`${BASE}/${planId}/assign-locations/`, cuerpoAsignacion('node_ids', ids, fechaInicio)).then((r) => r.data),
     onSuccess: () => invalidatePlanning(qc),
   })
 }

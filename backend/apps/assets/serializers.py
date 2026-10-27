@@ -280,6 +280,9 @@ class AssetSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
     maintenance_status = serializers.SerializerMethodField()
     plan = serializers.SerializerMethodField()
     coverage = serializers.SerializerMethodField()
+    default_checklist_template_name = serializers.CharField(
+        source="default_checklist_template.name", read_only=True, default=None,
+    )
 
     class Meta:
         model = Asset
@@ -292,6 +295,7 @@ class AssetSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializer):
             "created_at", "updated_at", "custom_field_values",
             "last_maintenance_date", "next_maintenance_date", "maintenance_status",
             "plan", "coverage", "is_location", "represents_node",
+            "default_checklist_template", "default_checklist_template_name",
         ]
         read_only_fields = ["id", "qr_code", "created_at", "updated_at", "is_location", "represents_node"]
 
@@ -332,7 +336,7 @@ class AssetListSerializer(AssetMaintenanceFieldsMixin, serializers.ModelSerializ
             # Columnas planas que el portal del cliente muestra en su tabla.
             "manufacturer", "model", "equipment_location",
             "last_maintenance_date", "next_maintenance_date", "maintenance_status",
-            "is_location",
+            "is_location", "default_checklist_template",
         ]
 
     is_location = serializers.BooleanField(read_only=True)
@@ -355,6 +359,10 @@ class AssetCreateUpdateSerializer(ScopedFieldsMixin, serializers.ModelSerializer
     # Un usuario limitado a una parte del arbol solo crea y mueve activos dentro de ella.
     scoped_fields = {"hospital": "hospitals", "node": "nodes"}
 
+    # Fecha de la primera ocurrencia del protocolo que se asigna con este
+    # guardado. No es columna del activo: solo viaja al asignar.
+    plan_start_date = serializers.DateField(write_only=True, required=False, allow_null=True)
+
     class Meta:
         model = Asset
         fields = [
@@ -363,23 +371,26 @@ class AssetCreateUpdateSerializer(ScopedFieldsMixin, serializers.ModelSerializer
             "asset_type", "classification_1", "classification_2", "supplier",
             "purchase_date", "avg_daily_usage_hours", "status", "notes",
             "photo_url", "installation_date", "warranty_expiry", "plan",
+            "plan_start_date", "default_checklist_template",
         ]
         read_only_fields = ["id"]
 
     def create(self, validated_data):
         plan = validated_data.pop("plan", None)
+        inicio = validated_data.pop("plan_start_date", None)
         asset = super().create(validated_data)
         if plan is not None:
-            _set_plan(asset, plan, self.context)
+            _set_plan(asset, plan, self.context, inicio)
         return asset
 
     def update(self, instance, validated_data):
         sentinel = object()
         plan = validated_data.pop("plan", sentinel)
+        inicio = validated_data.pop("plan_start_date", None)
         antes = instance.status
         asset = super().update(instance, validated_data)
         if plan is not sentinel:
-            _set_plan(asset, plan, self.context)
+            _set_plan(asset, plan, self.context, inicio)
         # El estado tambien se cambia desde el formulario: dar de baja por ahi
         # anula sus pendientes igual que el boton, y volver a activo las reabre.
         if asset.status != antes:
@@ -388,6 +399,11 @@ class AssetCreateUpdateSerializer(ScopedFieldsMixin, serializers.ModelSerializer
             request = self.context.get("request")
             asset_status_changed(asset, antes, getattr(request, "user", None))
         return asset
+
+    def validate_default_checklist_template(self, value):
+        if value is not None and not value.is_active:
+            raise serializers.ValidationError("Esa plantilla de checklist está inactiva.")
+        return value
 
     def validate_code(self, value):
         qs = Asset.objects.filter(code=value)
@@ -416,10 +432,10 @@ class AssetCreateUpdateSerializer(ScopedFieldsMixin, serializers.ModelSerializer
         return attrs
 
 
-def _set_plan(asset, plan, context):
+def _set_plan(asset, plan, context, start_date=None):
     """El plan del activo cambia por el servicio: la nueva pendiente hereda la
     fecha de la anterior y las del plan viejo se anulan (decision D7)."""
     from apps.maintenance.services import set_asset_plan
 
     request = context.get("request")
-    set_asset_plan(asset, plan, getattr(request, "user", None))
+    set_asset_plan(asset, plan, getattr(request, "user", None), start_date=start_date)

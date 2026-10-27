@@ -4,6 +4,7 @@ import { useCreateWorkOrder } from '../../api/workOrders'
 import { useAssets, useAssetTree, useHospitals } from '../../api/assets'
 import { useUsers } from '../../api/users'
 import { useChecklistTemplates } from '../../api/checklists'
+import { versionPredeterminada } from '../../utils/inicioProtocolo'
 import { AvisoSinContrato } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
 import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
@@ -93,7 +94,7 @@ export default function CreateWorkOrderPage() {
     setElegidos((prev) => {
       const next = new Map(prev)
       if (next.has(asset.id)) next.delete(asset.id)
-      else next.set(asset.id, { asset, version: '' })
+      else next.set(asset.id, { asset, version: versionPredeterminada(asset, publishedChecklists) })
       return next
     })
     if (errors.tasks) setErrors((e) => ({ ...e, tasks: null }))
@@ -116,7 +117,7 @@ export default function CreateWorkOrderPage() {
       const next = new Map(prev)
       for (const a of assets) {
         if (todosMarcados) next.delete(a.id)
-        else if (!next.has(a.id)) next.set(a.id, { asset: a, version: '' })
+        else if (!next.has(a.id)) next.set(a.id, { asset: a, version: versionPredeterminada(a, publishedChecklists) })
       }
       return next
     })
@@ -291,7 +292,7 @@ export default function CreateWorkOrderPage() {
             <p className="text-xs text-gray-500">
               {publishedChecklists.length === 0
                 ? 'No hay plantillas de checklist con una versión publicada.'
-                : 'Cada activo puede llevar su propio checklist.'}
+                : 'Cada activo puede llevar su propio checklist; si tiene uno predeterminado, ya viene elegido.'}
             </p>
             {marcados.map(({ asset, version }) => (
               <div key={asset.id} className="flex items-center gap-2 flex-wrap">

@@ -186,6 +186,13 @@ class Asset(models.Model):
         null=True, blank=True,
         related_name="assets",
     )
+    # Checklist que se usa por defecto con este equipo: preselecciona la de la
+    # OT manual y completa las tareas de protocolo que no traen una propia.
+    default_checklist_template = models.ForeignKey(
+        "checklists.ChecklistTemplate", on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="default_for_assets",
+    )
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=50, unique=True)
     manufacturer = models.CharField(max_length=200, blank=True, default="")

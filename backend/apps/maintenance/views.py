@@ -76,7 +76,7 @@ def _solo_del_hospital(plan, objetos, campo, etiqueta):
         )})
 
 
-def _asignar(plan, activos, user):
+def _asignar(plan, activos, user, start_date=None):
     """
     Asigna el plan a los activos (D7). Un activo que tenia otro plan se cambia a
     este y su nueva pendiente hereda la fecha de la que se anula.
@@ -87,7 +87,7 @@ def _asignar(plan, activos, user):
             if asset.plan_id == plan.id:
                 continue
             anterior = asset.plan.name if asset.plan_id else None
-            heredada = services.set_asset_plan(asset, plan, user)
+            heredada = services.set_asset_plan(asset, plan, user, start_date=start_date)
             if anterior:
                 cambiados.append({"code": asset.code, "from_plan": anterior, "kept_date": heredada})
             asignados += 1
@@ -200,7 +200,7 @@ class MaintenancePlanViewSet(viewsets.ModelViewSet):
         entrada.is_valid(raise_exception=True)
         activos = entrada.validated_data["asset_ids"]
         _solo_del_hospital(plan, activos, "asset_ids", lambda a: a.code)
-        return Response(_asignar(plan, activos, request.user))
+        return Response(_asignar(plan, activos, request.user, entrada.validated_data.get("start_date")))
 
     @action(detail=True, methods=["post"], url_path="assign-locations")
     def assign_locations(self, request, pk=None):
@@ -219,7 +219,7 @@ class MaintenancePlanViewSet(viewsets.ModelViewSet):
         _solo_del_hospital(plan, nodos, "node_ids", lambda n: n.path or n.name)
         with transaction.atomic():
             activos = [activo_de_ubicacion(n) for n in nodos]
-            return Response(_asignar(plan, activos, request.user))
+            return Response(_asignar(plan, activos, request.user, entrada.validated_data.get("start_date")))
 
     @action(detail=True, methods=["post"], url_path="remove-assets")
     def remove_assets(self, request, pk=None):

@@ -271,7 +271,7 @@ def _cancel(task, note):
 
 
 @transaction.atomic
-def set_asset_plan(asset, new_plan, created_by=None):
+def set_asset_plan(asset, new_plan, created_by=None, start_date=None):
     """
     Asigna, cambia o quita el plan de un activo.
 
@@ -281,6 +281,11 @@ def set_asset_plan(asset, new_plan, created_by=None):
     pendiente de la que heredar. Las tareas que ya estan dentro de una OT no se
     tocan; al cerrarse no generan la siguiente porque el activo ya no tiene ese
     plan.
+
+    `start_date` es la fecha de la primera ocurrencia elegida al asignar (puede
+    ser pasada: sale vencida). Si viene, manda sobre la heredada y sobre la
+    `start_date` de la tarea; vacia, se comporta como siempre. Solo afecta a
+    las tareas por fecha, y solo a las que se abren ahora.
     """
     nuevo_id = new_plan.id if new_plan else None
     heredada = None
@@ -304,8 +309,9 @@ def set_asset_plan(asset, new_plan, created_by=None):
         asset.save(update_fields=["plan", "updated_at"])
 
     if new_plan is not None:
+        fecha = start_date or heredada
         for plan_task in new_plan.tasks.filter(is_active=True, trigger=PlanTask.Trigger.DATE):
-            ensure_open_task(plan_task, asset, fecha=heredada, created_by=created_by)
+            ensure_open_task(plan_task, asset, fecha=fecha, created_by=created_by)
         from .meters import init_schedule
 
         for plan_task in new_plan.tasks.filter(is_active=True, trigger=PlanTask.Trigger.EVERY):
@@ -390,13 +396,24 @@ def assign_plan_to_assets(plan, assets, created_by=None):
 
 # ── Tareas y OTs ──────────────────────────────────────────────────────────────
 
-def _current_version(plan_task):
-    if plan_task is None or not plan_task.checklist_template_id:
+def checklist_template_id_for(plan_task, asset):
+    """
+    Plantilla que corresponde a la tarea: la propia de la tarea del protocolo y,
+    si no tiene, la predeterminada del activo.
+    """
+    if plan_task is not None and plan_task.checklist_template_id:
+        return plan_task.checklist_template_id
+    return getattr(asset, "default_checklist_template_id", None)
+
+
+def _current_version(plan_task, asset=None):
+    template_id = checklist_template_id_for(plan_task, asset)
+    if plan_task is None or not template_id:
         return None
     from apps.checklists.models import ChecklistTemplateVersion
 
     return ChecklistTemplateVersion.objects.filter(
-        template_id=plan_task.checklist_template_id, is_current=True
+        template_id=template_id, is_current=True
     ).first()
 
 
@@ -477,10 +494,15 @@ def schedule_tasks(tasks, work_order, first_sort_order=0):
                 "Todas las tareas de una OT deben ser de activos del mismo hospital."
             )
         if tarea.plan_task_id:
-            version = _current_version(tarea.plan_task)
-            if version is None and tarea.plan_task.checklist_template_id:
+            version = _current_version(tarea.plan_task, tarea.asset)
+            plantilla_id = checklist_template_id_for(tarea.plan_task, tarea.asset)
+            if version is None and plantilla_id:
+                if tarea.plan_task.checklist_template_id:
+                    nombre = tarea.plan_task.checklist_template.name
+                else:
+                    nombre = tarea.asset.default_checklist_template.name
                 avisos.append(
-                    f"La plantilla '{tarea.plan_task.checklist_template.name}' no tiene "
+                    f"La plantilla '{nombre}' no tiene "
                     f"version publicada: la tarea «{tarea.title}» entra sin checklist."
                 )
             tarea.checklist_version = version
