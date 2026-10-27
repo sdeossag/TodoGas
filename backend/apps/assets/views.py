@@ -1,3 +1,5 @@
+import uuid
+
 from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce
 from rest_framework import status, viewsets
@@ -406,6 +408,100 @@ class AssetViewSet(viewsets.ModelViewSet):
         asset.save(update_fields=["status", "updated_at"])
         efecto = asset_status_changed(asset, antes, request.user)
         return Response({"id": str(asset.id), "status": asset.status, **efecto})
+
+    # ── Baja y reactivacion masivas ──────────────────────────────────────────
+
+    BULK_MAX = 200
+
+    def _bulk_args(self, request):
+        """
+        Valida el cuerpo y devuelve (activos, estado, inicio). Los activos salen
+        del mismo queryset que la lista (alcance por hospital o rama del arbol):
+        un id fuera de ese alcance o inexistente se rechaza completo.
+        """
+        from rest_framework.exceptions import ValidationError
+
+        data = request.data
+        ids = data.get("asset_ids")
+        if not isinstance(ids, list) or not ids:
+            raise ValidationError({"asset_ids": "Elige al menos un activo."})
+        validos, vistos = [], set()
+        for valor in ids:
+            try:
+                uid = uuid.UUID(str(valor))
+            except ValueError:
+                raise ValidationError({"asset_ids": f"Identificador no valido: {valor}."})
+            if uid not in vistos:
+                vistos.add(uid)
+                validos.append(uid)
+        if len(validos) > self.BULK_MAX:
+            raise ValidationError({"asset_ids": f"Maximo {self.BULK_MAX} activos por vez."})
+
+        estado = data.get("status")
+        if estado not in (Asset.Status.DECOMMISSIONED, Asset.Status.ACTIVE):
+            raise ValidationError({"status": "Debe ser DECOMMISSIONED o ACTIVE."})
+        inicio = data.get("start") or "today"
+        if inicio not in ("today", "last_close"):
+            raise ValidationError({"start": "Debe ser 'today' o 'last_close'."})
+
+        encontrados = {a.id: a for a in self.get_queryset().filter(id__in=validos)}
+        faltan = [str(u) for u in validos if u not in encontrados]
+        if faltan:
+            raise ValidationError({
+                "detail": "Algunos activos no existen o estan fuera de tu alcance.",
+                "missing_ids": faltan,
+            })
+        return [encontrados[u] for u in validos], estado, inicio
+
+    @staticmethod
+    def _bulk_response(resumen):
+        return {
+            "changed": resumen["changed"],
+            "unchanged": resumen["unchanged"],
+            "cancelled": resumen["cancelled"],
+            "reopened": resumen["reopened"],
+            "in_work_orders": resumen["in_work_orders"],
+        }
+
+    @action(detail=False, methods=["post"], url_path="bulk-status/preview", permission_classes=[TienePermiso("activos.gestionar")])
+    def bulk_status_preview(self, request):
+        """Lo que pasaria con la baja o reactivacion masiva. No escribe nada."""
+        from apps.maintenance.services import apply_bulk_status
+
+        activos, estado, inicio = self._bulk_args(request)
+        resumen = apply_bulk_status(activos, estado, inicio, request.user, dry_run=True)
+        return Response(self._bulk_response(resumen))
+
+    @action(detail=False, methods=["post"], url_path="bulk-status", permission_classes=[TienePermiso("activos.gestionar")])
+    def bulk_status(self, request):
+        """
+        Da de baja o reactiva varios activos a la vez (maximo 200), en una sola
+        transaccion. Reactivar con start="today" (lo recomendado) deja las
+        tareas por fecha de su protocolo programadas para hoy.
+        """
+        from django.db import transaction
+
+        from apps.audit.models import AuditLog
+        from apps.audit.ip import client_ip
+        from apps.maintenance.services import apply_bulk_status
+
+        activos, estado, inicio = self._bulk_args(request)
+        with transaction.atomic():
+            resumen = apply_bulk_status(activos, estado, inicio, request.user)
+            for asset, antes in resumen["changed_assets"]:
+                cambios = {"field": "status", "from": antes, "to": estado, "bulk": True}
+                if estado == Asset.Status.ACTIVE:
+                    cambios["start"] = inicio
+                AuditLog.objects.create(
+                    user=request.user,
+                    action=AuditLog.Action.STATUS_CHANGE,
+                    entity_type="Asset",
+                    entity_id=asset.id,
+                    changes=cambios,
+                    ip_address=client_ip(request) or None,
+                    user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
+                )
+        return Response(self._bulk_response(resumen))
 
 
 class AssetCustomFieldViewSet(viewsets.ModelViewSet):

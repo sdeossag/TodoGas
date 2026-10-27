@@ -341,8 +341,44 @@ def decommission_preview(asset):
     }
 
 
+START_TODAY = "today"
+START_LAST_CLOSE = "last_close"
+REACTIVACION_CAUSE = "Reactivación del activo"
+
+
+def _reopen_from_today(plan_task, asset, hoy, created_by):
+    """
+    Una tarea por fecha del protocolo, contada desde hoy al reactivar el activo.
+    Devuelve True si abrio una tarea nueva o movio una pendiente a hoy.
+
+    Sin tarea abierta se crea con fecha calculada y programada de hoy. Si ya
+    habia una pendiente (el activo estaba fuera de servicio y no se le anulo
+    nada) se reprograma a hoy con la mecanica de siempre, que deja registro con
+    su causa, y su fecha calculada tambien pasa a hoy: es un nuevo comienzo. La
+    que ya esta dentro de una OT no se toca.
+    """
+    abierta = _open_task(plan_task, asset)
+    if abierta is None:
+        _, creada = ensure_open_task(plan_task, asset, fecha=hoy, created_by=created_by)
+        return creada
+    if abierta.status != Task.Status.PENDING:
+        return False
+    movida = False
+    if abierta.scheduled_date != hoy:
+        reschedule_task(
+            abierta, hoy, get_cause(REACTIVACION_CAUSE), created_by,
+            note="El activo se reactivó con las tareas desde hoy.",
+        )
+        movida = True
+    if abierta.calculated_date != hoy:
+        abierta.calculated_date = hoy
+        abierta.save(update_fields=["calculated_date", "updated_at"])
+        movida = True
+    return movida
+
+
 @transaction.atomic
-def asset_status_changed(asset, before, created_by=None):
+def asset_status_changed(asset, before, created_by=None, start=START_LAST_CLOSE):
     """
     Lo que le pasa a las tareas cuando cambia el estado del equipo (decision del
     2026-10-01, audio2 11:04).
@@ -353,7 +389,8 @@ def asset_status_changed(asset, before, created_by=None):
       genera la siguiente, porque can_generate exige el equipo activo.
     - Fuera de servicio: no se toca nada; puede que lo esten reparando.
     - De vuelta a activo: se reabren las pendientes de su protocolo, con la
-      fecha que toque por su ultimo cierre.
+      fecha que toque por su ultimo cierre (`start="last_close"`, lo de
+      siempre) o desde hoy (`start="today"`, la reactivacion masiva).
 
     Devuelve {"cancelled": n, "reopened": n, "in_work_orders": ["OT-...", ...]}.
     """
@@ -375,10 +412,62 @@ def asset_status_changed(asset, before, created_by=None):
         resultado["in_work_orders"] = sorted({t.work_order.wo_code for t in en_ots})
 
     if asset.status == Asset.Status.ACTIVE and asset.plan_id:
+        hoy = timezone.localdate()
         for plan_task in asset.plan.tasks.filter(is_active=True, trigger=PlanTask.Trigger.DATE):
+            if start == START_TODAY and can_generate(plan_task, asset):
+                resultado["reopened"] += int(_reopen_from_today(plan_task, asset, hoy, created_by))
+                continue
             _, creada = ensure_open_task(plan_task, asset, created_by=created_by)
             resultado["reopened"] += int(creada)
     return resultado
+
+
+class BulkStatusError(ValueError):
+    """El cambio de estado masivo no es valido (estado o inicio desconocidos)."""
+
+
+@transaction.atomic
+def apply_bulk_status(assets, status, start=START_TODAY, created_by=None, dry_run=False):
+    """
+    Da de baja o reactiva varios activos en una sola transaccion.
+
+    Cada activo cuyo estado cambia se guarda y pasa por `asset_status_changed`;
+    los que ya estan en el estado pedido solo se cuentan. Con `dry_run` hace lo
+    mismo y deshace todo al final: asi la vista previa cuenta exactamente lo que
+    pasaria, sin reescribir la logica en una version "de mentira".
+
+    Devuelve {"changed", "unchanged", "cancelled", "reopened", "in_work_orders",
+    "changed_assets"}.
+    """
+    from apps.assets.models import Asset
+
+    if status not in (Asset.Status.DECOMMISSIONED, Asset.Status.ACTIVE):
+        raise BulkStatusError("Solo se puede dar de baja o reactivar.")
+    if start not in (START_TODAY, START_LAST_CLOSE):
+        raise BulkStatusError("El inicio debe ser 'today' o 'last_close'.")
+
+    resumen = {
+        "changed": 0, "unchanged": 0, "cancelled": 0, "reopened": 0,
+        "in_work_orders": [], "changed_assets": [],
+    }
+    ots = set()
+    for asset in assets:
+        antes = asset.status
+        if antes == status:
+            resumen["unchanged"] += 1
+            continue
+        asset.status = status
+        asset.save(update_fields=["status", "updated_at"])
+        efecto = asset_status_changed(asset, antes, created_by, start=start)
+        resumen["changed"] += 1
+        resumen["cancelled"] += efecto["cancelled"]
+        resumen["reopened"] += efecto["reopened"]
+        ots.update(efecto["in_work_orders"])
+        resumen["changed_assets"].append((asset, antes))
+    resumen["in_work_orders"] = sorted(ots)
+    if dry_run:
+        transaction.set_rollback(True)
+    return resumen
 
 
 def assign_plan_to_assets(plan, assets, created_by=None):

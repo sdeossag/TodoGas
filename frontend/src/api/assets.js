@@ -193,6 +193,28 @@ export function useDecommissionAsset(id) {
   })
 }
 
+// Baja y reactivación masivas. La vista previa es un POST que no escribe nada:
+// va como mutación porque se pide al abrir el modal y al cambiar la opción.
+export function useBulkAssetStatusPreview() {
+  return useMutation({
+    mutationFn: (data) => client.post('/api/assets/bulk-status/preview/', data).then((r) => r.data),
+  })
+}
+
+export function useBulkAssetStatus() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => client.post('/api/assets/bulk-status/', data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['assets'] })
+      // La lista paginada de Activos usa su propia clave.
+      qc.invalidateQueries({ queryKey: ['assets-page'] })
+      qc.invalidateQueries({ queryKey: ['asset-tasks'] })
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+    },
+  })
+}
+
 // ── Importación desde Fracttal ─────────────────────────────────────────────
 
 // Con FormData el navegador pone el boundary; el JSON por defecto lo rompería.

@@ -11,6 +11,7 @@ import { filtrarPorCategoria } from '../../utils/tiposDeTarea'
 import { CoberturaEquipo } from '../../components/contracts/ContractStatus'
 import Icon from '../../components/ui/Icon'
 import DecommissionPreview from '../../components/assets/DecommissionPreview'
+import EstadoMasivoModal from '../../components/assets/EstadoMasivoModal'
 import MetersPanel from '../../components/meters/MetersPanel'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import { puede } from '../../utils/permisos'
@@ -39,6 +40,7 @@ export default function AssetDetailPage() {
 
   const [tab, setTab] = useState(0)
   const [confirmDecom, setConfirmDecom] = useState(false)
+  const [reactivando, setReactivando] = useState(false)
   // Lo que paso con sus tareas: cuantas se anularon y en que OT quedan otras.
   const [resultadoBaja, setResultadoBaja] = useState(null)
 
@@ -125,6 +127,12 @@ export default function AssetDetailPage() {
                 Dar de baja
               </button>
             )}
+            {puedeGestionar && asset.status === 'DECOMMISSIONED' && (
+              <button onClick={() => setReactivando(true)}
+                className="px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-light">
+                Reactivar
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -150,6 +158,14 @@ export default function AssetDetailPage() {
           {tab === 3 && <CustomFieldsTab asset={asset} />}
         </div>
       </div>
+
+      {reactivando && (
+        <EstadoMasivoModal
+          accion="ACTIVE"
+          assetIds={[asset.id]}
+          onClose={() => setReactivando(false)}
+        />
+      )}
 
       {/* Modal confirmación baja */}
       {confirmDecom && (

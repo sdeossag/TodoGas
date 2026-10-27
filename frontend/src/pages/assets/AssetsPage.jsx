@@ -4,6 +4,16 @@ import useAuthStore from '../../store/authStore'
 import { useHospitals, useAssetTree, useAssetsPage } from '../../api/assets'
 import Icon from '../../components/ui/Icon'
 import { compareNodes } from '../../utils/locationTree'
+import EstadoMasivoModal from '../../components/assets/EstadoMasivoModal'
+import {
+  ACCION_BAJA,
+  ACCION_REACTIVAR,
+  alternarTodas,
+  avisoLimite,
+  excedeLimite,
+  textoSeleccion,
+  todasMarcadas,
+} from '../../utils/estadoMasivo'
 import { puede } from '../../utils/permisos'
 
 const STATUS_LABELS = {
@@ -54,6 +64,9 @@ export default function AssetsPage() {
   const [pmFilter, setPmFilter] = useState(searchParams.get('maintenance_status') ?? '')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
+  // Selección para dar de baja o reactivar en bloque (solo con activos.gestionar).
+  const [seleccion, setSeleccion] = useState(() => new Set())
+  const [accionMasiva, setAccionMasiva] = useState(null)
 
   const { data: hospitals = [] } = useHospitals({ is_active: true })
   const { data: tree = [], isLoading: treeLoading } = useAssetTree(selectedHospitalId)
@@ -81,6 +94,20 @@ export default function AssetsPage() {
   useEffect(() => {
     setPage(1)
   }, [selectedHospitalId, selectedNodeId, search, statusFilter, pmFilter])
+
+  // La selección también se limpia al cambiar de filtro: lo marcado ya no se vería.
+  useEffect(() => {
+    setSeleccion(new Set())
+  }, [selectedHospitalId, selectedNodeId, search, statusFilter, pmFilter])
+
+  function alternarUno(id) {
+    setSeleccion((prev) => {
+      const nueva = new Set(prev)
+      if (nueva.has(id)) nueva.delete(id)
+      else nueva.add(id)
+      return nueva
+    })
+  }
 
   function handleSearchSubmit(e) {
     e.preventDefault()
@@ -223,6 +250,16 @@ export default function AssetsPage() {
               <table className="w-full text-sm min-w-[46rem]">
                 <thead className="sticky top-0 bg-gray-50">
                   <tr className="text-left text-xs font-medium text-gray-500">
+                    {puedeGestionar && (
+                      <th className="px-4 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          aria-label="Marcar todos los activos visibles"
+                          checked={todasMarcadas(seleccion, assets)}
+                          onChange={() => setSeleccion((prev) => alternarTodas(prev, assets))}
+                        />
+                      </th>
+                    )}
                     <th className="px-4 py-3">Código</th>
                     <th className="px-4 py-3">Nombre</th>
                     <th className="px-4 py-3">Tipo</th>
@@ -239,6 +276,16 @@ export default function AssetsPage() {
                     return (
                       <tr key={a.id} className="hover:bg-gray-50 transition-colors cursor-pointer"
                         onClick={() => navigate(`/activos/${a.id}`)}>
+                        {puedeGestionar && (
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              aria-label={`Marcar activo ${a.code}`}
+                              checked={seleccion.has(a.id)}
+                              onChange={() => alternarUno(a.id)}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3 font-mono text-xs text-gray-500">{a.code}</td>
                         <td className="px-4 py-3 font-medium text-gray-800">
                           <div className="flex items-center gap-2">
@@ -278,6 +325,7 @@ export default function AssetsPage() {
                 </tbody>
               </table>
             )}
+            {puedeGestionar && seleccion.size > 0 && <div className="h-16" aria-hidden="true" />}
           </div>
 
           {/* Paginador. hasNext/hasPrev vienen del servidor y son la fuente
@@ -314,6 +362,39 @@ export default function AssetsPage() {
           )}
         </div>
       </div>
+
+      {puedeGestionar && seleccion.size > 0 && (
+        // Abajo y fija, como en Reportes: arriba empujaba la tabla.
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[min(44rem,calc(100%-2rem))] bg-brand text-white rounded-xl shadow-lg px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
+          <span className="font-medium">{textoSeleccion(seleccion.size)}</span>
+          {excedeLimite(seleccion.size) && <span className="text-amber-200">{avisoLimite()}</span>}
+          <div className="ml-auto flex flex-wrap gap-2">
+            <button type="button" onClick={() => setAccionMasiva(ACCION_BAJA)}
+              disabled={excedeLimite(seleccion.size)}
+              className="px-3 py-1.5 rounded-lg bg-white text-red-700 font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
+              Dar de baja
+            </button>
+            <button type="button" onClick={() => setAccionMasiva(ACCION_REACTIVAR)}
+              disabled={excedeLimite(seleccion.size)}
+              className="px-3 py-1.5 rounded-lg bg-white text-brand font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
+              Reactivar
+            </button>
+            <button type="button" onClick={() => setSeleccion(new Set())}
+              className="px-3 py-1.5 rounded-lg border border-white/40 hover:bg-white/10">
+              Quitar selección
+            </button>
+          </div>
+        </div>
+      )}
+
+      {accionMasiva && (
+        <EstadoMasivoModal
+          accion={accionMasiva}
+          assetIds={[...seleccion]}
+          onClose={() => setAccionMasiva(null)}
+          onDone={() => setSeleccion(new Set())}
+        />
+      )}
     </div>
   )
 }
