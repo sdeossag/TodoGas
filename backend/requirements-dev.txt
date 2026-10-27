@@ -20,3 +20,6 @@ coverage>=7.6,<8
 # el Django 5.1 que pide requirements.txt, dejando DRF sin poder importarse
 # (ImportError: cannot import name 'cc_delim_re' from 'django.utils.cache').
 model_bakery>=1.17,<1.20
+
+# fijado: el CI y local usan la misma versión y las mismas reglas
+ruff==0.16.5

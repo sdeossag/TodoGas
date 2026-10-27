@@ -11,7 +11,7 @@ from apps.users import permisos, scope
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 
-from .models import Photo, Signature, UserSignature
+from .models import Photo, Signature
 from .serializers import (
     PhotoCreateSerializer,
     PhotoSerializer,

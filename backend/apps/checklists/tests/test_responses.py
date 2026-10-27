@@ -6,7 +6,6 @@ from rest_framework.test import APIClient
 from apps.assets.models import Asset, Hospital
 from apps.checklists.models import ChecklistField, ChecklistResponse, ChecklistTemplate, ChecklistTemplateVersion
 from apps.users.models import User
-from apps.work_orders.models import WorkOrder
 from apps.maintenance.testing import make_work_order
 
 

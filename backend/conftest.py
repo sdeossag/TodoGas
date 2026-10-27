@@ -1,12 +1,8 @@
-import django
-from django.conf import settings
+import pytest
 
 
 def pytest_configure():
     pass  # DJANGO_SETTINGS_MODULE ya definido en pytest.ini
-
-
-import pytest
 
 
 @pytest.fixture(autouse=True)

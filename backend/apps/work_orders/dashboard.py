@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Avg, Count, ExpressionWrapper, F, Min, Q, Subquery, OuterRef
+from django.db.models import Avg, Count, ExpressionWrapper, F, Q, Subquery, OuterRef
 from django.db.models.fields import DurationField
 from django.utils import timezone
 

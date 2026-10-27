@@ -12,7 +12,7 @@ lleva el clic.
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from dateutil.relativedelta import relativedelta

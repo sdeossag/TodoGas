@@ -16,10 +16,9 @@ from apps.audit.services import LoginOutcome, log_login_attempt
 from . import permisos
 from .emails import send_password_reset_email, send_welcome_email
 from .models import User
-from .permissions import IsAdmin, IsOwnerOrAdmin, TienePermiso
+from .permissions import IsAdmin, TienePermiso
 from .serializers import (
     ChangePasswordSerializer,
-    ResetPasswordRequestSerializer,
     UserCreateSerializer,
     UserSerializer,
     UserUpdateSerializer,

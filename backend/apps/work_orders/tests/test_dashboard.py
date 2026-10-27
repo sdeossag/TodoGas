@@ -3,7 +3,6 @@ from datetime import date, timedelta
 
 import pytest
 from django.core.cache import cache
-from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -136,7 +135,7 @@ def test_compliance_calculates_correctly(hospital, asset, admin):
     today = date.today()
     # 3 OTs preventivas este mes, 2 completadas a tiempo
     for i in range(3):
-        wo = make_wo(
+        make_wo(
             asset, admin,
             task_type=WorkOrder.TaskType.PREVENTIVE,
             scheduled_date=today,
@@ -180,7 +179,7 @@ def test_mttr_calculates_average_correctly(hospital, asset, admin):
     now = timezone.now()
     # Two corrective WOs: 2h and 4h repair time
     for hours in (2, 4):
-        wo = make_wo(
+        make_wo(
             asset, admin,
             task_type=WorkOrder.TaskType.CORRECTIVE,
             wo_status=WorkOrder.Status.COMPLETED,

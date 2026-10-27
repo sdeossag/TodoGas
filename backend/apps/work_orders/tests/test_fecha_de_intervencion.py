@@ -20,7 +20,6 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from rest_framework import status
 
 from apps.evidence.tests.firmas import firmar
 from apps.audit.models import AuditLog
@@ -162,10 +161,11 @@ def test_lo_que_registro_el_tecnico_no_se_pisa(revision_antigua):
     from apps.evidence.models import Photo
 
     e = revision_antigua
-    horas = lambda: (
-        [fr.answered_at for fr in ChecklistFieldResponse.objects.filter(response_id=e["cr"])],
-        [p.taken_at for p in Photo.objects.filter(work_order_id=e["wo_id"])],
-    )
+    def horas():
+        return (
+            [fr.answered_at for fr in ChecklistFieldResponse.objects.filter(response_id=e["cr"])],
+            [p.taken_at for p in Photo.objects.filter(work_order_id=e["wo_id"])],
+        )
     antes = horas()
     inicio, fin = _ventana()
     assert corregir_fecha(e["admin"], e["wo_id"], inicio, fin).status_code == 200

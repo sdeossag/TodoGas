@@ -9,7 +9,6 @@ generacion todavia en curso.
 """
 
 import uuid
-from datetime import date
 from unittest.mock import patch
 
 import pytest

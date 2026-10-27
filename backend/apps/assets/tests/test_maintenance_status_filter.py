@@ -17,7 +17,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.assets.models import Asset, Hospital
-from apps.maintenance.models import MaintenancePlan
 from apps.users.models import User
 from apps.maintenance.testing import make_plan
 

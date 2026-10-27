@@ -2,7 +2,6 @@ import uuid
 
 import pytest
 from django.test import RequestFactory
-from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.assets.models import Asset, Hospital

@@ -1,12 +1,10 @@
 import uuid
-from datetime import date
 
 import pytest
 
 from apps.assets.models import Asset, Hospital
 from apps.notifications.models import NotificationLog
 from apps.users.models import User
-from apps.work_orders.models import WorkOrder
 from apps.maintenance.testing import make_work_order
 
 

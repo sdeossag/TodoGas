@@ -30,7 +30,9 @@ def test_rellena_los_nodos_vacios_sin_pisar_lo_que_ya_hay_y_es_idempotente():
     h, bloque, p1, p3 = _base()
     AssetNode.objects.filter(pk=p3.pk).update(address="Mi calle", latitude="1.0000000", longitude="2.0000000")
     call_command("completar_ubicaciones_demo", marcador="")  # "" siempre esta en el nombre
-    p1.refresh_from_db(); p3.refresh_from_db(); bloque.refresh_from_db()
+    p1.refresh_from_db()
+    p3.refresh_from_db()
+    bloque.refresh_from_db()
     assert p1.address and p1.latitude is not None
     assert p3.address == "Mi calle"
     # El seed viejo copiaba al bloque la direccion y el punto del hospital: eso

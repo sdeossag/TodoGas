@@ -48,12 +48,15 @@ def mundo():
 
     S = Task.Status
     # Este mes: 2 hechas + 1 pendiente (+ 1 cancelada, que no cuenta) => 3, 2, 66.7
-    tarea(pt, 0, S.DONE); tarea(pt, 0, S.DONE, dia=28); tarea(pt, 0, S.PENDING)
+    tarea(pt, 0, S.DONE)
+    tarea(pt, 0, S.DONE, dia=28)
+    tarea(pt, 0, S.PENDING)
     tarea(pt, 0, S.CANCELLED)
     # Hace 1 mes: 1 hecha => 1, 1, 100.0
     tarea(pt, 1, S.DONE)
     # Hace 3 meses: 2 programadas => 2, 0, 0.0
-    tarea(pt, 3, S.SCHEDULED); tarea(pt, 3, S.SCHEDULED)
+    tarea(pt, 3, S.SCHEDULED)
+    tarea(pt, 3, S.SCHEDULED)
     # Hace 11 meses (el mas antiguo de la ventana): 1 hecha
     tarea(pt, 11, S.DONE)
     # Fuera de la ventana (hace 12 meses) y de otro protocolo: no cuentan

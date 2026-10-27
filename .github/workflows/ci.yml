@@ -10,6 +10,34 @@ on:
       - develop
 
 jobs:
+  frontend:
+    name: Frontend (tests y build)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Correr tests
+        run: npm test
+
+      - name: Build de produccion
+        run: npm run build
+
   lint:
     name: Lint (Ruff)
     runs-on: ubuntu-latest
@@ -26,12 +54,14 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Instalar Ruff
-        run: pip install ruff
+        # La misma version que requirements-dev.txt: sin fijarla, cada version
+        # nueva de Ruff trae reglas por defecto distintas y el lint se rompe solo.
+        run: pip install "$(grep -E '^ruff==' backend/requirements-dev.txt)"
 
       - name: Correr Ruff
         run: ruff check backend/
-        # No falla el pipeline por warnings de estilo,
-        # solo por errores criticos (imports no usados, sintaxis, etc.)
+        # Reglas en backend/ruff.toml: solo errores reales (sintaxis, imports
+        # y variables sin usar, nombres indefinidos), no estilo.
 
   test:
     name: Tests (pytest)

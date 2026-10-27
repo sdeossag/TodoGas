@@ -10,7 +10,6 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
-from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.evidence.tests.firmas import firmar

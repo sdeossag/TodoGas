@@ -30,7 +30,7 @@ from apps.checklists.models import (
 from apps.evidence.models import Photo
 from apps.maintenance import services
 from apps.maintenance.models import Task
-from apps.maintenance.testing import make_plan, pending_task
+from apps.maintenance.testing import make_plan
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 

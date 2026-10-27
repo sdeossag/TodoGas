@@ -211,7 +211,7 @@ def test_el_hospital_sin_contrato_vigente_queda_marcado(d):
 
 def test_el_resumen_del_tablero(d):
     por_vencer = contrato(d["a"], fin=20, name="POR VENCER")
-    vencido = contrato(d["b"], fin=-5, name="VENCIDO")
+    contrato(d["b"], fin=-5, name="VENCIDO")
     renovado = contrato(d["b"], inicio=-400, fin=-40, name="VIEJO")
     contrato(d["b"], inicio=-39, fin=-10, name="YA RENOVADO")
     contrato(d["b"], inicio=-9, fin=-6, name="PUENTE")  # renueva al anterior

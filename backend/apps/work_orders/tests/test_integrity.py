@@ -13,7 +13,6 @@ Lo que se verifica aqui, en orden:
 """
 
 import uuid
-from datetime import date
 
 import pytest
 from django.db import connection, transaction

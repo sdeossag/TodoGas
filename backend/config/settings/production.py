@@ -1,6 +1,7 @@
 from decouple import config
 from django.core.exceptions import ImproperlyConfigured
 
+from config import broker as _broker
 from config.cors import allowed_origins
 
 from .base import *  # noqa: F401,F403
@@ -25,8 +26,6 @@ BACKEND_URL = config("BACKEND_URL")
 
 # Broker de Celery: aquí sí se exige lo que cada uno necesita (REDIS_URL con
 # redis; la URL de la cola y la región con sqs). Desarrollo no lo exige.
-from config import broker as _broker
-
 _broker.validar(CELERY_BROKER, REDIS_URL, CELERY_SQS_QUEUE_URL, AWS_REGION)
 
 # La evidencia siempre a S3. El disco del contenedor se pierde en cada

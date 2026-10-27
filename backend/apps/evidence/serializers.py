@@ -157,7 +157,6 @@ class PhotoCreateSerializer(serializers.Serializer):
         ext = name.rsplit(".", 1)[-1].lower() if "." in name else "jpg"
         s3_key = f"evidence/photos/{work_order.id}/{uuid.uuid4().hex}.{ext}"
         saved_key = default_storage.save(s3_key, ContentFile(content))
-        file_url = default_storage.url(saved_key)
 
         return Photo.objects.create(
             work_order=work_order,

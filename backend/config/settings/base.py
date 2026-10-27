@@ -3,6 +3,8 @@ from datetime import timedelta
 
 from decouple import config
 
+from config import broker as _broker
+
 BASE_DIR = __import__("pathlib").Path(__file__).resolve().parents[2]
 
 # Fuerza mensajes de libpq en ASCII para evitar UnicodeDecodeError de psycopg2
@@ -128,8 +130,6 @@ AUTH_PASSWORD_VALIDATORS = [
 # (default) o "sqs". REDIS_URL ya no es obligatoria aquí: solo la pide
 # production.py cuando el broker es redis. Si existe, el caché usa Redis; si
 # no, la tabla django_cache (la crea `createcachetable` al desplegar).
-from config import broker as _broker
-
 CELERY_BROKER = _broker.elegir(config("CELERY_BROKER", default="redis"))
 REDIS_URL = config("REDIS_URL", default="")
 CELERY_SQS_QUEUE_URL = config("CELERY_SQS_QUEUE_URL", default="")

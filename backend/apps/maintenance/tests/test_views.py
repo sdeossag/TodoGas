@@ -1,16 +1,13 @@
-from dateutil.relativedelta import relativedelta
 from datetime import date, timedelta
 
 import pytest
-from django.urls import reverse
 from model_bakery import baker
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.assets.models import Asset, Hospital
-from apps.maintenance.models import MaintenancePlan, MaintenancePlanExecution
+from apps.maintenance.models import MaintenancePlan
 from apps.users.models import User
-from apps.work_orders.models import WorkOrder
 from apps.maintenance.models import Task
 from apps.maintenance.testing import make_plan
 

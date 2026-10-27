@@ -1,0 +1,15 @@
+target-version = "py312"
+line-length = 120
+
+extend-exclude = ["**/migrations/**"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# Tests: los fixtures de pytest se importan y se usan como argumento (F811).
+"**/tests/**" = ["F811"]
+"**/test_*.py" = ["F811"]
+"conftest.py" = ["F811"]
+# Settings: `from .base import *` (F403, F405).
+"config/settings/*.py" = ["F403", "F405"]

@@ -208,7 +208,7 @@ def _configuracion_del_acta(ajustes):
 
     return {
         "options": efectivas(ajustes.options),
-        "catalog": [{"key": k, "section": s, "label": l} for k, s, l in CATALOGO],
+        "catalog": [{"key": k, "section": s, "label": lbl} for k, s, lbl in CATALOGO],
         "always_included": SIEMPRE_INCLUIDO,
         "updated_at": ajustes.updated_at,
         "updated_by_name": (

@@ -1,4 +1,3 @@
-import uuid
 """La ficha de un activo debe exponer el mismo estado de mantenimiento que el listado.
 
 Regresion: AssetSerializer (retrieve) no incluia last_maintenance_date,
@@ -7,6 +6,7 @@ que llegaban undefined y la ficha pintaba "Sin plan"/"Nunca" para cualquier
 activo, contradiciendo lo que mostraba /activos para ese mismo activo.
 """
 
+import uuid
 from datetime import date, timedelta
 
 import pytest
@@ -15,7 +15,6 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.assets.models import Asset, Hospital
-from apps.maintenance.models import MaintenancePlan
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 from apps.maintenance.testing import make_plan, make_work_order
@@ -70,7 +69,7 @@ def test_detail_exposes_maintenance_fields(asset, admin_user):
 
 def test_detail_reports_plan_due_date(asset, admin_user):
     due = date.today() + timedelta(days=31)
-    plan = make_plan(
+    make_plan(
         f"Plan {uuid.uuid4()}",
         next_due_date=due,
         assets=[asset],
@@ -83,7 +82,7 @@ def test_detail_reports_plan_due_date(asset, admin_user):
 
 def test_detail_matches_list_for_same_asset(asset, admin_user):
     """El bug se veia justo aqui: listado con fecha, ficha diciendo "Sin plan"."""
-    plan = make_plan(
+    make_plan(
         f"Plan {uuid.uuid4()}",
         next_due_date=date.today() + timedelta(days=200),
         assets=[asset],
@@ -108,7 +107,7 @@ def test_detail_reports_last_completed_work_order(asset, admin_user):
     from django.utils import timezone
 
     completed = timezone.now()
-    wo = make_work_order(
+    make_work_order(
         asset, admin_user,
         task_type=WorkOrder.TaskType.PREVENTIVE,
         title='OT de cierre',

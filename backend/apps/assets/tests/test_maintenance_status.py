@@ -7,7 +7,6 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.assets.models import Asset, Hospital
-from apps.maintenance.models import MaintenancePlan
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 from apps.maintenance.testing import make_plan, make_work_order
@@ -46,7 +45,7 @@ def test_maintenance_status_no_plan(asset, admin_user):
 
 def test_maintenance_status_on_time(asset, admin_user):
     # Mas alla de 30 dias (la frontera de "por vencer" que comparte con el tablero).
-    p = make_plan(
+    make_plan(
         f"Plan {uuid.uuid4()}",
         next_due_date=date.today() + timedelta(days=31),
         assets=[asset],
@@ -59,7 +58,7 @@ def test_maintenance_status_on_time(asset, admin_user):
 
 
 def test_maintenance_status_due_soon(asset, admin_user):
-    p = make_plan(
+    make_plan(
         f"Plan {uuid.uuid4()}",
         next_due_date=date.today() + timedelta(days=5),
         assets=[asset],
@@ -72,7 +71,7 @@ def test_maintenance_status_due_soon(asset, admin_user):
 
 
 def test_maintenance_status_overdue(asset, admin_user):
-    p = make_plan(
+    make_plan(
         f"Plan {uuid.uuid4()}",
         next_due_date=date.today() - timedelta(days=1),
         assets=[asset],
@@ -86,7 +85,7 @@ def test_maintenance_status_overdue(asset, admin_user):
 
 def test_last_maintenance_date_from_completed_wo(asset, admin_user):
     from django.utils import timezone
-    wo = make_work_order(
+    make_work_order(
         asset, admin_user,
         task_type=WorkOrder.TaskType.PREVENTIVE,
         title='Test OT',

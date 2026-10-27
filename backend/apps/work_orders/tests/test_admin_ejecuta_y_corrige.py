@@ -22,7 +22,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.evidence.tests.firmas import firmar
-from apps.assets.models import Asset, AssetNode, Hospital
+from apps.assets.models import Asset, Hospital
 from apps.audit.models import AuditLog
 from apps.checklists.models import (
     ChecklistField,
