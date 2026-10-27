@@ -100,12 +100,20 @@ export default function AssetsPage() {
           <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Activos</h1>
           <p className="text-sm text-gray-500 mt-0.5">Equipos médicos registrados</p>
         </div>
-        {puedeGestionar && (
-          <button onClick={() => navigate('/activos/nuevo')}
-            className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors">
-            + Nuevo activo
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {user?.role === 'ADMIN' && (
+            <button onClick={() => navigate('/activos/importar-fracttal')}
+              className="px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+              Importar desde Fracttal
+            </button>
+          )}
+          {puedeGestionar && (
+            <button onClick={() => navigate('/activos/nuevo')}
+              className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-light transition-colors">
+              + Nuevo activo
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Dos columnas en escritorio, apiladas en movil */}

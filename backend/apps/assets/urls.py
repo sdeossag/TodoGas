@@ -8,6 +8,7 @@ from .views import (
     ClientPortalView,
     HospitalViewSet,
 )
+from .views_importacion import ImportacionFracttalPreviewView, ImportacionFracttalView
 from .views_contracts import ContractViewSet
 from .views_meters import MeterReadingViewSet, MeterUnitViewSet, MeterViewSet
 
@@ -21,6 +22,10 @@ router.register(r"meters", MeterViewSet, basename="meters")
 router.register(r"meter-readings", MeterReadingViewSet, basename="meter-readings")
 router.register(r"asset-custom-fields", AssetCustomFieldViewSet, basename="asset-custom-fields")
 
-urlpatterns = router.urls + [
+urlpatterns = [
+    path("assets/import/fracttal/preview/", ImportacionFracttalPreviewView.as_view(),
+         name="import-fracttal-preview"),
+    path("assets/import/fracttal/", ImportacionFracttalView.as_view(), name="import-fracttal"),
+] + router.urls + [
     path("client-portal/summary/", ClientPortalView.as_view(), name="client-portal-summary"),
 ]

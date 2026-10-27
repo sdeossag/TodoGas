@@ -83,6 +83,9 @@ class AssetNode(models.Model):
     latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    # Id del registro en Fracttal (final de la "Url Código QR" de la exportacion):
+    # reimportar actualiza este registro en vez de duplicarlo.
+    fracttal_id = models.CharField(max_length=50, blank=True, default="", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -93,7 +96,12 @@ class AssetNode(models.Model):
             models.UniqueConstraint(
                 fields=["hospital", "parent", "name"],
                 name="uq_assetnode_hospital_parent_name"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["fracttal_id"],
+                condition=~models.Q(fracttal_id=""),
+                name="uq_assetnode_fracttal_id",
+            ),
         ]
 
     def save(self, *args, **kwargs):
@@ -222,6 +230,9 @@ class Asset(models.Model):
         help_text="Si esta lleno, este activo es la ubicacion misma (para "
                   "asignarle protocolos), no un equipo.",
     )
+    # Id del registro en Fracttal (final de la "Url Código QR" de la exportacion):
+    # reimportar actualiza este registro en vez de duplicarlo.
+    fracttal_id = models.CharField(max_length=50, blank=True, default="", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -234,6 +245,13 @@ class Asset(models.Model):
     class Meta:
         db_table = "assets_asset"
         ordering = ["hospital", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fracttal_id"],
+                condition=~models.Q(fracttal_id=""),
+                name="uq_asset_fracttal_id",
+            ),
+        ]
         indexes = [
             models.Index(fields=["hospital", "status"], name="idx_asset_hospital_status"),
             models.Index(fields=["serial_number"], name="idx_asset_serial"),

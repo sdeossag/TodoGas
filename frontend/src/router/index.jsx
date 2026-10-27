@@ -11,6 +11,7 @@ import LocationsPage from '../pages/assets/LocationsPage'
 import AssetsPage from '../pages/assets/AssetsPage'
 import AssetDetailPage from '../pages/assets/AssetDetailPage'
 import AssetFormPage from '../pages/assets/AssetFormPage'
+import ImportFracttalPage from '../pages/assets/ImportFracttalPage'
 import WorkOrdersPage from '../pages/work-orders/WorkOrdersPage'
 import CreateWorkOrderPage from '../pages/work-orders/CreateWorkOrderPage'
 import WorkOrderDetailPage from '../pages/work-orders/WorkOrderDetailPage'
@@ -128,6 +129,7 @@ export const router = createBrowserRouter(
             {
               element: <ProtectedRoute allowedRoles={['ADMIN']} />,
               children: [
+                { path: '/activos/importar-fracttal', element: <ImportFracttalPage /> },
                 { path: '/usuarios', element: <UsersPage /> },
                 { path: '/auditoria', element: <AuditLogPage /> },
                 { path: '/formato-acta', element: <ReportSettingsPage /> },

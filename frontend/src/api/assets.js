@@ -192,3 +192,40 @@ export function useDecommissionAsset(id) {
     },
   })
 }
+
+// ── Importación desde Fracttal ─────────────────────────────────────────────
+
+// Con FormData el navegador pone el boundary; el JSON por defecto lo rompería.
+const SIN_JSON = { headers: { 'Content-Type': undefined } }
+
+function fracttalForm({ ubicaciones, equipos }) {
+  const fd = new FormData()
+  if (ubicaciones) fd.append('ubicaciones', ubicaciones)
+  if (equipos) fd.append('equipos', equipos)
+  return fd
+}
+
+// Revisa los archivos sin guardar nada.
+export function usePreviewFracttalImport() {
+  return useMutation({
+    mutationFn: (archivos) =>
+      client.post('/api/assets/import/fracttal/preview/', fracttalForm(archivos), SIN_JSON).then((r) => r.data),
+  })
+}
+
+// Importa de verdad. Con errores el servidor responde 400 con el resumen:
+// la pantalla lo lee en error.response.data.
+export function useImportFracttal() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (archivos) =>
+      client.post('/api/assets/import/fracttal/', fracttalForm(archivos), SIN_JSON).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['assets'] })
+      qc.invalidateQueries({ queryKey: ['assets-page'] })
+      qc.invalidateQueries({ queryKey: ['asset-tree'] })
+      qc.invalidateQueries({ queryKey: ['asset-nodes'] })
+      qc.invalidateQueries({ queryKey: ['hospitals'] })
+    },
+  })
+}

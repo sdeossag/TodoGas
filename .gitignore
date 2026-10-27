@@ -58,3 +58,6 @@ audios-neuvareu/
 # Grabaciones sueltas en la raiz y capturas de control de la presentacion
 Nueva grabaci*
 docs/presentacion/qc/
+
+# Exportaciones de Fracttal con datos reales del cliente
+fracttal-export/
