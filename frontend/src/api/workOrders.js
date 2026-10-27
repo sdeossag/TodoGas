@@ -128,8 +128,16 @@ export function useTransitionWorkOrder(id) {
     mutationFn: ({ new_status, comment = '' }) =>
       client.post(`/api/work-orders/${id}/transition/`, { new_status, comment }).then((r) => r.data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['work-orders', id] })
-      qc.invalidateQueries({ queryKey: ['work-orders'] })
+      // El detalle lo vuelve a pedir quien llamo (onSuccess del boton): aqui
+      // solo se marca vencido. Antes se invalidaba dos veces y ademas la
+      // pagina hacia refetch: tres GET identicos del detalle tras cada
+      // transicion, que con la galeria de fotos cargando tardaban segundos.
+      qc.invalidateQueries({ queryKey: ['work-orders', id], refetchType: 'none' })
+      // Las listas visibles si se refrescan (su clave lleva los filtros, no un id).
+      qc.invalidateQueries({
+        queryKey: ['work-orders'],
+        predicate: (q) => typeof q.queryKey[1] !== 'string',
+      })
     },
   })
 }

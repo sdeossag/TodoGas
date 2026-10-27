@@ -22,6 +22,7 @@ import {
   getPendingChecklistCompletions,
   getUnsyncedFieldResponses,
   getPendingFindings,
+  getPhotoFile,
   getUnsyncedPhotos,
   markFindingSynced,
   getUnsyncedSignatures,
@@ -339,13 +340,16 @@ export async function syncPhotos(ctx, onItemDone) {
         alNoSubir: () => ctx.sinSubir.add(row.work_order_id),
       },
       async () => {
-        if (!row.file_path?.startsWith('data:')) {
+        // La imagen se lee de a una: la lista de pendientes no la trae (con 95
+        // fotos en cola eran ~100 MB en memoria).
+        const archivo = await getPhotoFile(row.offline_uuid)
+        if (!archivo?.startsWith('data:')) {
           // La camara nativa guarda base64 como data URL, igual que el flujo web.
           // Cualquier otra cosa es una fila corrupta y no se puede subir.
-          throw new Error(`Ruta de foto no soportada: ${row.file_path ?? 'vacia'}`)
+          throw new Error(`Ruta de foto no soportada: ${archivo ? archivo.slice(0, 20) : 'vacia'}`)
         }
 
-        const file = await dataUrlToFile(row.file_path, `ot-${row.work_order_id}`)
+        const file = await dataUrlToFile(archivo, `ot-${row.work_order_id}`)
         const form = new FormData()
         form.append('work_order', row.work_order_id)
         if (row.task_id) form.append('task', row.task_id)

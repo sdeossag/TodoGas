@@ -50,6 +50,12 @@ export default function PhotoGallery({ workOrderId, editable = false }) {
             <img
               src={mediaUrl(photo.file_url)}
               alt={photo.caption || 'Foto de evidencia'}
+              // Con decenas de fotos (INVIMA pide hasta ~95) no se bajan todas
+              // de golpe: eran 95 descargas de hasta 10 MB que ocupaban las
+              // conexiones del navegador y dejaban en cola la peticion de
+              // "Enviar a revision". Solo se piden las que se van a ver.
+              loading="lazy"
+              decoding="async"
               className={`w-full aspect-video object-cover rounded-lg border border-gray-200 hover:opacity-90 transition-opacity cursor-pointer ${photo.hidden ? 'opacity-40 grayscale' : ''}`}
             />
           </a>

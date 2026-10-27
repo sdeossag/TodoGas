@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { useWorkOrderPhotos, useWorkOrderSignatures } from '../api/evidence'
-import { getUnsyncedPhotos, getUnsyncedSignatures } from '../db/repositories'
+import { countUnsyncedPhotos, getUnsyncedSignatures } from '../db/repositories'
 import useNetworkStore from '../store/networkStore'
 
 /**
@@ -25,7 +25,7 @@ export default function useReviewRequirements(workOrder) {
   const { data: locales = { fotos: 0, firmas: 0 } } = useQuery({
     queryKey: ['local-evidence', id, pendingSyncCount],
     queryFn: async () => ({
-      fotos: (await getUnsyncedPhotos(id)).length,
+      fotos: await countUnsyncedPhotos(id),
       firmas: (await getUnsyncedSignatures(id)).length,
     }),
     enabled: !!id && enCurso && !isOnline,
@@ -33,7 +33,7 @@ export default function useReviewRequirements(workOrder) {
     networkMode: 'always',
   })
 
-  const totalFotos = isOnline ? fotos.length : (workOrder?.photos_count ?? 0) + locales.fotos
+  const totalFotos = isOnline ? fotos.filter((f) => !f.hidden).length : (workOrder?.photos_count ?? 0) + locales.fotos
   const totalFirmas = isOnline ? firmas.length : (workOrder?.signatures_count ?? 0) + locales.firmas
 
   const conChecklist = (workOrder?.tasks ?? []).filter(

@@ -7,10 +7,14 @@
  */
 
 import { query, ready, run } from './database'
+import { contarPendientes, leerArchivo, listarPendientes, marcarSubida } from './photoQueue'
 import { PRIORITY_RANK_SQL } from './schema'
 import { progress, slotKey } from '../utils/checklistSlots'
 
 const nowISO = () => new Date().toISOString()
+
+// El contrato del driver (query/run) que usa photoQueue.js, sobre la base abierta.
+const driver = () => ({ query, run })
 
 /** Identificador local. crypto.randomUUID no existe en contextos no seguros. */
 export function newId() {
@@ -509,22 +513,31 @@ export async function savePhotoOffline(photo) {
   return offlineUuid
 }
 
+/**
+ * Fotos sin subir, SIN la imagen (ver photoQueue.js): con decenas en cola,
+ * cargarlas enteras agotaba la memoria del telefono. La imagen se pide de a
+ * una con getPhotoFile().
+ */
 export async function getUnsyncedPhotos(workOrderId = null) {
   if (!(await ready())) return []
-  if (workOrderId) {
-    return query('SELECT * FROM offline_photos WHERE work_order_id = ? AND synced = 0', [
-      workOrderId,
-    ])
-  }
-  return query('SELECT * FROM offline_photos WHERE synced = 0')
+  return listarPendientes(driver(), workOrderId)
+}
+
+/** Cuantas fotos de la OT siguen sin subir; no lee ninguna imagen. */
+export async function countUnsyncedPhotos(workOrderId) {
+  if (!(await ready())) return 0
+  return contarPendientes(driver(), workOrderId)
+}
+
+/** La imagen (data URL) de una foto en cola. */
+export async function getPhotoFile(offlineUuid) {
+  if (!(await ready())) return null
+  return leerArchivo(driver(), offlineUuid)
 }
 
 export async function markPhotoSynced(offlineUuid, serverId) {
   if (!(await ready())) return
-  await run('UPDATE offline_photos SET synced = 1, id = ? WHERE offline_uuid = ?', [
-    serverId,
-    offlineUuid,
-  ])
+  await marcarSubida(driver(), offlineUuid, serverId)
 }
 
 // ── Firmas ───────────────────────────────────────────────────────────────────
@@ -568,6 +581,28 @@ export async function markSignatureSynced(localId, serverId) {
     serverId ?? localId,
     localId,
   ])
+}
+
+// ── Firma guardada del usuario ───────────────────────────────────────────────
+// Copia local de su firma (data URL) para usarla sin red. Una fila por usuario.
+
+export async function saveMySignatureLocal(userId, dataUrl) {
+  if (!userId || !dataUrl || !(await ready())) return
+  await run(
+    'INSERT OR REPLACE INTO saved_signature (user_id, image_base64, updated_at) VALUES (?,?,?)',
+    [userId, dataUrl, nowISO()]
+  )
+}
+
+export async function getMySignatureLocal(userId) {
+  if (!userId || !(await ready())) return null
+  const [row] = await query('SELECT image_base64 FROM saved_signature WHERE user_id = ?', [userId])
+  return row?.image_base64 ?? null
+}
+
+export async function clearMySignatureLocal(userId) {
+  if (!userId || !(await ready())) return
+  await run('DELETE FROM saved_signature WHERE user_id = ?', [userId])
 }
 
 // ── Estado de sincronizacion ─────────────────────────────────────────────────
