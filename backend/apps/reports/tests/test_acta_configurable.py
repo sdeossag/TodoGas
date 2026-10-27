@@ -100,7 +100,7 @@ def test_por_defecto_todo_esta_encendido():
 
 
 def test_apagar_una_seccion_no_deja_hueco_en_la_numeracion():
-    op = efectivas({"resumen_activos": False, "fotos_visita": False})
+    op = efectivas({"fotos_visita": False})
     assert numeracion(op) == {"visita": 1, "activos": 2, "hallazgos": 3, "materiales": 4, "firmas": 5}
 
 
@@ -115,7 +115,7 @@ def test_el_administrador_ve_el_catalogo_y_lo_siempre_incluido(admin):
     r = cliente(admin).get(URL)
     assert r.status_code == 200
     assert {c["key"] for c in r.data["catalog"]} == CLAVES
-    assert "Respuestas del checklist" in r.data["always_included"]
+    assert "Resultados de la revisión (checklist)" in r.data["always_included"]
     assert all(r.data["options"].values())
 
 

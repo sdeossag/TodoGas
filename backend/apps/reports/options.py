@@ -13,28 +13,27 @@ integridad, que es con lo que un auditor verifica que el acta no se altero.
 # (clave, seccion, rotulo). El orden es el de la pantalla de configuracion.
 CATALOGO = [
     ("visita_ubicacion", "Datos de la visita", "Ubicación de la visita"),
-    ("visita_activos", "Datos de la visita", "Cantidad de activos intervenidos"),
-    ("visita_ejecutor", "Datos de la visita", "Ejecutado por"),
+    ("visita_activos", "Datos de la visita", "Cuántos activos se intervinieron"),
+    ("visita_ejecutor", "Datos de la visita", "Quién hizo el trabajo"),
     ("visita_fecha_programada", "Datos de la visita", "Fecha programada"),
-    ("visita_trabajo_en_campo", "Datos de la visita", "Trabajo en campo (hora de inicio y fin)"),
-    ("visita_duracion", "Datos de la visita", "Duración del trabajo"),
-    ("visita_descripcion", "Datos de la visita", "Descripción de la intervención"),
-    ("visita_notas", "Datos de la visita", "Notas de la OT"),
-    ("resumen_activos", "Activos", "Tabla resumen de activos intervenidos"),
-    ("activo_ubicacion", "Activos", "Ubicación del activo"),
-    ("activo_ubicacion_equipo", "Activos", "Ubicación del equipo"),
-    ("activo_tipo", "Activos", "Tipo de activo"),
+    ("visita_trabajo_en_campo", "Datos de la visita", "Fecha y hora del trabajo (inicio y fin)"),
+    ("visita_duracion", "Datos de la visita", "Tiempo que tomó el trabajo"),
+    ("visita_descripcion", "Datos de la visita", "Descripción del trabajo"),
+    ("visita_notas", "Datos de la visita", "Notas de la orden"),
+    ("activo_ubicacion", "Activos", "Ubicación (con dirección y mapa)"),
+    ("activo_ubicacion_equipo", "Activos", "Dónde está el equipo dentro de la ubicación"),
+    ("activo_tipo", "Activos", "Tipo de equipo"),
     ("activo_fabricante", "Activos", "Fabricante"),
     ("activo_modelo", "Activos", "Modelo"),
     ("activo_serie", "Activos", "Número de serie"),
-    ("activo_checklist", "Checklist", "Nombre y versión del checklist"),
-    ("checklist_observaciones", "Checklist", "Observaciones de cada respuesta"),
-    ("checklist_respondido", "Checklist", "Hora y técnico que respondió"),
-    ("checklist_mapa", "Checklist", "Mapa de la localización GPS"),
-    ("hallazgos", "Hallazgos", "Hallazgos encontrados y reportados"),
+    ("activo_checklist", "Checklist", "Nombre de la lista de revisión"),
+    ("checklist_observaciones", "Checklist", "Observaciones de cada resultado"),
+    ("checklist_respondido", "Checklist", "Cuándo y quién hizo la revisión"),
+    ("checklist_mapa", "Checklist", "Mapa de la ubicación tomada con el celular"),
+    ("hallazgos", "Hallazgos", "Problemas encontrados y reportados"),
     ("fotos_activo", "Fotos", "Fotos de cada activo"),
     ("fotos_visita", "Fotos", "Fotos generales de la visita"),
-    ("fotos_gps", "Fotos", "Coordenadas GPS de las fotos"),
+    ("fotos_gps", "Fotos", "Coordenadas de las fotos"),
     ("materiales", "Materiales", "Materiales utilizados"),
     ("firma_realizado", "Firmas", "Realizado por (firma del técnico)"),
     ("firma_validado", "Firmas", "Validado por (aprobación del supervisor)"),
@@ -44,10 +43,10 @@ CATALOGO = [
 CLAVES = {clave for clave, _, _ in CATALOGO}
 
 SIEMPRE_INCLUIDO = [
-    "Número de OT, tipo y fecha de emisión",
+    "Número de orden, tipo y fecha de emisión",
     "Hospital",
-    "Respuestas del checklist",
-    "Hash de integridad en el pie de página",
+    "Resultados de la revisión (checklist)",
+    "Código de verificación en el pie de página",
 ]
 
 
@@ -64,7 +63,6 @@ def numeracion(op):
     """
     secciones = [
         ("visita", True),
-        ("resumen", op["resumen_activos"]),
         ("activos", True),
         ("hallazgos", op["hallazgos"]),
         ("fotos_visita", op["fotos_visita"]),

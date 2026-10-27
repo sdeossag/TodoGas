@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db.models import Count, Q
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.template.defaultfilters import date as formato_fecha
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -40,12 +41,12 @@ def _resolve_url(file_key):
     return default_storage.url(file_key)
 
 
-def _valor(fr, corto=False):
+def _valor(fr, corto=False, vacio="—"):
     """Lo que el acta imprime de una respuesta. Una foto guarda foto:<id> o
     sin-conexion:<uuid>: la imagen va en las fotos del activo. En una tabla de
     tomas la celda es angosta: basta con "Foto"."""
     if fr is None or not fr.value:
-        return "—"
+        return vacio
     if fr.field.field_type == "PHOTO":
         return "Foto" if corto else "Foto adjunta (ver fotos del activo)"
     if fr.field.field_type == "BOOLEAN":
@@ -145,7 +146,7 @@ def _sections(respuesta, opciones=None):
     for grupo, respuestas in por_grupo.items():
         if grupo not in repetibles:
             secciones.append({"name": grupo, "repeated": False, "rows": [
-                {"label": fr.field.label, "value": _valor(fr), "notes": fr.notes, "map": _mapa(fr, opciones)}
+                {"label": fr.field.label, "value": _valor(fr, vacio="Sin respuesta"), "notes": _texto(fr.notes), "map": _mapa(fr, opciones)}
                 for fr in respuestas
             ]})
             continue
@@ -158,8 +159,8 @@ def _sections(respuesta, opciones=None):
         for n in range(1, respuesta.count_for(grupo) + 1):
             celdas = [_valor(indice.get((f.id, n)), corto=True) for f in campos]
             notas = "; ".join(
-                indice[(f.id, n)].notes for f in campos
-                if (f.id, n) in indice and indice[(f.id, n)].notes
+                _texto(indice[(f.id, n)].notes) for f in campos
+                if (f.id, n) in indice and _texto(indice[(f.id, n)].notes)
             )
             filas.append({"n": n, "cells": celdas, "notes": notas})
         secciones.append({
@@ -261,6 +262,111 @@ def _validacion(work_order):
     }
 
 
+def _texto(valor):
+    """El valor como texto limpio: None, vacio o solo espacios no cuentan como dato."""
+    if valor is None:
+        return ""
+    return str(valor).strip()
+
+
+def _fecha(valor, formato="d/m/Y"):
+    if hasattr(valor, "hour"):
+        valor = timezone.localtime(valor)
+    return formato_fecha(valor, formato)
+
+
+def _rango(inicio, fin):
+    """'26/10/2026 10:00 – 11:30', o con las dos fechas si cruza la medianoche."""
+    if _fecha(inicio) == _fecha(fin):
+        return f"{_fecha(inicio, 'd/m/Y H:i')} – {_fecha(fin, 'H:i')}"
+    return f"{_fecha(inicio, 'd/m/Y H:i')} – {_fecha(fin, 'd/m/Y H:i')}"
+
+
+def _dato(etiqueta, valor, extra="", mapa=""):
+    """Un dato del acta, o None si no hay valor: lo vacio no se imprime."""
+    valor = _texto(valor)
+    return {"label": etiqueta, "value": valor, "extra": _texto(extra), "map": mapa} if valor else None
+
+
+def _de_a_dos(datos):
+    """Los datos que si existen, en filas de dos celdas (la segunda puede quedar sola)."""
+    datos = [d for d in datos if d]
+    return [datos[i:i + 2] for i in range(0, len(datos), 2)]
+
+
+def _ficha_activo(tarea, respuesta, sub, op):
+    """
+    El cuadro de un activo: su ubicacion y su ficha tecnica juntas, al inicio
+    de su bloque. Un activo que es una ubicacion entera (Asset.represents_node)
+    se lee como "Ubicacion intervenida", sin codigo interno ni tipo.
+
+    Es presentacion: no entra en el hash de integridad.
+    """
+    a = tarea.asset
+    es_ubicacion = a.is_location
+    ruta = _texto(a.node.path) if a.node_id else ""
+
+    ubicacion = None
+    direccion, mapa = _texto((sub or {}).get("address")), (sub or {}).get("map", "")
+    # Una ubicacion cuyo nombre ya es toda su ruta (y sin direccion ni mapa) no
+    # repite lo que dice el titulo del bloque.
+    if op["activo_ubicacion"] and ruta and not (es_ubicacion and ruta == _texto(a.name) and not (direccion or mapa)):
+        ubicacion = _dato("Ubicación", ruta, extra=direccion, mapa=mapa)
+
+    equipo = [] if es_ubicacion else [
+        _dato("Código", a.code),
+        _dato("Tipo de equipo", a.asset_type) if op["activo_tipo"] else None,
+        _dato("Fabricante", a.manufacturer) if op["activo_fabricante"] else None,
+        _dato("Modelo", a.model) if op["activo_modelo"] else None,
+        _dato("Número de serie", a.serial_number) if op["activo_serie"] else None,
+        # La ubicacion del equipo sale solo si dice algo que la ruta no dice.
+        _dato("Dónde está el equipo", a.equipment_location)
+        if op["activo_ubicacion_equipo"] and _texto(a.equipment_location) != ruta else None,
+    ]
+    plan = tarea.plan_task.plan.name if tarea.plan_task_id else ""
+    lista = (
+        tarea.checklist_version.template.name
+        if op["activo_checklist"] and respuesta is not None and tarea.checklist_version_id else ""
+    )
+    trabajo = [
+        _dato("Tarea realizada", tarea.title),
+        _dato("Protocolo", plan if _texto(plan) != _texto(tarea.title) else ""),
+        _dato("Lista de revisión", lista),
+    ]
+    return {"location": ubicacion, "rows": _de_a_dos(equipo + trabajo)}
+
+
+def _revision(respuesta):
+    """Cuando y quien respondio el checklist, segun sus respuestas (no started_at, que es la creacion)."""
+    if respuesta is None:
+        return None
+    trabajo = _trabajo_en_campo([respuesta], [], [])
+    if trabajo is None:
+        return None
+    por = _nombre(respuesta.completed_by) if respuesta.completed_by_id else ""
+    return {"when": _rango(trabajo["start"], trabajo["end"]), "by": por}
+
+
+def _datos_de_la_visita(work_order, bloques, ejecutores, trabajo, op):
+    """Los datos de la visita en filas de dos celdas; lo apagado o vacio no ocupa lugar."""
+    todas_ubicaciones = bool(bloques) and all(b["asset"].is_location for b in bloques)
+    return _de_a_dos([
+        _dato("Hospital", work_order.hospital.name),
+        _dato("Ubicación de la visita", work_order.location.path)
+        if op["visita_ubicacion"] and work_order.location_id else None,
+        _dato("Ubicaciones intervenidas" if todas_ubicaciones else "Activos intervenidos", len(bloques))
+        if op["visita_activos"] and bloques else None,
+        # Quien hizo el trabajo y cuando, segun lo registrado en campo; no el
+        # asignado ni la hora de aprobar.
+        _dato("Trabajo realizado por", ", ".join(ejecutores)) if op["visita_ejecutor"] else None,
+        _dato("Fecha programada", _fecha(work_order.scheduled_date))
+        if op["visita_fecha_programada"] and work_order.scheduled_date else None,
+        _dato("Fecha y hora del trabajo", _rango(trabajo["start"], trabajo["end"]))
+        if op["visita_trabajo_en_campo"] and trabajo else None,
+        _dato("Tiempo de trabajo", trabajo["duration"]) if op["visita_duracion"] and trabajo else None,
+    ])
+
+
 def _render(work_order, opciones):
     """
     El acta en PDF con los interruptores `opciones` (apps.reports.options).
@@ -303,21 +409,24 @@ def _render(work_order, opciones):
             fotos_visita.append(p)
     resolvedores, mapas = {}, {}
     secciones_por_tarea = {t.id: _sections(respuestas.get(t.id), opciones) for t in tareas}
-    bloques = [
-        {
+    bloques = []
+    for t in tareas:
+        sublocation = _ubicacion_del_activo(t, secciones_por_tarea[t.id], resolvedores, mapas, opciones)
+        bloques.append({
             "task": t,
             "asset": t.asset,
             "checklist_response": respuestas.get(t.id),
             "sections": secciones_por_tarea[t.id],
-            "sublocation": _ubicacion_del_activo(t, secciones_por_tarea[t.id], resolvedores, mapas, opciones),
+            "sublocation": sublocation,
+            "card": _ficha_activo(t, respuestas.get(t.id), sublocation, opciones),
+            "title": _texto(t.asset.name) or _texto(t.asset.code),
+            "review": _revision(respuestas.get(t.id)),
             "photos": fotos_por_tarea.get(t.id, []),
             "photo_groups": _grupos_de_fotos(fotos_por_tarea.get(t.id, []), 6),
             "field_work": _trabajo_en_campo(
                 [respuestas[t.id]] if t.id in respuestas else [], [], []
             ),
-        }
-        for t in tareas
-    ]
+        })
 
     signatures = list(signatures_qs)
     for s in signatures:
@@ -329,13 +438,17 @@ def _render(work_order, opciones):
     report_hash = compute_wo_content_hash(work_order)
     generated_at = timezone.now()
 
+    trabajo = _con_correccion(
+        work_order, _trabajo_en_campo(list(respuestas.values()), photos, signatures)
+    )
+    ejecutores = _ejecutores(work_order, list(respuestas.values()))
+
     context = {
         "work_order": work_order,
         "technician": technician,
-        "field_work": _con_correccion(
-            work_order, _trabajo_en_campo(list(respuestas.values()), photos, signatures)
-        ),
-        "executors": _ejecutores(work_order, list(respuestas.values())),
+        "field_work": trabajo,
+        "executors": ejecutores,
+        "visit_rows": _datos_de_la_visita(work_order, bloques, ejecutores, trabajo, opciones),
         "validation": _validacion(work_order),
         "technician_signature": next(
             (s for s in signatures if s.signature_type == Signature.SignatureType.TECHNICIAN), None
