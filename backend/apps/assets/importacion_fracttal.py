@@ -234,7 +234,8 @@ class ActivoPlan:
     existente: object = None  # Asset | None
     campos: dict = field(default_factory=dict)
     fracttal_id: str = ""
-    plan: object = None  # MaintenancePlan | None
+    plan: object = None  # MaintenancePlan | None (ya existente)
+    plan_nuevo: str = ""  # clave normalizada de un protocolo por crear
 
 
 @dataclass
@@ -243,7 +244,8 @@ class Plan:
     nodos: dict = field(default_factory=dict)
     activos: list = field(default_factory=list)
     filas: list = field(default_factory=list)
-    planes_no_encontrados: list = field(default_factory=list)
+    planes_crear: dict = field(default_factory=dict)  # clave normalizada -> nombre
+    planes_existentes: list = field(default_factory=list)  # nombres
 
     @property
     def errores(self):
@@ -265,7 +267,10 @@ class Plan:
                 "create": sum(1 for a in self.activos if a.existente is None),
                 "update": sum(1 for a in self.activos if a.existente is not None),
             },
-            "plans_unmatched": list(self.planes_no_encontrados),
+            "plans": {
+                "create": list(self.planes_crear.values()),
+                "existing": list(self.planes_existentes),
+            },
             "rows": self.filas,
             "errors_count": self.errores,
             "warnings_count": self.avisos,
@@ -321,13 +326,14 @@ class _Planificador:
             if n.fracttal_id:
                 self.nodos_por_fid[n.fracttal_id] = n
         self.activos_por_fid = {
-            a.fracttal_id: a for a in Asset.objects.exclude(fracttal_id="")
+            a.fracttal_id: a
+            for a in Asset.objects.exclude(fracttal_id="").select_related("plan")
         }
         self.planes_db = {}
         for p in MaintenancePlan.objects.order_by("created_at"):
             self.planes_db.setdefault(normalizar(p.name), p)
         self.fids_nodos, self.fids_activos = set(), set()
-        self.no_encontrados = {}
+        self.planes_existentes = {}
 
     # --- filas de salida ---------------------------------------------------
     def _fila(self, f, ubicacion=""):
@@ -555,20 +561,28 @@ class _Planificador:
                             f"El código «{deseado}» {motivo}; se generó «{campos['code']}»."
                         )
 
-            nombre_plan = d.get("plan", "")
+            nombre_plan = d.get("plan", "")[:255]
             plan_obj = None
+            plan_nuevo = ""
             if nombre_plan:
-                plan_obj = self.planes_db.get(normalizar(nombre_plan))
-                if plan_obj is None:
-                    self.no_encontrados.setdefault(normalizar(nombre_plan), nombre_plan)
-                    if existente is not None and existente.plan_id:
-                        salida["warnings"].append(
-                            f"Protocolo «{nombre_plan}» no existe; el equipo conserva el que tiene."
-                        )
-                    else:
-                        salida["warnings"].append(
-                            f"Protocolo «{nombre_plan}» no existe; el equipo queda sin protocolo."
-                        )
+                clave_plan = normalizar(nombre_plan)
+                plan_obj = self.planes_db.get(clave_plan)
+                if plan_obj is not None:
+                    self.planes_existentes.setdefault(clave_plan, plan_obj.name)
+                    destino = plan_obj.name
+                else:
+                    plan_nuevo = clave_plan
+                    self.plan.planes_crear.setdefault(clave_plan, nombre_plan)
+                    destino = self.plan.planes_crear[clave_plan]
+                    salida["warnings"].append(
+                        f"Se creará el protocolo «{destino}» vacío; "
+                        "hay que completarle tareas y checklist."
+                    )
+                actual = existente.plan if existente is not None else None
+                if actual is not None and (plan_obj is None or actual.id != plan_obj.id):
+                    salida["warnings"].append(
+                        f"Cambia de protocolo: «{actual.name}» → «{destino}»."
+                    )
 
             self.plan.activos.append(
                 ActivoPlan(
@@ -578,6 +592,7 @@ class _Planificador:
                     campos=campos,
                     fracttal_id=fid,
                     plan=plan_obj,
+                    plan_nuevo=plan_nuevo,
                 )
             )
             salida["action"] = "update" if existente else "create"
@@ -589,7 +604,7 @@ class _Planificador:
                     f"La ubicación intermedia «{nodo.nombres[-1]}» no venía en el archivo "
                     "de ubicaciones; se crea igual."
                 )
-        self.plan.planes_no_encontrados = list(self.no_encontrados.values())
+        self.plan.planes_existentes = list(self.planes_existentes.values())
         return self.plan
 
 
@@ -606,6 +621,11 @@ def planificar(ubicaciones, equipos):
 # --------------------------------------------------------------------------
 
 
+DESCRIPCION_PROTOCOLO_NUEVO = (
+    "Creado desde la importación de Fracttal. Falta agregar tareas y checklist."
+)
+
+
 def aplicar(plan, user):
     """Escribe el plan en una sola transaccion. Devuelve los conteos aplicados."""
     if plan.errores:
@@ -617,6 +637,7 @@ def aplicar(plan, user):
         "locations_updated": 0,
         "assets_created": 0,
         "assets_updated": 0,
+        "plans_created": 0,
         "plans_assigned": 0,
     }
     try:
@@ -628,6 +649,13 @@ def aplicar(plan, user):
                 else:
                     hospitales[clave] = Hospital.objects.create(name=hp.nombre, code=hp.codigo)
                     conteos["hospitals_created"] += 1
+
+            planes_nuevos = {}
+            for clave, nombre in plan.planes_crear.items():
+                planes_nuevos[clave] = MaintenancePlan.objects.create(
+                    name=nombre, description=DESCRIPCION_PROTOCOLO_NUEVO
+                )
+                conteos["plans_created"] += 1
 
             nodos = {}
             for clave, n in sorted(plan.nodos.items(), key=lambda kv: len(kv[1].claves)):
@@ -683,8 +711,9 @@ def aplicar(plan, user):
                     )
                     activo.save()
                     conteos["assets_created"] += 1
-                if a.plan is not None and activo.plan_id != a.plan.id:
-                    set_asset_plan(activo, a.plan, created_by=user)
+                destino = a.plan if a.plan is not None else planes_nuevos.get(a.plan_nuevo)
+                if destino is not None and activo.plan_id != destino.id:
+                    set_asset_plan(activo, destino, created_by=user)
                     conteos["plans_assigned"] += 1
     except IntegrityError as exc:
         raise ImportacionError(f"La base de datos rechazó la importación: {exc}") from exc
@@ -710,6 +739,7 @@ def auditar(user, archivos, resumen, conteos, ip=None, user_agent=""):
             "hospitales_nuevos": len(resumen["hospitals"]["create"]),
             "ubicaciones": resumen["locations"],
             "equipos": resumen["assets"],
+            "protocolos_nuevos": len(resumen["plans"]["create"]),
             "avisos": resumen["warnings_count"],
             "aplicado": conteos,
         },

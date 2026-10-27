@@ -7,7 +7,7 @@ import { usePreviewFracttalImport, useImportFracttal } from '../../api/assets'
 import { apiErrorMessage } from '../../utils/apiError'
 import {
   FILTROS_FILAS, MENSAJE_CORREGIR, contarFilas, errorDeArchivo, filtrarFilas, hayArchivos,
-  nombreArchivo, puedeImportar, textoBotonImportar, textoResultado,
+  nombreArchivo, puedeImportar, textoBotonImportar, textoProtocolos, textoResultado,
 } from '../../utils/importacionFracttal'
 
 const ACCION = {
@@ -197,7 +197,7 @@ function Vista({ resumen, filtro, onFiltro, onImportar, onReiniciar, error }) {
   const filas = filtrarFilas(resumen.rows, filtro)
   const hospitalesNuevos = resumen.hospitals?.create ?? []
   const hospitalesExistentes = resumen.hospitals?.existing ?? []
-  const sinProtocolo = resumen.plans_unmatched ?? []
+  const protocolosNuevos = resumen.plans?.create ?? []
   const hayErrores = (resumen.errors_count ?? 0) > 0
 
   return (
@@ -224,14 +224,16 @@ function Vista({ resumen, filtro, onFiltro, onImportar, onReiniciar, error }) {
         </Tarjeta>
       </div>
 
-      {sinProtocolo.length > 0 && (
+      {protocolosNuevos.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-medium text-amber-800">
-            Protocolos que no se encontraron ({sinProtocolo.length})
+            Se crearán {textoProtocolos(protocolosNuevos.length)} nuevos
           </p>
-          <p className="text-xs text-amber-700 mb-2">Los equipos se importan igual, pero esos protocolos no se asignan.</p>
+          <p className="text-xs text-amber-700 mb-2">
+            Quedan vacíos: hay que completarles tareas y checklist.
+          </p>
           <ul className="text-xs text-amber-900 list-disc pl-4 columns-1 sm:columns-2 gap-6">
-            {sinProtocolo.map((p) => <li key={p}>{p}</li>)}
+            {protocolosNuevos.map((p) => <li key={p}>{p}</li>)}
           </ul>
         </div>
       )}

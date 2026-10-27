@@ -55,6 +55,10 @@ export function textoUbicaciones(n) {
   return plural(n, 'ubicación', 'ubicaciones')
 }
 
+export function textoProtocolos(n) {
+  return plural(n, 'protocolo', 'protocolos')
+}
+
 export function textoBotonImportar(resumen) {
   const equipos = (resumen?.assets?.create ?? 0) + (resumen?.assets?.update ?? 0)
   const ubicaciones = (resumen?.locations?.create ?? 0) + (resumen?.locations?.update ?? 0)
@@ -62,6 +66,7 @@ export function textoBotonImportar(resumen) {
 }
 
 export function textoResultado(resumen) {
+  const creados = resumen?.applied_counts?.plans_created ?? resumen?.plans?.create?.length ?? 0
   const hosp = resumen?.hospitals?.create?.length ?? 0
   const partes = []
   if (hosp > 0) partes.push(plural(hosp, 'hospital nuevo', 'hospitales nuevos'))
@@ -71,6 +76,7 @@ export function textoResultado(resumen) {
   const au = resumen?.assets?.update ?? 0
   if (lc > 0) partes.push(`${textoUbicaciones(lc)} ${lc === 1 ? 'creada' : 'creadas'}`)
   if (lu > 0) partes.push(`${textoUbicaciones(lu)} ${lu === 1 ? 'actualizada' : 'actualizadas'}`)
+  if (creados > 0) partes.push(`${textoProtocolos(creados)} ${creados === 1 ? 'creado vacío' : 'creados vacíos'}`)
   if (ac > 0) partes.push(`${textoEquipos(ac)} ${ac === 1 ? 'creado' : 'creados'}`)
   if (au > 0) partes.push(`${textoEquipos(au)} ${au === 1 ? 'actualizado' : 'actualizados'}`)
   return partes

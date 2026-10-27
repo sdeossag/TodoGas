@@ -137,6 +137,11 @@ function PlanRow({ plan, puedeGestionar, onView, onEdit }) {
     <tr className="hover:bg-gray-50 transition-colors align-top">
       <td className="px-4 py-3">
         <button onClick={onView} className="font-medium text-gray-800 hover:text-brand text-left">{plan.name}</button>
+        {plan.tasks.length === 0 && (
+          <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
+            Sin tareas
+          </span>
+        )}
         {plan.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{plan.description}</p>}
       </td>
       <td className="px-4 py-3">

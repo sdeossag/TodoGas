@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
-  filtrarFilas, contarFilas, puedeImportar, textoBotonImportar, textoResultado,
+  filtrarFilas, contarFilas, puedeImportar, textoBotonImportar, textoResultado, textoProtocolos,
   hayArchivos, errorDeArchivo, textoEquipos,
 } from './importacionFracttal.js'
 
@@ -39,6 +39,18 @@ test('textos con singular y plural', () => {
     textoResultado({ hospitals: { create: ['A'] }, locations: { create: 1, update: 2 }, assets: { create: 3, update: 1 } }),
     ['1 hospital nuevo', '1 ubicación creada', '2 ubicaciones actualizadas', '3 equipos creados', '1 equipo actualizado'],
   )
+})
+
+test('protocolos por crear en el texto del resultado', () => {
+  assert.equal(textoProtocolos(1), '1 protocolo')
+  assert.equal(textoProtocolos(3), '3 protocolos')
+  const base = { locations: {}, assets: {} }
+  assert.deepEqual(textoResultado({ ...base, plans: { create: ['A', 'B'] } }), ['2 protocolos creados vacíos'])
+  assert.deepEqual(
+    textoResultado({ ...base, plans: { create: ['A'] }, applied_counts: { plans_created: 1 } }),
+    ['1 protocolo creado vacío'],
+  )
+  assert.deepEqual(textoResultado({ ...base, plans: { create: [] } }), [])
 })
 
 test('valida los archivos antes de enviarlos', () => {

@@ -212,13 +212,14 @@ def test_aplicar_crea_todo_y_asigna_protocolo_existente(admin):
         ],
     )
     r = plan.resumen()
-    assert r["plans_unmatched"] == ["PLAN FANTASMA"]
-    assert any("«PLAN FANTASMA» no existe; el equipo queda sin protocolo" in w
+    assert r["plans"] == {"create": ["PLAN FANTASMA"], "existing": ["PLAN DE SERVICIO ALARMA"]}
+    assert any("Se creará el protocolo «PLAN FANTASMA» vacío" in w
                for w in plan.filas[2]["warnings"])
     conteos = imp.aplicar(plan, admin)
 
     assert conteos["hospitals_created"] == 1 and conteos["locations_created"] == 2
-    assert conteos["assets_created"] == 2 and conteos["plans_assigned"] == 1
+    assert conteos["assets_created"] == 2 and conteos["plans_assigned"] == 2
+    assert conteos["plans_created"] == 1
     hospital = Hospital.objects.get(name="H1")
     cuarto = AssetNode.objects.get(name="Cuarto de gases")
     assert cuarto.parent.name == "Bloque A" and cuarto.parent.parent is None
@@ -228,7 +229,8 @@ def test_aplicar_crea_todo_y_asigna_protocolo_existente(admin):
     assert alarma.node == cuarto and alarma.hospital == hospital and alarma.plan == plan_pm
     assert Task.objects.filter(asset=alarma, status=Task.Status.PENDING).count() == 1
     otra = Asset.objects.get(fracttal_id="275")
-    assert otra.node is None and otra.plan is None
+    assert otra.node is None and otra.plan.name == "PLAN FANTASMA"
+    assert otra.plan.tasks.count() == 0 and "Falta agregar tareas" in otra.plan.description
 
 
 @pytest.mark.django_db
@@ -256,6 +258,74 @@ def test_reimportar_actualiza_sin_duplicar(admin):
     assert a.manufacturer == "Puesto a mano"  # un vacio de Fracttal no borra
     assert conteos["plans_assigned"] == 0  # ya tenia ese protocolo
     assert Task.objects.filter(asset=a).count() == 1
+
+
+@pytest.mark.django_db
+def test_protocolos_nuevos_se_deduplican_y_la_reimportacion_no_duplica(admin):
+    eq = [
+        equipo("A", "// H1/", fid=1, plan="PLAN  SERVICIO   TOMAS"),
+        equipo("B", "// H1/", fid=2, plan="plan servicio tomas"),
+        equipo("C", "// H1/", fid=3, plan="Plan Servicio Alarma"),
+        equipo("D", "// H1/", fid=4),
+    ]
+    p1 = planificar_con(eq=eq)
+    assert p1.resumen()["plans"] == {
+        "create": ["PLAN SERVICIO TOMAS", "Plan Servicio Alarma"], "existing": []}
+    assert MaintenancePlan.objects.count() == 0  # planificar no escribe
+    c1 = imp.aplicar(p1, admin)
+    assert c1["plans_created"] == 2 and c1["plans_assigned"] == 3
+    assert MaintenancePlan.objects.count() == 2
+    a, b = Asset.objects.get(fracttal_id="1"), Asset.objects.get(fracttal_id="2")
+    assert a.plan_id == b.plan_id and Asset.objects.get(fracttal_id="4").plan is None
+
+    p2 = planificar_con(eq=eq)
+    assert p2.resumen()["plans"]["create"] == []
+    assert len(p2.resumen()["plans"]["existing"]) == 2
+    assert not any("Cambia de protocolo" in w for f in p2.filas for w in f["warnings"])
+    c2 = imp.aplicar(p2, admin)
+    assert c2["plans_created"] == 0 and c2["plans_assigned"] == 0
+    assert MaintenancePlan.objects.count() == 2 and Asset.objects.count() == 4
+
+
+@pytest.mark.django_db
+def test_cambia_de_protocolo_y_fila_sin_plan_conserva_el_suyo(admin):
+    viejo = _plan_con_tarea("PLAN VIEJO")
+    nuevo = _plan_con_tarea("PLAN NUEVO")
+    imp.aplicar(planificar_con(eq=[
+        equipo("A", "// H1/", fid=1, plan=viejo.name),
+        equipo("B", "// H1/", fid=2, plan=viejo.name),
+        equipo("C", "// H1/", fid=3, plan=viejo.name),
+    ]), admin)
+    plan = planificar_con(eq=[
+        equipo("A", "// H1/", fid=1, plan=nuevo.name),      # a uno existente
+        equipo("B", "// H1/", fid=2),                       # sin plan: conserva
+        equipo("C", "// H1/", fid=3, plan="PLAN CREADO"),   # a uno por crear
+    ])
+    avisos = [f["warnings"] for f in plan.filas]
+    assert "Cambia de protocolo: «PLAN VIEJO» → «PLAN NUEVO»." in avisos[0]
+    assert avisos[1] == []
+    assert "Cambia de protocolo: «PLAN VIEJO» → «PLAN CREADO»." in avisos[2]
+    imp.aplicar(plan, admin)
+    assert Asset.objects.get(fracttal_id="1").plan == nuevo
+    assert Asset.objects.get(fracttal_id="2").plan == viejo
+    assert Asset.objects.get(fracttal_id="3").plan.name == "PLAN CREADO"
+    # las pendientes del plan viejo se anularon al cambiar
+    assert not Task.objects.filter(
+        asset__fracttal_id__in=["1", "3"], plan_task__plan=viejo, status=Task.Status.PENDING).exists()
+
+
+@pytest.mark.django_db
+def test_protocolo_vacio_no_rompe_nada(admin):
+    imp.aplicar(planificar_con(eq=[equipo("A", "// H1/", fid=1, plan="PLAN VACIO")]), admin)
+    asset = Asset.objects.get()
+    c = APIClient()
+    c.force_authenticate(admin)
+    lista = c.get("/api/maintenance/plans/")
+    assert lista.status_code == 200
+    fila = next(p for p in lista.data["results"] if p["name"] == "PLAN VACIO")
+    assert fila["tasks"] == [] and fila["assets_count"] == 1
+    assert c.get(f"/api/maintenance/plans/{fila['id']}/").status_code == 200
+    assert c.get(f"/api/assets/{asset.id}/").status_code == 200
 
 
 @pytest.mark.django_db
@@ -327,7 +397,7 @@ def test_preview_responde_el_resumen_y_no_escribe(cliente_admin):
               ubicaciones=excel(COLS_UBIC, [ubic("Sala", "// H1/", fid=10)]),
               equipos=excel(COLS_EQ, [equipo("Bomba", "// H1/ Sala/", fid=1, codigo="B1")]))
     assert r.status_code == 200
-    assert set(r.data) == {"hospitals", "locations", "assets", "plans_unmatched", "rows",
+    assert set(r.data) == {"hospitals", "locations", "assets", "plans", "rows",
                            "errors_count", "warnings_count", "applied"}
     assert r.data["applied"] is False
     assert r.data["hospitals"] == {"create": ["H1"], "existing": []}

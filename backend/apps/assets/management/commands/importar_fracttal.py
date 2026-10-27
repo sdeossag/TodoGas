@@ -61,7 +61,8 @@ class Command(BaseCommand):
         w("Hospitales existentes: %s" % (", ".join(r["hospitals"]["existing"]) or "ninguno"))
         w("Ubicaciones: %(create)d a crear, %(update)d a actualizar" % r["locations"])
         w("Equipos: %(create)d a crear, %(update)d a actualizar" % r["assets"])
-        w("Protocolos no encontrados: %s" % (", ".join(r["plans_unmatched"]) or "ninguno"))
+        w("Protocolos a crear (vacios): %s" % (", ".join(r["plans"]["create"]) or "ninguno"))
+        w("Protocolos existentes: %s" % (", ".join(r["plans"]["existing"]) or "ninguno"))
         w("Errores: %d   Avisos: %d   Aplicado: %s" % (r["errors_count"], r["warnings_count"], "SI" if r["applied"] else "no"))
         if "applied_counts" in r:
             w("Aplicado: %s" % r["applied_counts"])
