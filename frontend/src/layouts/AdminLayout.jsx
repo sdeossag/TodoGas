@@ -6,6 +6,7 @@ import { useStockAlerts } from '../api/inventory'
 import Icon from '../components/ui/Icon'
 import Avatar from '../components/ui/Avatar'
 import OfflineBanner from '../components/ui/OfflineBanner'
+import SyncNowButton from '../components/ui/SyncNowButton'
 import { useFindingsSummary } from '../api/findings'
 import { useContractsSummary } from '../api/contracts'
 import { useTaskTypes } from '../api/taskTypes'
@@ -172,6 +173,8 @@ export default function AdminLayout() {
         </Link>
 
         <div className="flex-1" />
+
+        <SyncNowButton />
 
         <NotificationBell />
 

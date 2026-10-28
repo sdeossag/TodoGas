@@ -4,6 +4,7 @@ import useAuthStore from '../store/authStore'
 import Icon from '../components/ui/Icon'
 import Avatar from '../components/ui/Avatar'
 import OfflineBanner from '../components/ui/OfflineBanner'
+import SyncNowButton from '../components/ui/SyncNowButton'
 import { useTaskTypes } from '../api/taskTypes'
 import { esGestor, veOrdenes } from '../utils/permisos'
 
@@ -73,6 +74,8 @@ export default function TechnicianLayout() {
         )}
 
         <div className="flex-1" />
+
+        <SyncNowButton />
 
         <div className="hidden sm:flex items-center gap-2.5">
           <Avatar user={user} size="sm" />

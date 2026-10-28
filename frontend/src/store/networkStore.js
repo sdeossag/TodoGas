@@ -154,8 +154,13 @@ const useNetworkStore = create((set, get) => ({
     queryClient.invalidateQueries()
   },
 
-  /** Sube todo lo que quedo guardado sin conexion. Nunca corre dos veces a la vez. */
-  triggerSync: async () => {
+  /**
+   * Sube todo lo que quedo guardado sin conexion. Nunca corre dos veces a la vez.
+   * Con { refrescar: true } (boton "Sincronizar ahora") ademas vuelve a pedir
+   * los datos al servidor, aunque no hubiera nada que subir: asi el tecnico ve
+   * las OT recien asignadas.
+   */
+  triggerSync: async ({ refrescar = false } = {}) => {
     if (get().isSyncing) return null
     if (!get().isOnline) return null
 
@@ -172,7 +177,11 @@ const useNetworkStore = create((set, get) => ({
       // que esto subiera: sin refrescar, el tecnico veria el checklist vacio
       // durante los 5 minutos que TanStack da por frescos esos datos.
       // Un cambio de estado rechazado vuelve la OT a su estado anterior: tambien se refresca.
-      if (Object.values(result).some((fase) => fase.ok > 0) || result.workOrders?.failed > 0) {
+      if (
+        refrescar ||
+        Object.values(result).some((fase) => fase.ok > 0) ||
+        result.workOrders?.failed > 0
+      ) {
         queryClient.invalidateQueries()
       }
       return result
