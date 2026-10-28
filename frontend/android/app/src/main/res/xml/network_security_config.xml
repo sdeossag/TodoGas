@@ -3,8 +3,8 @@
   Trafico en claro bloqueado hacia la API y el bucket de evidencia: las fotos
   y firmas viajan con datos de paciente y ubicacion.
 
-  Dominios de produccion (infra/terraform): la API en api.cmms.todogas.com.co y
-  la evidencia en el bucket todogas-prod-evidencia (us-east-1). boto3 firma las
+  Dominios de produccion (infra/terraform): la API en cmms.todogas.com.co (la misma
+  que la web, detras de CloudFront) y la evidencia en el bucket todogas-prod-evidencia (us-east-1). boto3 firma las
   URLs con el endpoint global o el regional de S3 segun la configuracion, asi
   que van los dos.
 
@@ -13,7 +13,7 @@
 -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">api.cmms.todogas.com.co</domain>
+        <domain includeSubdomains="true">cmms.todogas.com.co</domain>
         <domain includeSubdomains="false">todogas-prod-evidencia.s3.amazonaws.com</domain>
         <domain includeSubdomains="false">todogas-prod-evidencia.s3.us-east-1.amazonaws.com</domain>
     </domain-config>

@@ -5,12 +5,19 @@ Terraform de TodoGas CMMS en `infra/terraform/` y workflow de despliegue en
 `docs/infra/VARIABLES.md`. Correo: `docs/infra/SES.md`.
 
 ```
-Internet ──> Route 53 ──> CloudFront ──> S3 (web)            cmms.todogas.com.co
-                     └──> ALB (80->443) ──> ECS api          api.cmms.todogas.com.co
+Internet ──> Route 53 ──> CloudFront + WAF (plan Free)      cmms.todogas.com.co
+                            ├─ /api/* /admin/* /static/* ──> ALB (solo 443, solo CloudFront)
+                            │                                  └─> ECS api
+                            └─ todo lo demás ──> S3 (web)
                                               ECS worker+beat ──> SQS (o Valkey)
                                               RDS PostgreSQL 16 (subredes privadas)
                                               S3 evidencia (Object Lock) · SES · SSM
 ```
+
+Web y API comparten dominio (`cmms.todogas.com.co`, mismo origen). El nombre
+`api.cmms.todogas.com.co` sigue existiendo, pero solo como nombre del ALB para
+que CloudFront lo use de origen con TLS válido: el ALB contesta 403 a cualquiera
+que no sea CloudFront. Ver "Plan de CloudFront y WAF".
 
 Región `us-east-1`, contenedores ARM64 (Graviton), sin NAT Gateway: las tareas
 van en subredes públicas con IP pública y los grupos de seguridad las protegen
@@ -147,7 +154,7 @@ Variables del environment (Variables, no Secrets: no hay ninguna clave).
 | `MIGRATE_SECURITY_GROUP` | ID del grupo de seguridad de la API |
 | `WEB_BUCKET` | output `bucket_web` |
 | `CLOUDFRONT_ID` | output `cloudfront_id` |
-| `API_URL` | `https://api.cmms.todogas.com.co` (opcional; ese es el valor por defecto) |
+| `API_URL` | `https://cmms.todogas.com.co` (opcional; ese es el valor por defecto; el mismo dominio de la web) |
 | `VITE_GOOGLE_MAPS_API_KEY` | opcional, clave de Maps para el front |
 
 ## Qué hace el primer despliegue
@@ -231,6 +238,129 @@ tiene retención de 1 año en `GOVERNANCE`; el destroy lo vacía con el bypass
 (`force_destroy`), por lo que quien lo ejecuta necesita `s3:BypassGovernanceRetention`.
 Al volver a `prod` ejecuta `terraform init -reconfigure -backend-config=backend-prod.hcl ...`.
 
+## Plan de CloudFront y WAF
+
+La web y la API salen por **una sola** distribución de CloudFront, con AWS WAF
+delante. Se usa el plan de tarifa fija **Free** de CloudFront, que incluye el WAF
+y la zona de Route 53, sin cobro por peticiones ni por transferencia dentro de
+sus límites.
+
+### Suscribir la distribución al plan Free (paso manual)
+
+El provider de AWS de Terraform (la 6.71, última al 2026-10-28, y por lo tanto
+tampoco la 5.x que fija `versions.tf`) no tiene un recurso para elegir el plan de
+tarifa fija: Terraform crea la distribución con precio por uso y el plan se elige
+a mano, **después del apply**:
+
+1. Consola de AWS > CloudFront > la distribución `TodoGas CMMS web y API` >
+   cambiar su plan a **Free**.
+2. La consola revisa que la distribución cumpla los requisitos del plan (máximo
+   5 behaviors, solo políticas `Managed-*`, WAF con máximo 5 reglas). Esta
+   configuración está hecha para cumplirlos; si la consola rechaza algo (por
+   ejemplo la CloudFront Function), el mensaje dice qué.
+3. No hace falta tocar Terraform después. Si un `apply` posterior revirtiera el
+   plan, vuelve a elegirlo en la consola.
+
+### Qué hace cada una de las 5 reglas (`waf.tf`)
+
+| Regla | Qué frena |
+|---|---|
+| `ReputacionDeIP` (AmazonIpReputationList) | IP de botnets y escaneadores conocidos por AWS |
+| `LimiteAuth` (por tasa) | Más de 100 peticiones por IP en 5 minutos a `/api/auth/`: fuerza bruta de contraseñas |
+| `EntradasMaliciosas` (KnownBadInputs) | Log4j y otras cargas conocidas |
+| `ReglasGenerales` (CommonRuleSet) | XSS, LFI/RFI, extensiones y rutas peligrosas, agentes vacíos |
+| `InyeccionSQL` (SQLiRuleSet) | Inyección SQL en URL, cuerpo y cabeceras |
+
+Dos reglas del grupo general van en **count** (cuentan y dejan pasar), con el
+motivo en el código:
+
+- `SizeRestrictions_BODY`: bloquea cuerpos de más de 8 KB, y las fotos (hasta
+  10 MB) y firmas suben por la API; los JSON del checklist y de la sincronización
+  offline también superan 8 KB. El tope real lo pone Django.
+- `CrossSiteScripting_BODY`: los checklists y hallazgos llevan texto libre y JSON
+  grandes; un comentario con etiquetas HTML dejaría a un técnico sin poder
+  guardar la OT. React y el admin de Django escapan lo que muestran. El XSS en
+  URL, query y cookies sigue bloqueando.
+
+El límite de `/api/auth/` es 100 por IP y 5 minutos: el front solo llama a
+`/api/auth/refresh/` cuando una petición recibe 401 (una vez, no en bucle) y a
+`/api/auth/me/` al abrir la app. Un hospital entero detrás de un NAT entrando a la
+vez cabe de sobra. Se ajusta en `limite_auth` (`waf.tf`).
+
+El plan Free no entrega los logs del WAF, pero cada regla publica métricas en
+CloudWatch (namespace `AWS/WAFV2`, región `us-east-1`, dimensión `Rule`) con lo
+bloqueado y lo contado. Revísalas las primeras semanas: si una regla bloquea
+tráfico legítimo, pásala a count con otro `rule_action_override`.
+
+### Límite de uso
+
+El plan Free incluye **1 millón de peticiones al mes**. Cada llamada a la API y
+cada archivo de la web cuenta. Si se supera de forma sostenida, pasar al plan
+**Pro (US$15 al mes)**, que sube los límites y además da los logs del WAF.
+
+### Cómo se cierra el ALB
+
+- El grupo de seguridad del ALB solo admite el 443 desde la lista de prefijos
+  administrada `com.amazonaws.global.cloudfront.origin-facing`; no hay puerto 80
+  ni `0.0.0.0/0`.
+- CloudFront manda en cada petición al ALB la cabecera `X-Origen-CloudFront` con
+  un valor secreto (`random_password`, vive en el estado de Terraform). El
+  listener 443 contesta 403 por defecto y solo reenvía a la API si llega esa
+  cabecera. Hace falta porque la lista de prefijos es de todo CloudFront: sin el
+  secreto, la distribución de cualquier otra cuenta podría llegar a la API y
+  saltarse este WAF.
+- El health check del ALB va directo a cada tarea (puerto 8000), sin pasar por el
+  listener: sigue funcionando.
+- Para rotar el secreto: `terraform apply -replace=random_password.origen_cloudfront`
+  (CloudFront y el ALB cambian a la vez; puede haber unos minutos de 403).
+
+### Detalles de la configuración
+
+- Behaviors: `/api/*`, `/admin/*` y `/static/*` (estáticos del admin, los sirve
+  whitenoise) van al ALB con todos los métodos, `Managed-CachingDisabled` y
+  `Managed-AllViewer` (reenvía `Authorization` y `Host`; Django ve
+  `Host = cmms.todogas.com.co`). El resto va a S3. Son 4 de los 5 permitidos.
+- No hay behavior para `/health/`: el ALB lo consulta directo y nadie más lo usa.
+- Las rutas del front sin extensión (`/ordenes/123`) las reescribe a
+  `/index.html` una CloudFront Function en el behavior por defecto. Ya no hay
+  `custom_error_response`, porque afectaba a toda la distribución y habría
+  convertido en 200 los 403/404 reales de la API.
+- `TRUSTED_PROXY_COUNT = 2` (CloudFront + ALB): CloudFront anota la IP del cliente
+  en `X-Forwarded-For` y el ALB la del borde de CloudFront; contando desde la
+  derecha, el penúltimo valor es el cliente (`apps/audit/ip.py`, probado en
+  `apps/audit/tests/test_ip.py`).
+- CORS: web y API comparten origen, pero la app Android (Capacitor, origen
+  `https://localhost`) sigue necesitándolo y no cambió.
+- **App Android**: el APK de release apunta a `VITE_API_BASE_URL`. Los APK ya
+  instalados que usan `https://api.cmms.todogas.com.co` dejan de funcionar
+  cuando el ALB se cierra (403): hay que publicar un APK nuevo con la URL
+  `https://cmms.todogas.com.co`.
+- La respuesta del origen puede tardar hasta 60 s (reportes en PDF).
+
+### Comprobar después del apply
+
+Tras aplicar, suscribir el plan Free y desplegar la app (el deploy cambia la
+imagen, y `ALLOWED_HOSTS` y `TRUSTED_PROXY_COUNT` entran con la tarea nueva):
+
+1. **Login**: entrar en `https://cmms.todogas.com.co` con un usuario; carga el
+   panel y no hay errores de red en la consola del navegador.
+2. **Rutas del front**: abrir directamente una ruta interna (por ejemplo
+   `/ordenes`) y recargar: carga la app, no un error.
+3. **Foto**: subir una foto de evidencia a una OT (más de 8 KB): sube bien.
+4. **Admin**: `https://cmms.todogas.com.co/admin/` carga con sus estilos
+   (`/static/`) y deja iniciar sesión (CSRF correcto).
+5. **Un 403 de la API se ve como 403**: `curl -i https://cmms.todogas.com.co/api/auth/me/`
+   sin token da 401 en JSON (no un 200 con HTML), y un recurso sin permiso da 403
+   en JSON.
+6. **ALB cerrado**: `curl -i https://api.cmms.todogas.com.co/api/auth/me/` (sin la
+   cabecera) da **403 `Acceso denegado`**; `curl -i http://api.cmms.todogas.com.co/`
+   no conecta; y el nombre DNS del ALB directo también da 403 o no conecta.
+7. **Auditoría**: en un registro de auditoría nuevo (por ejemplo un login) la IP
+   es la real del usuario, no la del borde de CloudFront.
+8. **WAF**: en CloudWatch > Métricas > `WAFV2` aparecen las 5 reglas; la regla
+   `LimiteAuth` se prueba con más de 100 intentos de login desde una IP: el
+   siguiente da 403.
+
 ## Alarmas y presupuesto
 
 SNS `todogas-<entorno>-alertas` (correo a `correo_alertas`): ALB sin hosts sanos
@@ -258,8 +388,12 @@ terraform test -var-file=staging.tfvars
 | IPv4 públicas (ALB y tareas) | 15 | 15 |
 | RDS db.t4g.micro + 20 GB gp3 | 14 | 14 |
 | Valkey cache.t4g.micro | - | 9 |
-| CloudWatch, Route 53, CloudFront, S3, SQS, SES, ECR | ~5 | ~4 |
+| CloudFront plan Free (incluye WAF) y Route 53 de la zona | 0 | 0 |
+| CloudWatch, S3, SQS, SES, ECR | ~5 | ~4 |
 | **Total aproximado** | **~US$71** | **~US$95** |
+
+El plan Free de CloudFront incluye 1 M de peticiones al mes (ver "Plan de
+CloudFront y WAF"); pasar a Pro cuesta US$15 más.
 
 Crece con el almacenamiento de evidencia (S3 Intelligent-Tiering), el disco de
 RDS (autoescala hasta 100 GB) y los logs. Multi-AZ en RDS (`multi_az = true`)

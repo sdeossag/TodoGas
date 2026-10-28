@@ -21,11 +21,11 @@ La misma imagen Docker corre con tres comandos distintos.
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | | `DB_PASSWORD` en Parameter Store |
 | `DB_SSLMODE` | `require` | Nueva. Default `require` en producción |
 | `DB_CONN_MAX_AGE` | `60` | Nueva. Segundos; cuidado con la RDS micro |
-| `DJANGO_ALLOWED_HOSTS` | `api.cmms.todogas.com.co` | |
+| `DJANGO_ALLOWED_HOSTS` | `cmms.todogas.com.co` | CloudFront reenvía el Host del visitante |
 | `FRONTEND_URL` | `https://cmms.todogas.com.co` | |
-| `BACKEND_URL` | `https://api.cmms.todogas.com.co` | |
+| `BACKEND_URL` | `https://cmms.todogas.com.co` | |
 | `DJANGO_CORS_ALLOWED_ORIGINS` | | Extra, separados por coma |
-| `TRUSTED_PROXY_COUNT` | `1` | Detrás del ALB |
+| `TRUSTED_PROXY_COUNT` | `2` | Detrás de CloudFront y del ALB |
 | `AWS_STORAGE_BUCKET_NAME` | `todogas-prod-evidencia` | |
 | `AWS_S3_REGION_NAME` | `us-east-1` | |
 | `AWS_REGION` | `us-east-1` | Nueva. Región de SQS y SES |

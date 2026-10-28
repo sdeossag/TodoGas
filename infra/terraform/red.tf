@@ -79,7 +79,7 @@ resource "aws_default_security_group" "cerrado" {
 # ── Grupos de seguridad ──────────────────────────────────────────────────────
 resource "aws_security_group" "alb" {
   name        = "${local.prefijo}-alb"
-  description = "ALB: 80 y 443 desde internet"
+  description = "ALB: 443 solo desde CloudFront"
   vpc_id      = aws_vpc.principal.id
 
   tags = { Name = "${local.prefijo}-alb" }
@@ -119,22 +119,22 @@ resource "aws_security_group" "redis" {
   tags = { Name = "${local.prefijo}-redis" }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "alb_http" {
-  security_group_id = aws_security_group.alb.id
-  description       = "HTTP (redirige a HTTPS)"
-  ip_protocol       = "tcp"
-  from_port         = 80
-  to_port           = 80
-  cidr_ipv4         = "0.0.0.0/0"
+# Lista de prefijos administrada por AWS con las IP desde las que CloudFront
+# llega a los origenes. Se actualiza sola. Cuenta como ~55 reglas en el grupo
+# de seguridad (cuota por defecto: 60 entradas por grupo; este grupo no lleva
+# otras de entrada).
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
 }
 
+# Sin 0.0.0.0/0 y sin puerto 80: el ALB solo habla HTTPS con CloudFront.
 resource "aws_vpc_security_group_ingress_rule" "alb_https" {
   security_group_id = aws_security_group.alb.id
-  description       = "HTTPS"
+  description       = "HTTPS solo desde CloudFront"
   ip_protocol       = "tcp"
   from_port         = 443
   to_port           = 443
-  cidr_ipv4         = "0.0.0.0/0"
+  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront.id
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_a_api" {

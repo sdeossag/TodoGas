@@ -13,6 +13,13 @@ data "aws_availability_zones" "disponibles" {
 locals {
   prefijo     = "todogas-${var.entorno}"
   dominio_api = "api.${var.dominio}"
+  # Nombre solo para CloudFront -> ALB (dns.tf lo apunta al ALB y el certificado
+  # lo cubre). Los usuarios entran siempre por var.dominio.
+  cabecera_origen = "X-Origen-CloudFront"
+
+  # Rutas que CloudFront manda a la API: el resto va al bucket de la web.
+  rutas_api = ["/api/*", "/admin/*", "/static/*"]
+
   correo_from = "TodoGas CMMS <notificaciones@${var.dominio}>"
   cuenta_id   = data.aws_caller_identity.actual.account_id
 

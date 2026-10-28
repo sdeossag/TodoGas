@@ -34,8 +34,9 @@ _broker.validar(CELERY_BROKER, REDIS_URL, CELERY_SQS_QUEUE_URL, AWS_REGION)
 # pueden venir del rol de la tarea de ECS en vez de AWS_ACCESS_KEY_ID.
 STORAGES = {**STORAGES, "default": {"BACKEND": S3_STORAGE}}  # noqa: F405
 
-# La API y la web viven en dominios distintos (VITE_API_BASE_URL de
-# frontend/.env.production), y la app Android llama desde https://localhost.
+# En producción la web y la API comparten dominio (CloudFront), así que el
+# navegador no necesita CORS; sí lo necesita la app Android, que llama desde
+# https://localhost (y cualquier web en otro dominio que se agregue a mano).
 # La API se autentica con JWT en la cabecera, no con cookies: no hacen falta
 # credenciales CORS.
 CORS_ALLOWED_ORIGINS = allowed_origins(
@@ -45,7 +46,8 @@ CORS_ALLOWED_ORIGINS = allowed_origins(
 # ── Cabeceras de seguridad ────────────────────────────────────────────────────
 # Detrás del ALB de AWS el TLS termina en el balanceador y Django ve HTTP: se
 # confía en X-Forwarded-Proto para saber que la petición original era https.
-# Por la misma razón hay que poner TRUSTED_PROXY_COUNT=1 en el entorno.
+# Por la misma razón hay que poner TRUSTED_PROXY_COUNT en el entorno: 2 con
+# CloudFront + ALB (1 si solo hubiera ALB).
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # El health check del ALB llega por HTTP y con la IP privada como Host, y
 # recibiría la redirección (301) o un 400 por ALLOWED_HOSTS. /health/ lo

@@ -62,10 +62,10 @@ locals {
     DB_PORT                   = tostring(aws_db_instance.principal.port)
     DB_SSLMODE                = "require"
     DB_CONN_MAX_AGE           = "60"
-    DJANGO_ALLOWED_HOSTS      = local.dominio_api
+    DJANGO_ALLOWED_HOSTS      = var.dominio # CloudFront reenvia el Host del visitante
     FRONTEND_URL              = "https://${var.dominio}"
-    BACKEND_URL               = "https://${local.dominio_api}"
-    TRUSTED_PROXY_COUNT       = "1"
+    BACKEND_URL               = "https://${var.dominio}"
+    TRUSTED_PROXY_COUNT       = "2" # CloudFront + ALB
     AWS_STORAGE_BUCKET_NAME   = aws_s3_bucket.evidencia.bucket
     AWS_S3_REGION_NAME        = var.region
     AWS_REGION                = var.region

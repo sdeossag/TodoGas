@@ -40,7 +40,7 @@ entonces con un `IOException` sobre el nombre de archivo, sin decir por que.
 `frontend/.env.production` define contra que backend habla el APK:
 
 ```
-VITE_API_BASE_URL=https://api.cmms.todogas.com.co
+VITE_API_BASE_URL=https://cmms.todogas.com.co
 ```
 
 Es el dominio de la API que crea `infra/terraform` (`api.<dominio>`). Tiene que

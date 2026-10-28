@@ -15,7 +15,7 @@ variable "region" {
 }
 
 variable "dominio" {
-  description = "Subdominio delegado a Route 53. La web vive aqui y la API en api.<dominio>."
+  description = "Subdominio delegado a Route 53. La web y la API viven aqui (CloudFront); api.<dominio> es solo el nombre del ALB como origen."
   type        = string
   default     = "cmms.todogas.com.co"
 }

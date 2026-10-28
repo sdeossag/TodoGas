@@ -1,5 +1,6 @@
 # Web (React + Vite): bucket privado + CloudFront con OAC. El deploy sube dist/
-# con `aws s3 sync` e invalida la distribucion.
+# con `aws s3 sync` e invalida la distribucion. La misma distribucion lleva la
+# API (origen "api" = el ALB) y el WAF (waf.tf).
 
 resource "aws_s3_bucket" "web" {
   bucket        = "${local.prefijo}-web"
@@ -60,23 +61,105 @@ data "aws_cloudfront_cache_policy" "optimizada" {
   name = "Managed-CachingOptimized"
 }
 
+# Plan de tarifa fija de CloudFront: solo admite politicas administradas
+# (Managed-*), no las propias.
+data "aws_cloudfront_cache_policy" "sin_cache" {
+  name = "Managed-CachingDisabled"
+}
+
+# Reenvia todo lo del visitante, incluidos Authorization y Host: Django ve
+# Host = el dominio principal y el JWT llega intacto.
+data "aws_cloudfront_origin_request_policy" "todo_el_visitante" {
+  name = "Managed-AllViewer"
+}
+
 data "aws_cloudfront_response_headers_policy" "seguridad" {
   name = "Managed-SecurityHeadersPolicy"
 }
 
+# Valor secreto que CloudFront manda al ALB en cada peticion. El ALB solo
+# reenvia a la API si lo trae (ver alb.tf); asi nadie salta CloudFront y su WAF
+# aunque llegue a la IP del ALB. Sin simbolos para que sirva en una cabecera.
+resource "random_password" "origen_cloudfront" {
+  length  = 48
+  special = false
+}
+
+# SPA: las rutas del front (React Router, p. ej. /ordenes/123) no existen en el
+# bucket. Antes lo resolvian los custom_error_response 403/404 -> index.html,
+# pero esos afectan a TODA la distribucion y taparian los 403/404 reales de la
+# API (/api/*), que el front necesita ver tal cual. Esta funcion corre solo en
+# el behavior por defecto (el bucket) y reescribe a /index.html las rutas cuyo
+# ultimo segmento no tiene extension de archivo. Los archivos reales
+# (assets/app.js, favicon.ico) pasan sin cambios.
+resource "aws_cloudfront_function" "spa" {
+  name    = "${local.prefijo}-spa"
+  comment = "Rutas del front sin extension -> /index.html"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+
+  code = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+
+      // /admin sin barra final caeria en el bucket: se manda al panel de Django.
+      if (uri === '/admin') {
+        return {
+          statusCode: 301,
+          statusDescription: 'Moved Permanently',
+          headers: { location: { value: '/admin/' } }
+        };
+      }
+
+      var ultimo = uri.substring(uri.lastIndexOf('/') + 1);
+      if (ultimo.indexOf('.') === -1) {
+        request.uri = '/index.html';
+      }
+      return request;
+    }
+  EOT
+}
+
+# Una sola distribucion para la web y la API (mismo origen: sin CORS en el
+# navegador y un unico WAF). El default va al bucket; /api/*, /admin/* y
+# /static/* (estaticos del admin, los sirve whitenoise) van al ALB. Son 4
+# behaviors contando el default; el plan Free admite 5.
 resource "aws_cloudfront_distribution" "web" {
   enabled             = true
   is_ipv6_enabled     = true
   http_version        = "http2and3"
-  comment             = "TodoGas CMMS web (${var.entorno})"
+  comment             = "TodoGas CMMS web y API (${var.entorno})"
   default_root_object = "index.html"
   aliases             = [var.dominio]
   price_class         = "PriceClass_100"
+  web_acl_id          = aws_wafv2_web_acl.principal.arn
 
   origin {
     domain_name              = aws_s3_bucket.web.bucket_regional_domain_name
     origin_id                = "web"
     origin_access_control_id = aws_cloudfront_origin_access_control.web.id
+  }
+
+  # El nombre api.<dominio> apunta al ALB (dns.tf) y esta en el certificado del
+  # ALB, asi que el TLS hacia el origen valida. Los visitantes nunca lo usan.
+  origin {
+    domain_name = local.dominio_api
+    origin_id   = "api"
+
+    custom_origin_config {
+      http_port                = 80
+      https_port               = 443
+      origin_protocol_policy   = "https-only"
+      origin_ssl_protocols     = ["TLSv1.2"]
+      origin_read_timeout      = 60 # los PDF de reportes pueden tardar
+      origin_keepalive_timeout = 5
+    }
+
+    custom_header {
+      name  = local.cabecera_origen
+      value = random_password.origen_cloudfront.result
+    }
   }
 
   default_cache_behavior {
@@ -87,22 +170,26 @@ resource "aws_cloudfront_distribution" "web" {
     compress                   = true
     cache_policy_id            = data.aws_cloudfront_cache_policy.optimizada.id
     response_headers_policy_id = data.aws_cloudfront_response_headers_policy.seguridad.id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa.arn
+    }
   }
 
-  # SPA: las rutas del front (React Router) no existen en el bucket; S3 contesta
-  # 403 (sin ListBucket) o 404 y se sirve index.html.
-  custom_error_response {
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
+  dynamic "ordered_cache_behavior" {
+    for_each = local.rutas_api
 
-  custom_error_response {
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
+    content {
+      path_pattern             = ordered_cache_behavior.value
+      target_origin_id         = "api"
+      viewer_protocol_policy   = "redirect-to-https"
+      allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+      cached_methods           = ["GET", "HEAD"]
+      compress                 = false # sin cache no hay compresion en CloudFront
+      cache_policy_id          = data.aws_cloudfront_cache_policy.sin_cache.id
+      origin_request_policy_id = data.aws_cloudfront_origin_request_policy.todo_el_visitante.id
+    }
   }
 
   restrictions {

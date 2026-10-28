@@ -32,7 +32,7 @@ output "servicio_worker" {
 }
 
 output "cloudfront_id" {
-  description = "ID de la distribucion de CloudFront de la web."
+  description = "ID de la distribucion de CloudFront (web y API)."
   value       = aws_cloudfront_distribution.web.id
 }
 
@@ -66,6 +66,6 @@ output "variables_github" {
     MIGRATE_SECURITY_GROUP = aws_security_group.api.id
     WEB_BUCKET             = aws_s3_bucket.web.bucket
     CLOUDFRONT_ID          = aws_cloudfront_distribution.web.id
-    API_URL                = "https://${local.dominio_api}"
+    API_URL                = "https://${var.dominio}" # mismo origen que la web
   }
 }

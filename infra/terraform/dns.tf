@@ -6,8 +6,9 @@ resource "aws_route53_zone" "principal" {
   comment = "TodoGas CMMS (${var.entorno})"
 }
 
-# Un certificado para la web (CloudFront) y la API (ALB); las dos viven en
-# us-east-1, que es donde CloudFront exige el certificado.
+# Un certificado para CloudFront (dominio principal) y para el ALB
+# (api.<dominio>, el origen de CloudFront); los dos viven en us-east-1, que es
+# donde CloudFront exige el certificado.
 resource "aws_acm_certificate" "principal" {
   domain_name               = var.dominio
   subject_alternative_names = [local.dominio_api]
@@ -43,6 +44,8 @@ resource "aws_acm_certificate_validation" "principal" {
   validation_record_fqdns = [for r in aws_route53_record.validacion_acm : r.fqdn]
 }
 
+# Nombre del ALB para que CloudFront lo use como origen (con certificado
+# valido). El ALB solo contesta a CloudFront: directo da 403.
 resource "aws_route53_record" "api" {
   zone_id = aws_route53_zone.principal.zone_id
   name    = local.dominio_api

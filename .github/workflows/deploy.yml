@@ -158,7 +158,7 @@ jobs:
       - name: Build de la web
         working-directory: frontend
         env:
-          VITE_API_BASE_URL: ${{ vars.API_URL || 'https://api.cmms.todogas.com.co' }}
+          VITE_API_BASE_URL: ${{ vars.API_URL || 'https://cmms.todogas.com.co' }}
           VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
         run: |
           npm ci

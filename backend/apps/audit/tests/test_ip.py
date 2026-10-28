@@ -197,6 +197,43 @@ def test_solo_el_helper_lee_x_forwarded_for():
     assert ofensores == []
 
 
+# ── CloudFront + ALB (TRUSTED_PROXY_COUNT=2, como en infra/terraform) ─────────
+
+CLIENTE = "198.51.100.23"   # la IP real: la que CloudFront ve y anota
+BORDE_CF = "130.176.10.5"   # la IP del servidor de borde de CloudFront, que anota el ALB
+
+
+@override_settings(TRUSTED_PROXY_COUNT=2)
+def test_con_cloudfront_y_alb_la_ip_es_la_del_cliente():
+    """CloudFront agrega la IP del cliente y el ALB la del borde: cliente = penultimo."""
+    assert client_ip(peticion(xff=f"{CLIENTE}, {BORDE_CF}", remote="10.0.1.7")) == CLIENTE
+
+
+@override_settings(TRUSTED_PROXY_COUNT=2)
+def test_con_cloudfront_y_alb_una_cabecera_falsificada_por_el_cliente_no_cuenta():
+    """Lo que el cliente escriba va al principio; solo valen los dos ultimos valores."""
+    xff = f"{FALSA}, 7.7.7.7, {CLIENTE}, {BORDE_CF}"
+    assert client_ip(peticion(xff=xff, remote="10.0.1.7")) == CLIENTE
+
+
+@override_settings(TRUSTED_PROXY_COUNT=2)
+def test_con_cloudfront_y_alb_la_transicion_guarda_la_ip_del_cliente(ot_pendiente):
+    wo, tec = ot_pendiente
+    log = cambiar_estado(wo, tec, REMOTE_ADDR="10.0.1.7",
+                         HTTP_X_FORWARDED_FOR=f"{FALSA}, {CLIENTE}, {BORDE_CF}")
+    assert log.ip_address == CLIENTE
+
+
+def test_con_dos_proxies_el_throttling_de_drf_usa_la_ip_del_cliente(settings):
+    """NUM_PROXIES sigue a TRUSTED_PROXY_COUNT en settings; aqui se fija en 2."""
+    from rest_framework.request import Request
+    from rest_framework.throttling import BaseThrottle
+
+    settings.REST_FRAMEWORK = {**settings.REST_FRAMEWORK, "NUM_PROXIES": 2}
+    request = Request(peticion(xff=f"{FALSA}, {CLIENTE}, {BORDE_CF}", remote="10.0.1.7"))
+    assert BaseThrottle().get_ident(request) == CLIENTE
+
+
 # ── Throttling de DRF ────────────────────────────────────────────────────────
 
 def test_el_throttling_ignora_una_x_forwarded_for_falsificada_con_cero_proxies():

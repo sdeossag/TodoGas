@@ -38,6 +38,18 @@ mock_provider "aws" {
     }
   }
 
+  mock_data "aws_cloudfront_origin_request_policy" {
+    defaults = {
+      id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+    }
+  }
+
+  mock_data "aws_ec2_managed_prefix_list" {
+    defaults = {
+      id = "pl-3b927c52"
+    }
+  }
+
   mock_data "aws_cloudfront_response_headers_policy" {
     defaults = {
       id = "67f7725c-6f97-4210-82d7-5512b31e9d03"
@@ -122,6 +134,24 @@ mock_provider "aws" {
   mock_resource "aws_s3_bucket" {
     defaults = {
       arn = "arn:aws:s3:::x"
+    }
+  }
+
+  mock_resource "aws_lb_listener" {
+    defaults = {
+      arn = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/x/1/2"
+    }
+  }
+
+  mock_resource "aws_cloudfront_function" {
+    defaults = {
+      arn = "arn:aws:cloudfront::123456789012:function/x"
+    }
+  }
+
+  mock_resource "aws_wafv2_web_acl" {
+    defaults = {
+      arn = "arn:aws:wafv2:us-east-1:123456789012:global/webacl/x/1"
     }
   }
 
@@ -298,5 +328,55 @@ run "segun_el_entorno" {
   assert {
     condition     = one(one(aws_s3_bucket_object_lock_configuration.evidencia.rule).default_retention).years == var.object_lock_anios
     error_message = "La retencion sigue a object_lock_anios."
+  }
+}
+
+# CloudFront con WAF delante de la web y la API, y el ALB cerrado.
+run "cloudfront_waf_y_alb_cerrado" {
+  command = apply
+
+  assert {
+    condition     = aws_wafv2_web_acl.principal.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.principal.rule) == 5
+    error_message = "El WAF es de CloudFront y lleva exactamente 5 reglas (limite del plan Free)."
+  }
+
+  assert {
+    condition     = length([for r in aws_wafv2_web_acl.principal.rule : r if try(r.statement[0].rate_based_statement, null) != null && length(r.statement[0].rate_based_statement) > 0]) == 1
+    error_message = "Una de las 5 reglas es la de limite de peticiones a /api/auth/."
+  }
+
+  assert {
+    condition     = aws_cloudfront_distribution.web.web_acl_id == aws_wafv2_web_acl.principal.arn
+    error_message = "La distribucion debe llevar el WAF asociado."
+  }
+
+  assert {
+    condition     = length(aws_cloudfront_distribution.web.origin) == 2 && toset([for o in aws_cloudfront_distribution.web.origin : o.origin_id]) == toset(["web", "api"])
+    error_message = "La distribucion tiene dos origenes: web (S3) y api (ALB)."
+  }
+
+  assert {
+    condition     = length(aws_cloudfront_distribution.web.ordered_cache_behavior) <= 4
+    error_message = "El plan Free admite 5 behaviors contando el default."
+  }
+
+  assert {
+    condition     = length(aws_cloudfront_distribution.web.custom_error_response) == 0
+    error_message = "Sin custom_error_response: taparian los 403/404 de la API."
+  }
+
+  assert {
+    condition     = aws_lb_listener.https.default_action[0].type == "fixed-response" && aws_lb_listener.https.default_action[0].fixed_response[0].status_code == "403"
+    error_message = "El listener del ALB contesta 403 si no llega la cabecera secreta."
+  }
+
+  assert {
+    condition     = aws_vpc_security_group_ingress_rule.alb_https.cidr_ipv4 == null && aws_vpc_security_group_ingress_rule.alb_https.prefix_list_id != null && aws_vpc_security_group_ingress_rule.alb_https.from_port == 443
+    error_message = "El SG del ALB solo admite 443 desde la lista de prefijos de CloudFront, sin 0.0.0.0/0."
+  }
+
+  assert {
+    condition     = strcontains(aws_ecs_task_definition.api.container_definitions, "\"TRUSTED_PROXY_COUNT\",\"value\":\"2\"")
+    error_message = "Detras de CloudFront y el ALB, TRUSTED_PROXY_COUNT es 2."
   }
 }
