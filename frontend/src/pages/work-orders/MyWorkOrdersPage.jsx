@@ -11,6 +11,7 @@ import Icon from '../../components/ui/Icon'
 import { taskTypeLabel } from '../../constants/labels'
 import Spinner from '../../components/ui/Spinner'
 import { formatWoCode } from '../../utils/workOrder'
+import { ultimoRechazo } from '../../utils/rechazoOT'
 
 const TABS = [
   { label: 'Pendientes',   filter: 'PENDING' },
@@ -81,6 +82,7 @@ export default function MyWorkOrdersPage() {
 
 function WorkOrderCard({ wo, onTransition, navigate, hasPendingSync = false }) {
   const isOverdue = wo.is_overdue
+  const rechazo = ultimoRechazo(wo)
 
   return (
     <div className={`relative bg-white rounded-xl border shadow-sm p-4 space-y-3 ${
@@ -128,6 +130,15 @@ function WorkOrderCard({ wo, onTransition, navigate, hasPendingSync = false }) {
       {/* Status */}
       <div className="flex items-center gap-2">
         <StatusBadge status={wo.status} />
+        {rechazo && (
+          <span
+            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800"
+            title={rechazo.motivo ? `Motivo: ${rechazo.motivo}` : 'Devuelta para corrección'}
+          >
+            <Icon name="warning" className="w-3 h-3" />
+            Devuelta
+          </span>
+        )}
         {wo.pending_count > 0 && (
           <span
             className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800"

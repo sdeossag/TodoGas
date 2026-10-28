@@ -45,6 +45,23 @@ def send_assignment_notification(work_order):
     )
 
 
+def send_rejection_notification(work_order, rechaza, motivo):
+    """Aviso al tecnico asignado de que su OT volvio a correccion, con el motivo."""
+    if not work_order.assigned_to:
+        return
+    quien = f"{rechaza.first_name} {rechaza.last_name}".strip() or rechaza.email
+    send_push_notification(
+        user=work_order.assigned_to,
+        title=f"OT devuelta para corrección: {work_order.wo_code}",
+        body=f"{quien}: {motivo}",
+        data={
+            "type": NotificationLog.NotificationType.GENERAL,
+            "entity_type": "WorkOrder",
+            "entity_id": str(work_order.id),
+        },
+    )
+
+
 def send_overdue_alert(work_order):
     if not work_order.assigned_to:
         return

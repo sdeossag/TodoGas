@@ -16,6 +16,7 @@ import FindingsPanel from '../../components/findings/FindingsPanel'
 import { formatDate } from '../../utils/maintenance'
 import { useUsers } from '../../api/users'
 import { formatWoCode } from '../../utils/workOrder'
+import { ultimoRechazo, fechaDeRechazo } from '../../utils/rechazoOT'
 import {
   useChecklistResponse,
   useChecklistTemplates,
@@ -222,6 +223,24 @@ export default function WorkOrderDetailPage() {
         {/* Botones de transición */}
         <TransitionButton workOrder={wo} onSuccess={refetch} />
       </div>
+
+      {/* Por qué la devolvieron: lo que hay que corregir antes de reenviarla */}
+      {(() => {
+        const rechazo = ultimoRechazo(wo)
+        if (!rechazo) return null
+        return (
+          <div role="alert" className="px-4 py-3 rounded-xl bg-red-50 border border-red-300 text-red-900 text-sm space-y-1">
+            <p className="font-semibold flex items-center gap-1.5">
+              <Icon name="warning" className="w-4 h-4 flex-shrink-0" />
+              La OT fue devuelta para corrección
+            </p>
+            {rechazo.motivo && <p className="whitespace-pre-line">{rechazo.motivo}</p>}
+            <p className="text-xs text-red-800">
+              {[rechazo.por && `Devuelta por ${rechazo.por}`, fechaDeRechazo(rechazo.fecha)].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+        )
+      })()}
 
       {/* Lo que quedó pendiente en los checklists: hay que volver a ello */}
       {!['COMPLETED', 'CANCELLED'].includes(wo.status) && pendientesDeLaOt(wo.tasks).length > 0 && (

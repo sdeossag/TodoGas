@@ -83,6 +83,10 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
     location = serializers.SerializerMethodField()
     # Cuantos items quedaron "pendientes: no se pudo revisar" en su checklist.
     pending_count = serializers.SerializerMethodField()
+    # Por que la devolvieron a correccion, si esta vigente. Va en la lista (no
+    # solo en el detalle) porque la app guarda la lista y de ahi pinta la
+    # etiqueta "Devuelta"; sale del historial ya precargado, sin consultas.
+    last_rejection = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkOrder
@@ -90,7 +94,26 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
             "id", "wo_number", "wo_code", "title", "task_type", "status", "priority",
             "scheduled_date", "assets", "assets_count", "hospital", "location", "assigned_to",
             "created_at", "is_overdue", "has_report", "report_id", "pending_count",
+            "last_rejection",
         ]
+
+    def get_last_rejection(self, obj):
+        """{motivo, por, fecha} si el ultimo cambio fue revision -> en curso; si no, None."""
+        if obj.status != WorkOrder.Status.IN_PROGRESS:
+            return None
+        # `status_history` viene con prefetch en el viewset: se ordena en Python.
+        historial = sorted(obj.status_history.all(), key=lambda h: (h.changed_at, h.created_at))
+        if not historial:
+            return None
+        ultimo = historial[-1]
+        if (ultimo.from_status, ultimo.to_status) != (WorkOrder.Status.IN_REVIEW, WorkOrder.Status.IN_PROGRESS):
+            return None
+        u = ultimo.changed_by
+        return {
+            "motivo": ultimo.comment,
+            "por": f"{u.first_name} {u.last_name}".strip() or u.email,
+            "fecha": ultimo.changed_at.isoformat(),
+        }
 
     def get_pending_count(self, obj):
         if obj.status in (WorkOrder.Status.COMPLETED, WorkOrder.Status.CANCELLED):

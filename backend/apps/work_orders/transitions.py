@@ -163,6 +163,7 @@ def apply_transition(work_order, new_status, user, comment="", client_time=None)
         work_order.status = (
             WorkOrder.objects.select_for_update().values_list("status", flat=True).get(pk=work_order.pk)
         )
+        desde = work_order.status
         _aplicar(work_order, new_status, user, comment, client_time)
 
     if new_status == WorkOrder.Status.COMPLETED:
@@ -177,7 +178,40 @@ def apply_transition(work_order, new_status, user, comment="", client_time=None)
 
         transaction.on_commit(_avisar)
 
+    # Devolver a correccion: el tecnico asignado se entera del motivo. Si quien
+    # devuelve es el mismo asignado (admin que ejecuto su propia OT) no hay a
+    # quien avisar.
+    if (
+        desde == WorkOrder.Status.IN_REVIEW
+        and new_status == WorkOrder.Status.IN_PROGRESS
+        and work_order.assigned_to_id
+        and work_order.assigned_to_id != user.id
+    ):
+        transaction.on_commit(lambda: avisar_rechazo(work_order, user, comment))
+
     return work_order
+
+
+def avisar_rechazo(work_order, rechaza, motivo):
+    """
+    Push y correo al tecnico asignado. Va despues del commit y un fallo de envio
+    no deshace la devolucion: se registra y se sigue.
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
+    try:
+        from apps.notifications.service import send_rejection_notification
+
+        send_rejection_notification(work_order, rechaza, motivo)
+    except Exception:
+        log.exception("No se pudo enviar el aviso push del rechazo de la OT %s", work_order.pk)
+    try:
+        from .tasks import send_rejection_email
+
+        send_rejection_email.delay(str(work_order.pk), str(rechaza.pk), motivo)
+    except Exception:
+        log.exception("No se pudo encolar el correo del rechazo de la OT %s", work_order.pk)
 
 
 def _aplicar(work_order, new_status, user, comment, client_time=None):
