@@ -5,7 +5,7 @@ titulo: "Quitar la columna «Costo unit.» de los repuestos de la OT"
 tipo: chore
 prioridad: could-have
 modulo: ordenes-trabajo
-estado: OPEN
+estado: CLOSED
 etiquetas: ['priority: could-have', 'type: chore', 'mod: ordenes-trabajo', 'platform: web']
 ---
 

@@ -5,7 +5,7 @@ titulo: "Firma electrónica — Ley 527 de 1999"
 tipo: non-functional
 prioridad: must-have
 modulo: cumplimiento-legal
-estado: OPEN
+estado: CLOSED
 etiquetas: ['priority: must-have', 'type: non-functional', 'mod: cumplimiento-legal']
 ---
 

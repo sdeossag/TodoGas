@@ -5,7 +5,7 @@ titulo: "El reporte consolidado anuncia un correo que nunca se envía"
 tipo: bug
 prioridad: should-have
 modulo: pdf
-estado: OPEN
+estado: CLOSED
 etiquetas: ['priority: should-have', 'type: bug', 'mod: pdf', 'platform: backend', 'platform: web']
 ---
 

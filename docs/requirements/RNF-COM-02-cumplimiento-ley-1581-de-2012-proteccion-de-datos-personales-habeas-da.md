@@ -6,7 +6,7 @@ tipo: non-functional
 prioridad: must-have
 modulo: cumplimiento-legal
 estado: OPEN
-etiquetas: ['priority: must-have', 'type: non-functional', 'mod: cumplimiento-legal']
+etiquetas: ['priority: must-have', 'type: non-functional', 'mod: cumplimiento-legal', 'blocked']
 ---
 
 # RNF-COM-02 - Cumplimiento Ley 1581 de 2012 (Protección de Datos Personales — Habeas Data)

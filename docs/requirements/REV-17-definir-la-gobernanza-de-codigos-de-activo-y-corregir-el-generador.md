@@ -5,7 +5,7 @@ titulo: "Definir la gobernanza de códigos de activo y corregir el generador"
 tipo: functional
 prioridad: should-have
 modulo: activos
-estado: OPEN
+estado: CLOSED
 etiquetas: ['priority: should-have', 'type: functional', 'mod: activos']
 ---
 

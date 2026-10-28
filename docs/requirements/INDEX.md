@@ -6,7 +6,7 @@ Generado desde los issues de `sdeossag/TodoGas`. Un archivo por requisito.
 - **REV:** cambios que salieron de las revisiones con el cliente y del barrido de QA.
 - **OPS:** tareas de operación y puesta en marcha.
 
-Total: 150 · Abiertos: 51 · Cerrados: 99 (actualizado el 2026-10-27).
+Total: 152 · Abiertos: 47 · Cerrados: 105 (actualizado el 2026-10-27).
 
 | ID | Issue | Titulo | Tipo | Prioridad | Modulo | Estado |
 |---|---|---|---|---|---|---|
@@ -108,8 +108,8 @@ Total: 150 · Abiertos: 51 · Cerrados: 99 (actualizado el 2026-10-27).
 | RNF-USA-04 | #77 | Usabilidad del portal web para ADMIN y SUP | non-functional | should-have | usabilidad | OPEN |
 | RNF-COM-01 | #78 | Trazabilidad para auditorías GMP/BPM (INVIMA) | non-functional | must-have | cumplimiento-legal | OPEN |
 | RNF-COM-02 | #79 | Cumplimiento Ley 1581 de 2012 (Protección de Datos Personales — Habeas Data) | non-functional | must-have | cumplimiento-legal | OPEN |
-| RNF-COM-03 | #80 | Firma electrónica — Ley 527 de 1999 | non-functional | must-have | cumplimiento-legal | OPEN |
-| RNF-COM-04 | #81 | Retención y disponibilidad de registros para auditoría | non-functional | must-have | cumplimiento-legal | OPEN |
+| RNF-COM-03 | #80 | Firma electrónica — Ley 527 de 1999 | non-functional | must-have | cumplimiento-legal | CLOSED |
+| RNF-COM-04 | #81 | Retención y disponibilidad de registros para auditoría | non-functional | must-have | cumplimiento-legal | CLOSED |
 | RNF-AND-01 | #82 | Versiones de Android soportadas | non-functional | must-have | android | OPEN |
 | RNF-AND-02 | #83 | Tamaños de pantalla y resoluciones | non-functional | must-have | android | OPEN |
 | RNF-AND-03 | #84 | Distribución del APK fuera de Play Store | non-functional | must-have | android | CLOSED |
@@ -136,12 +136,12 @@ Total: 150 · Abiertos: 51 · Cerrados: 99 (actualizado el 2026-10-27).
 | REV-10 | #105 | El administrador debe poder iniciar y diligenciar checklists | functional | must-have | usuarios-roles | CLOSED |
 | REV-19 | #106 | El administrador debe poder corregir checklist y evidencia mientras la OT está en revisión | functional | should-have | ordenes-trabajo | CLOSED |
 | REV-11 | #107 | Configurar qué campos aparecen en el acta PDF | functional | should-have | pdf | CLOSED |
-| REV-12 | #108 | La ubicación física debe ser obligatoria en el acta, no solo el GPS | functional | must-have | pdf | OPEN |
+| REV-12 | #108 | La ubicación física debe ser obligatoria en el acta, no solo el GPS | functional | must-have | pdf | CLOSED |
 | REV-13 | #109 | Poder añadir texto descriptivo a cada foto de evidencia | functional | should-have | evidencia | CLOSED |
 | REV-14 | #110 | Comprimir las fotos preservando calidad suficiente para auditoría | functional | must-have | evidencia | CLOSED |
 | REV-15 | #111 | Filtrar el inventario por ubicación e institución | functional | must-have | inventario | OPEN |
 | REV-16 | #112 | Definir el comportamiento al desactivar activos, ubicaciones y planes | functional | must-have | trazabilidad | OPEN |
-| REV-17 | #113 | Definir la gobernanza de códigos de activo y corregir el generador | functional | should-have | activos | OPEN |
+| REV-17 | #113 | Definir la gobernanza de códigos de activo y corregir el generador | functional | should-have | activos | CLOSED |
 | REV-18 | #114 | Permitir editar la fecha de intervención de una OT | functional | could-have | ordenes-trabajo | CLOSED |
 | REV-20 | #115 | Ampliar el dashboard con los indicadores que el cliente espera | functional | could-have | dashboard-bi | OPEN |
 | REV-21 | #116 | Un usuario Cliente puede quedarse sin hospital y ver un portal vacío | bug | should-have | usuarios-roles | CLOSED |
@@ -153,10 +153,12 @@ Total: 150 · Abiertos: 51 · Cerrados: 99 (actualizado el 2026-10-27).
 | REV-27 | #141 | Elegir qué fechas y horas salen en el acta | functional | must-have | pdf | OPEN |
 | REV-28 | #142 | Numeración y nombre del acta para el empalme con Fracttal | functional | could-have | pdf | OPEN |
 | REV-29 | #143 | Renombrar «Inventario» como «Almacén» | functional | could-have | inventario | OPEN |
-| REV-30 | #144 | Quitar la columna «Costo unit.» de los repuestos de la OT | chore | could-have | ordenes-trabajo | OPEN |
-| REV-31 | #145 | El reporte consolidado anuncia un correo que nunca se envía | bug | should-have | pdf | OPEN |
+| REV-30 | #144 | Quitar la columna «Costo unit.» de los repuestos de la OT | chore | could-have | ordenes-trabajo | CLOSED |
+| REV-31 | #145 | El reporte consolidado anuncia un correo que nunca se envía | bug | should-have | pdf | CLOSED |
 | OPS-01 | #146 | Desplegar la infraestructura en AWS y delegar el subdominio en el DNS | chore | must-have | disponibilidad | OPEN |
 | OPS-02 | #147 | Importar el catálogo completo y los Planes de Tareas desde Fracttal | chore | must-have | migracion | OPEN |
 | OPS-03 | #148 | Prueba en teléfono real: firma guardada, pendientes y aprobación sin red | chore | must-have | offline | OPEN |
 | OPS-04 | #149 | Verificar el bloqueo por intentos fallidos de inicio de sesión | chore | should-have | seguridad | CLOSED |
 | OPS-05 | #150 | Guía de mantenimiento no técnica para la entrega | chore | should-have | mantenibilidad | OPEN |
+| OPS-06 | #151 | Manual de uso completo y detallado | chore | must-have | usabilidad | OPEN |
+| OPS-07 | #152 | Manual de uso rápido | chore | must-have | usabilidad | OPEN |

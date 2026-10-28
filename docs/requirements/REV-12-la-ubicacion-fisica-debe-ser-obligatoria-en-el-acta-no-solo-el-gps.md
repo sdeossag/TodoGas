@@ -5,7 +5,7 @@ titulo: "La ubicación física debe ser obligatoria en el acta, no solo el GPS"
 tipo: functional
 prioridad: must-have
 modulo: pdf
-estado: OPEN
+estado: CLOSED
 etiquetas: ['priority: must-have', 'type: functional', 'mod: pdf']
 ---
 
