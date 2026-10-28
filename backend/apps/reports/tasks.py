@@ -281,15 +281,7 @@ def send_reports_bundle(self, hospital_id, report_ids):
 def generate_consolidated_report(
     self, hospital_id, date_from, date_to, task_type=None, requested_by_id=None
 ):
-    from weasyprint import HTML
-
-    from apps.assets.models import Hospital
     from apps.users.models import User
-
-    try:
-        hospital = Hospital.objects.get(id=hospital_id) if hospital_id else None
-    except Hospital.DoesNotExist:
-        hospital = None
 
     requested_by = None
     if requested_by_id:
@@ -297,6 +289,29 @@ def generate_consolidated_report(
             requested_by = User.objects.get(id=requested_by_id)
         except User.DoesNotExist:
             pass
+
+    try:
+        return _generar_consolidado(
+            hospital_id, date_from, date_to, task_type, requested_by
+        )
+    except Exception as exc:
+        logger.exception(
+            "No se pudo generar el reporte consolidado %s - %s: %s",
+            date_from, date_to, exc,
+        )
+        _avisar_consolidado_fallido(requested_by, hospital_id, date_from, date_to)
+        raise
+
+
+def _generar_consolidado(hospital_id, date_from, date_to, task_type, requested_by):
+    from weasyprint import HTML
+
+    from apps.assets.models import Hospital
+
+    try:
+        hospital = Hospital.objects.get(id=hospital_id) if hospital_id else None
+    except Hospital.DoesNotExist:
+        hospital = None
 
     qs = WorkOrder.objects.select_related(
         "hospital", "assigned_to"
@@ -364,7 +379,97 @@ def generate_consolidated_report(
     except Exception:
         download_url = s3_key
 
+    _enviar_consolidado(
+        requested_by, hospital, date_from, date_to, pdf_bytes, download_url
+    )
+
     return {"status": "done", "report_id": str(report.id), "download_url": download_url}
+
+
+def _etiqueta_consolidado(hospital, date_from, date_to):
+    lugar = hospital.name if hospital else "todos los hospitales"
+    return f"{lugar} {date_from}–{date_to}"
+
+
+def _enlace_consolidado(download_url):
+    """Enlace absoluto al PDF; si el almacenamiento da una ruta relativa, a la pantalla de reportes."""
+    if download_url and download_url.startswith("http"):
+        return download_url
+    return f"{settings.FRONTEND_URL}/reportes"
+
+
+def _enviar_consolidado(requested_by, hospital, date_from, date_to, pdf_bytes, download_url):
+    """
+    Manda el PDF consolidado a quien lo pidio. Va adjunto si pesa menos de
+    settings.REPORTS_EMAIL_MAX_BYTES; si no, va el enlace de descarga.
+    Sin correo del solicitante no se envia nada y queda en el log.
+    """
+    if requested_by is None or not requested_by.email:
+        logger.warning(
+            "Reporte consolidado %s - %s listo, pero el solicitante no tiene correo: no se envia",
+            date_from, date_to,
+        )
+        return
+    adjunto = len(pdf_bytes) <= settings.REPORTS_EMAIL_MAX_BYTES
+    try:
+        msg = EmailMessage(
+            subject=f"Reporte consolidado {_etiqueta_consolidado(hospital, date_from, date_to)}",
+            body=render_to_string("reports/email_consolidated_report.html", {
+                "etiqueta": _etiqueta_consolidado(hospital, date_from, date_to),
+                "hospital_name": hospital.name if hospital else "Todos los hospitales",
+                "date_from": date_from,
+                "date_to": date_to,
+                "solicitante": requested_by.first_name or requested_by.email,
+                "adjunto": adjunto,
+                "enlace": "" if adjunto else _enlace_consolidado(download_url),
+                "fallido": False,
+                "frontend_url": settings.FRONTEND_URL,
+            }),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[requested_by.email],
+        )
+        msg.content_subtype = "html"
+        if adjunto:
+            msg.attach(
+                f"consolidado_{date_from}_{date_to}.pdf", pdf_bytes, "application/pdf"
+            )
+        msg.send()
+    except Exception as exc:
+        logger.exception(
+            "No se pudo enviar el reporte consolidado %s - %s a %s: %s",
+            date_from, date_to, requested_by.email, exc,
+        )
+
+
+def _avisar_consolidado_fallido(requested_by, hospital_id, date_from, date_to):
+    """Correo corto cuando la generacion falla. Nunca lanza: el error original es el que importa."""
+    if requested_by is None or not requested_by.email:
+        return
+    try:
+        from apps.assets.models import Hospital
+
+        hospital = Hospital.objects.filter(id=hospital_id).first() if hospital_id else None
+        etiqueta = _etiqueta_consolidado(hospital, date_from, date_to)
+        msg = EmailMessage(
+            subject=f"No se pudo generar el reporte consolidado {etiqueta}",
+            body=render_to_string("reports/email_consolidated_report.html", {
+                "etiqueta": etiqueta,
+                "hospital_name": hospital.name if hospital else "Todos los hospitales",
+                "date_from": date_from,
+                "date_to": date_to,
+                "solicitante": requested_by.first_name or requested_by.email,
+                "adjunto": False,
+                "enlace": "",
+                "fallido": True,
+                "frontend_url": settings.FRONTEND_URL,
+            }),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[requested_by.email],
+        )
+        msg.content_subtype = "html"
+        msg.send()
+    except Exception as exc:
+        logger.exception("No se pudo avisar el fallo del consolidado a %s: %s", requested_by.email, exc)
 
 
 def _assets_label(work_order):

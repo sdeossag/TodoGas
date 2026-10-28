@@ -37,6 +37,7 @@ function ConsolidatedReportForm() {
   const { data: hospitals = [] } = useHospitals()
   const hospitalList = Array.isArray(hospitals) ? hospitals : hospitals?.results ?? []
   const generateMut = useGenerateConsolidatedReport()
+  const miCorreo = useAuthStore((s) => s.user?.email)
 
   const [form, setForm] = useState({
     hospital_id: '',
@@ -115,7 +116,10 @@ function ConsolidatedReportForm() {
 
       {generateMut.isSuccess && (
         <div className="mt-4 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm">
-          Reporte en generacion. Recibiras un email cuando este listo.
+          Reporte en generacion.{' '}
+          {miCorreo
+            ? `Te llegará por correo a ${miCorreo} cuando esté listo.`
+            : 'Te llegará por correo cuando esté listo.'}
         </div>
       )}
       {generateMut.isError && (

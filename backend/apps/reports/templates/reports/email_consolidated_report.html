@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reporte consolidado {{ etiqueta }}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f5f5f5; font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5; padding:24px 0;">
+  <tr>
+    <td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; background-color:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+
+        <!-- Header -->
+        <tr>
+          <td style="background-color:#1e3a5f; padding:24px 32px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td>
+                  <div style="color:#ffffff; font-size:22px; font-weight:bold; letter-spacing:1px;">TodoGas CMMS</div>
+                  <div style="color:#a8c4e0; font-size:12px; margin-top:4px;">Sistema de gestión de mantenimiento</div>
+                </td>
+                <td align="right">
+                  <div style="color:#ffffff; font-size:14px; font-weight:bold;">Reporte consolidado</div>
+                  <div style="color:#a8c4e0; font-size:11px; margin-top:2px;">{{ date_from }} &ndash; {{ date_to }}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:32px;">
+
+            <p style="font-size:15px; color:#333; margin:0 0 16px 0;">
+              Hola {{ solicitante }},<br>
+              <strong>{{ hospital_name }}</strong>
+            </p>
+
+            {% if fallido %}
+            <p style="font-size:14px; color:#555; margin:0 0 24px 0; line-height:1.6;">
+              No fue posible generar el reporte consolidado del periodo solicitado.
+              Puede volver a intentarlo desde la pantalla de reportes. Si el problema continúa, contacte al administrador.
+            </p>
+            {% else %}
+            <p style="font-size:14px; color:#555; margin:0 0 24px 0; line-height:1.6;">
+              El reporte consolidado de las órdenes de trabajo del periodo indicado ya está listo.
+              {% if adjunto %}Lo encontrará adjunto a este correo en formato PDF.{% else %}El archivo es demasiado grande para adjuntarlo; use el enlace de descarga.{% endif %}
+            </p>
+
+            {% if not adjunto %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+              <tr>
+                <td align="center">
+                  <a href="{{ enlace }}"
+                     style="display:inline-block; background-color:#1e3a5f; color:#ffffff; text-decoration:none; padding:12px 32px; border-radius:6px; font-size:14px; font-weight:bold;">
+                    Descargar reporte
+                  </a>
+                </td>
+              </tr>
+            </table>
+            {% endif %}
+            {% endif %}
+
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background-color:#f8f9fa; padding:16px 32px; border-top:1px solid #e0e0e0;">
+            <p style="font-size:11px; color:#999; margin:0; text-align:center; line-height:1.6;">
+              Este es un mensaje automatico del sistema CMMS de TodoGas.<br>
+              Por favor no responda a este correo.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
