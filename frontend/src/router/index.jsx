@@ -2,6 +2,8 @@ import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 
 import LoginPage from '../pages/auth/LoginPage'
+import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage'
+import ResetPasswordPage from '../pages/auth/ResetPasswordPage'
 import ChangePasswordPage from '../pages/auth/ChangePasswordPage'
 import DashboardPage from '../pages/dashboard/DashboardPage'
 import MisActivosPage from '../pages/assets/MisActivosPage'
@@ -92,6 +94,8 @@ export const router = createBrowserRouter(
   [
     // Rutas públicas
     { path: '/login', element: <LoginPage /> },
+    { path: '/olvide-contrasena', element: <ForgotPasswordPage /> },
+    { path: '/restablecer-contrasena', element: <ResetPasswordPage /> },
     { path: '/cambiar-contrasena', element: <ChangePasswordPage /> },
     { path: '/privacidad', element: <PrivacyPage /> },
 

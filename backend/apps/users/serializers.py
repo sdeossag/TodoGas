@@ -222,3 +222,11 @@ class ResetPasswordRequestSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         return value.lower().strip()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Nueva contraseña con el enlace que llegó por correo (sin autenticación)."""
+
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, style={"input_type": "password"})

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import { SESSION_EXPIRED_KEY } from '../../api/client'
 import Icon from '../../components/ui/Icon'
@@ -19,6 +19,7 @@ const ROLE_ROUTES = {
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const login = useAuthStore((s) => s.login)
 
   const [email, setEmail] = useState('')
@@ -35,6 +36,8 @@ export default function LoginPage() {
   const clearTimer = useRef(null)
 
   useEffect(() => {
+    // Aviso que deja la pantalla de restablecer contraseña al terminar.
+    if (location.state?.notice) setNotice(location.state.notice)
     try {
       if (sessionStorage.getItem(SESSION_EXPIRED_KEY)) {
         sessionStorage.removeItem(SESSION_EXPIRED_KEY)
@@ -44,6 +47,7 @@ export default function LoginPage() {
       // sin sessionStorage no hay aviso que recuperar
     }
     return () => clearTimeout(clearTimer.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function showError(message) {
@@ -299,7 +303,13 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-8 text-xs leading-relaxed text-gray-500">
+          <p className="mt-5 text-sm">
+            <Link to="/olvide-contrasena" className="text-brand hover:underline">
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </p>
+
+          <p className="mt-6 text-xs leading-relaxed text-gray-500">
             ¿No puedes entrar? El administrador de tu organización puede restablecer tu
             contraseña desde el módulo de usuarios.
           </p>

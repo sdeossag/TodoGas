@@ -118,6 +118,9 @@ STORAGES = {
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 
+# Enlace de «¿Olvidaste tu contraseña?»: vale 1 hora.
+PASSWORD_RESET_TIMEOUT = 3600
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -170,6 +173,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "config.pagination.DefaultPagination",
     "PAGE_SIZE": 50,
     "NUM_PROXIES": TRUSTED_PROXY_COUNT,
+    # Solo aplican a las vistas que declaran throttle_scope; no hay throttle global.
+    "DEFAULT_THROTTLE_RATES": {
+        "password_reset": "5/hour",
+        "password_reset_confirm": "20/hour",
+    },
 }
 
 # ── Email ──────────────────────────────────────────────────────────────────

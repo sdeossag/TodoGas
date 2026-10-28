@@ -1,13 +1,18 @@
+import logging
 import secrets
 import string
 
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -15,11 +20,17 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.audit.services import LoginOutcome, log_login_attempt
 
 from . import permisos, privacy
-from .emails import send_password_reset_email, send_welcome_email
+from .emails import (
+    send_password_reset_email,
+    send_self_service_reset_email,
+    send_welcome_email,
+)
 from .models import User
 from .permissions import IsAdmin, TienePermiso
 from .serializers import (
     ChangePasswordSerializer,
+    PasswordResetConfirmSerializer,
+    ResetPasswordRequestSerializer,
     UserCreateSerializer,
     UserSerializer,
     UserUpdateSerializer,
@@ -39,6 +50,8 @@ def _generate_temp_password(length: int = 12) -> str:
         ):
             return pwd
 
+
+logger = logging.getLogger(__name__)
 
 _throttle = LoginRateThrottle()
 
@@ -143,6 +156,86 @@ class ChangePasswordView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         serializer.save()
         return Response({"detail": "Contraseña actualizada correctamente."}, status=status.HTTP_200_OK)
+
+
+PASSWORD_RESET_SENT = (
+    "Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña."
+)
+PASSWORD_RESET_INVALID = (
+    "El enlace no es válido o ya venció. Solicita uno nuevo desde «¿Olvidaste tu contraseña?»."
+)
+
+
+class PasswordResetRequestView(APIView):
+    """
+    POST /api/auth/password-reset/
+    Body: {email}
+    Responde siempre 200 con el mismo mensaje, exista o no la cuenta, para no
+    revelar qué correos están registrados.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    def post(self, request):
+        serializer = ResetPasswordRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data["email"]
+            user = User.objects.filter(email__iexact=email, is_active=True).first()
+            if user and user.has_usable_password() and user.deactivated_at is None:
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                try:
+                    send_self_service_reset_email(user, uid, token)
+                except Exception:
+                    # Mismo 200 aunque falle el correo: otra respuesta delataría la cuenta.
+                    logger.exception("No se pudo enviar el correo de restablecimiento")
+        return Response({"detail": PASSWORD_RESET_SENT}, status=status.HTTP_200_OK)
+
+
+class PasswordResetConfirmView(APIView):
+    """
+    POST /api/auth/password-reset/confirm/
+    Body: {uid, token, new_password}
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset_confirm"
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+
+        invalid = Response({"detail": PASSWORD_RESET_INVALID}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(pk=force_str(urlsafe_base64_decode(data["uid"])))
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist, DjangoValidationError):
+            return invalid
+        if (
+            not user.is_active
+            or user.deactivated_at is not None
+            or not default_token_generator.check_token(user, data["token"])
+        ):
+            return invalid
+
+        try:
+            validate_password(data["new_password"], user)
+        except DjangoValidationError as exc:
+            return Response({"new_password": exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(data["new_password"])
+        user.must_change_password = False
+        user.save(update_fields=["password", "must_change_password", "updated_at"])
+        _throttle.reset_attempts(user.email)
+        # La auditoria queda en AuditMiddleware, que ya registra todo POST bajo /api/auth/.
+        return Response(
+            {"detail": "Contraseña actualizada. Ya puedes iniciar sesión."},
+            status=status.HTTP_200_OK,
+        )
 
 
 class MeView(APIView):
