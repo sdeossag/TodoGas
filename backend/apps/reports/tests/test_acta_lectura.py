@@ -155,11 +155,10 @@ def test_interruptores_de_la_ficha_siguen_funcionando(equipo):
     assert "ALR-1" in html
 
 
-def test_apagar_la_ubicacion_quita_la_fila_de_ubicacion_del_cuadro(equipo):
+def test_la_ubicacion_del_cuadro_no_se_puede_apagar(equipo):
     ReportSettings.objects.create(options={"activo_ubicacion": False})
     html, _ = acta_html(equipo[0])
-    assert "Bloque A/Piso 1" not in _texto(_cuadro_del_activo(html))
-    assert "Calle 10" not in html
+    assert "Bloque A/Piso 1" in _texto(_cuadro_del_activo(html))
 
 
 # -- Ubicacion como ubicacion -------------------------------------------------
@@ -240,7 +239,7 @@ def test_cada_interruptor_apaga_solo_lo_suyo(equipo, clave):
 def test_sin_fechas_la_tabla_de_la_visita_no_deja_huecos(equipo):
     ReportSettings.objects.create(options={
         "visita_fecha_programada": False, "visita_trabajo_en_campo": False,
-        "visita_duracion": False, "visita_ejecutor": False, "visita_ubicacion": False,
+        "visita_duracion": False, "visita_ejecutor": False,
         "visita_activos": False,
     })
     html, _ = acta_html(equipo[0])

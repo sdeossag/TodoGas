@@ -31,10 +31,27 @@ def test_el_acta_trae_la_direccion_de_la_sububicacion(ot):
     assert "Calle 10 #20-30, Medellin" in html
 
 
-def test_la_direccion_va_con_el_interruptor_de_ubicacion_del_activo(ot):
-    ReportSettings.objects.create(options={"activo_ubicacion": False})
+def test_la_ubicacion_sale_aunque_la_configuracion_guardada_la_apague(ot):
+    """REV-12: la ubicacion fisica es obligatoria; un false guardado antes se ignora."""
+    ReportSettings.objects.create(options={"activo_ubicacion": False, "visita_ubicacion": False})
     html, _ = acta_html(ot)
-    assert "Calle 10 #20-30, Medellin" not in html
+    assert "Calle 10 #20-30, Medellin" in html
+    assert "Bloque A" in html and "Piso 1" in html
+
+
+def test_la_ubicacion_ya_no_es_un_interruptor():
+    from apps.reports.options import CATALOGO, efectivas
+
+    claves = {c for c, _, _ in CATALOGO}
+    assert not {"activo_ubicacion", "visita_ubicacion"} & claves
+    assert efectivas({"activo_ubicacion": False, "visita_ubicacion": False}) == efectivas({})
+
+
+def test_el_acta_trae_el_aviso_de_firma_electronica_y_el_hash(ot):
+    html, reporte = acta_html(ot)
+    assert "Ley 527 de 1999" in html
+    assert "Decreto 2364 de 2012" in html
+    assert f"Hash de integridad: <span class=\"hash\">{reporte.content_hash}</span>" in html
 
 
 def test_mapa_de_la_sububicacion_cuando_no_hay_gps_del_tecnico(ot):

@@ -55,6 +55,8 @@
   td, th, .meta-row { overflow-wrap: anywhere; word-break: break-word; }
   .alert { color: #b42318; }
   .kv:last-child { margin-bottom: 0; }
+  .legal { margin-top: 18px; padding-top: 6px; border-top: 1px solid #ccc; font-size: 7pt; line-height: 1.35; color: #666; overflow-wrap: anywhere; word-break: break-word; page-break-inside: avoid; }
+  .legal .hash { font-family: 'Courier New', monospace; }
 </style>
 </head>
 <body>
@@ -318,6 +320,13 @@
   </table>
 </div>
 {% endif %}
+
+{# Aviso fijo (RNF-COM-03): no se configura. El hash es el de contenido: lo que se verifica contra la OT, no contra el HTML. #}
+<div class="legal">
+  Este documento ha sido firmado electrónicamente en cumplimiento de la Ley 527 de 1999 y su Decreto 2364 de 2012. El hash de integridad garantiza que el documento no ha sido alterado desde su firma.
+  Hash de integridad: <span class="hash">{{ report_hash }}</span>.
+  Se verifica en TodoGas CMMS, en el detalle de la orden {{ work_order.wo_code }}, y debe coincidir con este código.
+</div>
 
 </body>
 </html>

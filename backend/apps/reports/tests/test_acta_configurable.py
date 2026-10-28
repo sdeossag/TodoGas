@@ -24,7 +24,7 @@ from apps.maintenance import services
 from apps.maintenance.models import Task
 from apps.maintenance.testing import make_plan
 from apps.reports.models import GeneratedReport, ReportSettings
-from apps.reports.options import CLAVES, efectivas, numeracion
+from apps.reports.options import CLAVES, OBLIGATORIAS, efectivas, numeracion
 from apps.users.models import User
 from apps.work_orders.models import WorkOrder
 
@@ -114,7 +114,7 @@ def test_sin_ninguna_firma_no_hay_seccion_de_firmas():
 def test_el_administrador_ve_el_catalogo_y_lo_siempre_incluido(admin):
     r = cliente(admin).get(URL)
     assert r.status_code == 200
-    assert {c["key"] for c in r.data["catalog"]} == CLAVES
+    assert {c["key"] for c in r.data["catalog"]} == CLAVES - set(OBLIGATORIAS)
     assert "Resultados de la revisión (checklist)" in r.data["always_included"]
     assert all(r.data["options"].values())
 

@@ -12,7 +12,6 @@ integridad, que es con lo que un auditor verifica que el acta no se altero.
 
 # (clave, seccion, rotulo). El orden es el de la pantalla de configuracion.
 CATALOGO = [
-    ("visita_ubicacion", "Datos de la visita", "Ubicación de la visita"),
     ("visita_activos", "Datos de la visita", "Cuántos activos se intervinieron"),
     ("visita_ejecutor", "Datos de la visita", "Quién hizo el trabajo"),
     ("visita_fecha_programada", "Datos de la visita", "Fecha programada"),
@@ -20,7 +19,6 @@ CATALOGO = [
     ("visita_duracion", "Datos de la visita", "Tiempo que tomó el trabajo"),
     ("visita_descripcion", "Datos de la visita", "Descripción del trabajo"),
     ("visita_notas", "Datos de la visita", "Notas de la orden"),
-    ("activo_ubicacion", "Activos", "Ubicación (con dirección y mapa)"),
     ("activo_ubicacion_equipo", "Activos", "Dónde está el equipo dentro de la ubicación"),
     ("activo_tipo", "Activos", "Tipo de equipo"),
     ("activo_fabricante", "Activos", "Fabricante"),
@@ -40,20 +38,32 @@ CATALOGO = [
     ("firma_aceptado", "Firmas", "Aceptado por (firma del cliente)"),
 ]
 
-CLAVES = {clave for clave, _, _ in CATALOGO}
+# La ubicacion fisica (ruta del arbol de ubicaciones, con direccion y mapa) sale
+# siempre (REV-12): el GPS no distingue equipos de un mismo edificio. Ya no es un
+# interruptor; las claves siguen existiendo para que las configuraciones
+# guardadas antiguas (que pueden traerlas en false) se sigan leyendo, pero su
+# valor se ignora.
+OBLIGATORIAS = ("visita_ubicacion", "activo_ubicacion")
+
+CLAVES = {clave for clave, _, _ in CATALOGO} | set(OBLIGATORIAS)
 
 SIEMPRE_INCLUIDO = [
     "Número de orden, tipo y fecha de emisión",
     "Hospital",
+    "Ubicación física (ruta de la ubicación): siempre aparece en el acta",
     "Resultados de la revisión (checklist)",
     "Código de verificación en el pie de página",
+    "Aviso de firma electrónica (Ley 527 de 1999)",
 ]
 
 
 def efectivas(guardadas=None):
     """Todas las claves del catalogo: lo guardado y, lo demas, encendido."""
     guardadas = guardadas or {}
-    return {clave: bool(guardadas.get(clave, True)) for clave in CLAVES}
+    return {
+        clave: True if clave in OBLIGATORIAS else bool(guardadas.get(clave, True))
+        for clave in CLAVES
+    }
 
 
 def numeracion(op):
