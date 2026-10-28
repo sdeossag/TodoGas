@@ -146,6 +146,14 @@ CELERY_RESULT_SERIALIZER = "json"
 # Cuantos proxies propios (ALB, etc.) hay delante de la app. Lo usan la IP de
 # auditoria (apps.audit.ip) y el throttling de DRF (NUM_PROXIES). Con 0 se
 # ignora X-Forwarded-For, que lo escribe el cliente.
+# Habeas Data (Ley 1581 de 2012). PRIVACY_NOTICE_VERSION se cambia junto con
+# VERSION de frontend/src/legal/avisoPrivacidad.js: al subirla, todos vuelven a
+# aceptar. PRIVACY_POLICY_URL vacio: el frontend usa su ruta /privacidad.
+PRIVACY_NOTICE_VERSION = config("PRIVACY_NOTICE_VERSION", default="2026-10-28")
+PRIVACY_POLICY_URL = config("PRIVACY_POLICY_URL", default="")
+# Dias sin actividad (desactivada o sin entrar) para poder anonimizar una cuenta.
+ANONYMIZE_MIN_INACTIVE_DAYS = config("ANONYMIZE_MIN_INACTIVE_DAYS", default=730, cast=int)
+
 TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=0, cast=int)
 
 REST_FRAMEWORK = {

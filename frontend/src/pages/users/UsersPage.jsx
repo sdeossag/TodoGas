@@ -16,6 +16,8 @@ import Icon from '../../components/ui/Icon'
 import { entityTypeLabel } from '../../constants/labels'
 import useModalDismiss from '../../hooks/useModalDismiss'
 import { agruparPorArea, cuantosExtra } from '../../utils/permisos'
+import { exportUserPersonalData, useAnonymizeUser, descargarJson } from '../../api/privacy'
+import { TEXTO_RECORDATORIO_USUARIOS } from '../../utils/consentimiento'
 
 export const ROLE_LABELS = {
   ADMIN: 'Administrador',
@@ -273,6 +275,9 @@ function CreateUserModal({ hospitals, onClose, onCreated }) {
   return (
     <Modal title="Nuevo usuario" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
+        <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+          {TEXTO_RECORDATORIO_USUARIOS}
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>
@@ -712,6 +717,9 @@ export default function UsersPage() {
   const deactivate = useDeactivateUser()
   const update = useUpdateUser()
   const resetPassword = useResetPassword()
+  const anonymize = useAnonymizeUser()
+  const [anonymizing, setAnonymizing] = useState(null)
+  const [anonError, setAnonError] = useState('')
 
   const [search, setSearch] = useState('')
   const [role, setRole] = useState('')
@@ -793,6 +801,28 @@ export default function UsersPage() {
   }
 
   const togglePending = deactivate.isPending || update.isPending
+
+  async function handleExport(target) {
+    setRowError('')
+    try {
+      const datos = await exportUserPersonalData(target.id)
+      descargarJson(datos, `datos-personales-${target.id.slice(0, 8)}.json`)
+      flash('Datos personales exportados. Queda constancia en la auditoría.')
+    } catch (err) {
+      setRowError(generalError(err, 'No se pudieron exportar los datos.'))
+    }
+  }
+
+  function handleAnonymize() {
+    setAnonError('')
+    anonymize.mutate(anonymizing.id, {
+      onSuccess: () => {
+        setAnonymizing(null)
+        flash('Usuario anonimizado.')
+      },
+      onError: (err) => setAnonError(generalError(err, 'No se pudo anonimizar al usuario.')),
+    })
+  }
 
   return (
     <div className="space-y-5 max-w-6xl">
@@ -980,6 +1010,27 @@ export default function UsersPage() {
                                 >
                                   {u.is_active ? 'Desactivar' : 'Activar'}
                                 </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleExport(u)}
+                                  title="Descargar los datos personales de este usuario (JSON)"
+                                  className="px-2.5 py-1 text-xs text-gray-600 rounded border border-gray-200 hover:bg-gray-50"
+                                >
+                                  Exportar datos
+                                </button>
+                                {!u.is_active && !isSelf && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setAnonError('')
+                                      setAnonymizing(u)
+                                    }}
+                                    title="Anonimizar datos personales (Ley 1581)"
+                                    className="px-2.5 py-1 text-xs text-red-600 rounded border border-red-200 hover:bg-red-50"
+                                  >
+                                    Anonimizar
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>
@@ -1003,6 +1054,60 @@ export default function UsersPage() {
             flash(`Usuario creado. Se envio el correo de bienvenida a ${email}`)
           }}
         />
+      )}
+
+      {anonymizing && (
+        <Modal title="Anonimizar usuario" onClose={() => setAnonymizing(null)}>
+          <div className="space-y-3 text-sm text-gray-700">
+            <p>
+              Vas a anonimizar a <strong>{anonymizing.email}</strong>. Esta acción no se puede
+              deshacer. Solo se permite con la cuenta desactivada y más de 2 años sin actividad.
+            </p>
+            <div>
+              <p className="font-medium text-gray-800">Se borra o reemplaza</p>
+              <ul className="list-disc pl-5 text-xs text-gray-600">
+                <li>Nombre y apellido: pasan a «Usuario anonimizado» con un código.</li>
+                <li>Correo: se cambia por uno genérico; ya no podrá iniciar sesión.</li>
+                <li>Teléfono y código de empleado: se vacían.</li>
+                <li>Contraseña: se inutiliza.</li>
+                <li>Firma guardada: se borra.</li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-medium text-gray-800">Se conserva</p>
+              <ul className="list-disc pl-5 text-xs text-gray-600">
+                <li>Órdenes de trabajo, firmas de las actas y fotos de evidencia.</li>
+                <li>El registro de auditoría y la constancia de aceptación del aviso de privacidad.</li>
+              </ul>
+              <p className="mt-1 text-xs text-gray-500">
+                La normativa sanitaria obliga a conservar estos registros.
+              </p>
+            </div>
+            {anonError && (
+              <p role="alert" className="text-xs text-red-600">
+                {anonError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setAnonymizing(null)}
+                disabled={anonymize.isPending}
+                className="px-3 py-1.5 text-sm text-gray-600 rounded-lg border border-gray-200 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleAnonymize}
+                disabled={anonymize.isPending}
+                className="px-3 py-1.5 text-sm font-medium text-white rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-60"
+              >
+                {anonymize.isPending ? 'Anonimizando...' : 'Anonimizar'}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {editing && (

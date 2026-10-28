@@ -37,6 +37,7 @@ import ClientReportsPage from '../pages/client/ClientReportsPage'
 import ClientAssetPage from '../pages/client/ClientAssetPage'
 import ClientWorkOrderPage from '../pages/client/ClientWorkOrderPage'
 import NotFoundPage from '../pages/NotFoundPage'
+import PrivacyPage from '../pages/PrivacyPage'
 import UiSpinner from '../components/ui/Spinner'
 
 import AdminLayout from '../layouts/AdminLayout'
@@ -92,6 +93,7 @@ export const router = createBrowserRouter(
     // Rutas públicas
     { path: '/login', element: <LoginPage /> },
     { path: '/cambiar-contrasena', element: <ChangePasswordPage /> },
+    { path: '/privacidad', element: <PrivacyPage /> },
 
     // Rutas para ADMIN y SUP
     {

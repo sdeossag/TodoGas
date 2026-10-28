@@ -53,6 +53,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         help_text="Obliga al usuario a cambiar la contraseña en el próximo login."
     )
 
+    # Cuando el administrador desactivo la cuenta. Sirve para contar los 2 anos
+    # que exige la anonimizacion (Ley 1581). Vacio en cuentas activas.
+    deactivated_at = models.DateTimeField(null=True, blank=True)
+
     hospital = models.ForeignKey(
         "assets.Hospital", on_delete=models.PROTECT,
         null=True, blank=True,
@@ -116,3 +120,31 @@ class PermisoExtra(models.Model):
 
     def __str__(self):
         return f"{self.user_id} · {self.codigo}"
+
+
+class PrivacyConsent(models.Model):
+    """
+    Aceptacion del aviso de privacidad (Ley 1581 de 2012, Decreto 1377 de 2013).
+    Una fila por usuario y version aceptada. Solo se inserta: no hay endpoint
+    para borrarla ni editarla, y la anonimizacion tampoco la toca porque es la
+    prueba de que el titular autorizo el tratamiento.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        "users.User", on_delete=models.PROTECT, related_name="privacy_consents",
+    )
+    version = models.CharField(max_length=20)
+    accepted_at = models.DateTimeField(default=timezone.now)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True, default="")
+
+    class Meta:
+        db_table = "users_privacyconsent"
+        ordering = ["-accepted_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "version"], name="uniq_privacy_consent_user_version"),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} acepto {self.version}"

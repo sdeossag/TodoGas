@@ -17,6 +17,8 @@ class AuditLog(models.Model):
         STATUS_CHANGE = "STATUS_CHANGE", "Cambio de estado"
         LOGIN = "LOGIN", "Inicio de sesión"
         SYNC = "SYNC", "Sincronización offline"
+        EXPORT = "EXPORT", "Exportación"
+        ANONYMIZE = "ANONYMIZE", "Anonimización"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(

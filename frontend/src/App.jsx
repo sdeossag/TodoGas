@@ -8,6 +8,7 @@ import { initFCM } from './notifications/fcm'
 import useAuthStore from './store/authStore'
 import useNetworkStore from './store/networkStore'
 import { queryClient } from './api/queryClient'
+import ConsentGate from './components/legal/ConsentGate'
 
 function AppBootstrap({ children }) {
   const loadUser = useAuthStore((s) => s.loadUser)
@@ -37,6 +38,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AppBootstrap>
         <RouterProvider router={router} />
+        <ConsentGate />
       </AppBootstrap>
     </QueryClientProvider>
   )

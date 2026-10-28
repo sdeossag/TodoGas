@@ -1,5 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 
 from . import permisos
@@ -173,6 +174,9 @@ class UserUpdateSerializer(_PermisosExtraMixin, serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         extras = validated_data.pop("permisos_extra", None)
+        if "is_active" in validated_data and validated_data["is_active"] != instance.is_active:
+            # Fecha de desactivacion: base de los 2 anos de la anonimizacion.
+            instance.deactivated_at = None if validated_data["is_active"] else timezone.now()
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()

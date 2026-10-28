@@ -61,7 +61,7 @@ export default function MiFirmaGuardada() {
   }
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-card p-5">
+    <section id="mi-firma" className="bg-white rounded-xl border border-gray-200 shadow-card p-5">
       <h2 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
         Mi firma
       </h2>

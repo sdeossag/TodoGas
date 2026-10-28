@@ -3,6 +3,7 @@ import string
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -13,7 +14,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.audit.services import LoginOutcome, log_login_attempt
 
-from . import permisos
+from . import permisos, privacy
 from .emails import send_password_reset_email, send_welcome_email
 from .models import User
 from .permissions import IsAdmin, TienePermiso
@@ -183,7 +184,7 @@ class UserViewSet(viewsets.ModelViewSet):
             return [TienePermiso("ot.asignar", "ot.crear_manual")()]
         if self.action in (
             "deactivate", "reset_password", "create", "update", "partial_update", "destroy",
-            "permissions", "permissions_catalog",
+            "permissions", "permissions_catalog", "personal_data_of", "anonymize",
         ):
             return [IsAdmin()]
         return [IsAuthenticated()]
@@ -205,6 +206,40 @@ class UserViewSet(viewsets.ModelViewSet):
     def permissions_catalog(self, request):
         """GET /api/users/permissions-catalog/ — las casillas de permisos adicionales."""
         return Response(permisos.catalogo_para_api())
+
+    @action(detail=False, methods=["get", "post"], url_path="me/privacy-consent")
+    def privacy_consent(self, request):
+        """
+        GET /api/users/me/privacy-consent/ — {required, version, accepted_at, policy_url}.
+        POST registra la aceptacion de la version vigente del aviso de privacidad.
+        """
+        if request.method == "POST":
+            return Response(privacy.accept_consent(request.user, request), status=status.HTTP_200_OK)
+        return Response(privacy.consent_status(request.user))
+
+    @action(detail=False, methods=["get"], url_path="me/personal-data")
+    def personal_data(self, request):
+        """GET /api/users/me/personal-data/ — los datos personales del propio usuario."""
+        return Response(privacy.personal_data(request.user))
+
+    @action(detail=True, methods=["get"], url_path="personal-data")
+    def personal_data_of(self, request, pk=None):
+        """GET /api/users/{id}/personal-data/ — ADMIN exporta los datos de otro usuario."""
+        target = self.get_object()
+        privacy.log_export(target, request.user, request)
+        return Response(privacy.personal_data(target))
+
+    @action(detail=True, methods=["post"], url_path="anonymize")
+    def anonymize(self, request, pk=None):
+        """POST /api/users/{id}/anonymize/ — solo ADMIN, cuenta inactiva hace mas de 2 anos."""
+        target = self.get_object()
+        if target == request.user:
+            return Response({"detail": "No puedes anonimizarte a ti mismo."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            privacy.anonymize(target, request.user, request)
+        except privacy.AnonymizeError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(UserSerializer(User.objects.get(pk=target.pk)).data)
 
     @action(detail=True, methods=["get", "put"], url_path="permissions")
     def permissions(self, request, pk=None):
@@ -238,7 +273,8 @@ class UserViewSet(viewsets.ModelViewSet):
         if user == request.user:
             return Response({"detail": "No puedes desactivarte a ti mismo."}, status=status.HTTP_400_BAD_REQUEST)
         user.is_active = False
-        user.save(update_fields=["is_active", "updated_at"])
+        user.deactivated_at = timezone.now()
+        user.save(update_fields=["is_active", "deactivated_at", "updated_at"])
         return Response({"detail": f"Usuario {user.email} desactivado."}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="reset-password")

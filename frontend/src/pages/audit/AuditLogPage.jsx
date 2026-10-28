@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import useAuthStore from '../../store/authStore'
-import { useAuditLog } from '../../api/audit'
+import { downloadAuditLogCsv, useAuditLog } from '../../api/audit'
 import { useUsers } from '../../api/users'
 import { ENTITY_TYPE_LABELS, entityTypeLabel } from '../../constants/labels'
 import Spinner from '../../components/ui/Spinner'
@@ -17,8 +17,12 @@ const ACTION_LABELS = {
   STATUS_CHANGE: 'Cambio de estado',
   LOGIN: 'Inicio de sesion',
   SYNC: 'Sincronizacion',
+  EXPORT: 'Exportacion',
+  ANONYMIZE: 'Anonimizacion',
 }
 const ACTION_COLORS = {
+  EXPORT: 'bg-indigo-100 text-indigo-700',
+  ANONYMIZE: 'bg-rose-100 text-rose-700',
   CREATE: 'bg-green-100 text-green-700',
   UPDATE: 'bg-blue-100 text-blue-700',
   DELETE: 'bg-red-100 text-red-600',
@@ -114,6 +118,8 @@ export default function AuditLogPage() {
   const [applied, setApplied] = useState(EMPTY_FILTERS)
   const [page, setPage] = useState(1)
   const [expandedId, setExpandedId] = useState(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
 
   // El enlace "Ver historial completo" del modal de usuarios llega con ?user_id=
   const urlUserId = searchParams.get('user_id') ?? ''
@@ -162,29 +168,17 @@ export default function AuditLogPage() {
     }
   }
 
-  function exportCsv() {
-    const header = ['Fecha', 'Usuario', 'Accion', 'Entidad', 'ID entidad', 'IP']
-    const rows = results.map((l) => [
-      new Date(l.timestamp).toLocaleString('es-CO'),
-      l.user?.full_name || 'Sistema',
-      ACTION_LABELS[l.action] || l.action,
-      entityTypeLabel(l.entity_type),
-      l.entity_id,
-      l.ip_address || '',
-    ])
-    const csv = [header, ...rows]
-      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    // BOM para que Excel en es-CO no rompa los acentos.
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `auditoria-pagina-${page}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+  // Exporta todo el rango filtrado (no solo la pagina visible) desde el servidor.
+  async function exportCsv() {
+    setExporting(true)
+    setExportError('')
+    try {
+      await downloadAuditLogCsv(compact(applied))
+    } catch (err) {
+      setExportError(err.message)
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (user?.role !== 'ADMIN') {
@@ -204,13 +198,16 @@ export default function AuditLogPage() {
           <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">Log de auditoria</h1>
           <p className="text-sm text-gray-500 mt-0.5">{count} registros</p>
         </div>
-        <button
-          onClick={exportCsv}
-          disabled={results.length === 0}
-          className="px-4 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
-        >
-          Exportar CSV (pagina actual)
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={exportCsv}
+            disabled={exporting}
+            className="px-4 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          >
+            {exporting ? 'Exportando…' : 'Exportar CSV'}
+          </button>
+          {exportError && <p className="text-xs text-red-500 max-w-xs text-right">{exportError}</p>}
+        </div>
       </div>
 
       {/* Filtros */}

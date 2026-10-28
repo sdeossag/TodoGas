@@ -5,6 +5,7 @@ import { saveSignatureOffline } from '../../db/repositories'
 import useAuthStore from '../../store/authStore'
 import useNetworkStore from '../../store/networkStore'
 import { base64DeDataUrl, cargoDelFirmante } from '../../utils/firmaGuardada'
+import AutorizacionFirma from '../legal/AutorizacionFirma'
 
 function extractError(err) {
   const data = err?.response?.data
@@ -333,6 +334,11 @@ export default function SignaturePad({
         >
           Limpiar
         </button>
+        {signatureType === 'CLIENT' && !onCapture && (
+          <div className="mt-2">
+            <AutorizacionFirma />
+          </div>
+        )}
       </div>
 
       {!onCapture && (

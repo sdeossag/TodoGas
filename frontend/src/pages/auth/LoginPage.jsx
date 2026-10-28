@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import { SESSION_EXPIRED_KEY } from '../../api/client'
 import Icon from '../../components/ui/Icon'
@@ -302,6 +302,11 @@ export default function LoginPage() {
           <p className="mt-8 text-xs leading-relaxed text-gray-500">
             ¿No puedes entrar? El administrador de tu organización puede restablecer tu
             contraseña desde el módulo de usuarios.
+          </p>
+          <p className="mt-3 text-xs text-gray-500">
+            <Link to="/privacidad" className="underline hover:text-gray-700">
+              Aviso de privacidad
+            </Link>
           </p>
         </div>
       </main>
