@@ -2228,7 +2228,6 @@ function RepuestosTab({ wo, user }) {
                 <th className="px-4 py-3">Codigo</th>
                 <th className="px-4 py-3">Cantidad</th>
                 <th className="px-4 py-3">Unidad</th>
-                <th className="px-4 py-3">Costo unit.</th>
                 <th className="px-4 py-3">Fecha</th>
                 <th className="px-4 py-3">Registrado por</th>
               </tr>
@@ -2240,9 +2239,6 @@ function RepuestosTab({ wo, user }) {
                   <td className="px-4 py-3 font-mono text-xs text-gray-500">{mov.item?.code ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-700">{parseFloat(mov.quantity).toLocaleString('es-CO')}</td>
                   <td className="px-4 py-3 text-gray-500">{mov.item?.unit_of_measure ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">
-                    {mov.item?.unit_cost ? `$${parseFloat(mov.item.unit_cost).toLocaleString('es-CO')}` : '—'}
-                  </td>
                   <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                     {new Date(mov.performed_at).toLocaleDateString('es-CO')}
                   </td>

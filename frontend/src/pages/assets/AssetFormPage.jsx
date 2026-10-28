@@ -7,6 +7,7 @@ import { avisoFechaInicio } from '../../utils/inicioProtocolo'
 import DecommissionPreview from '../../components/assets/DecommissionPreview'
 import Icon from '../../components/ui/Icon'
 import { flattenTree, indentedLabel } from '../../utils/locationTree'
+import { generarCodigoActivo } from '../../utils/codigoActivo'
 
 const EMPTY = {
   hospital: '',
@@ -28,15 +29,6 @@ const EMPTY = {
   supplier: '',
   avg_daily_usage_hours: '',
   notes: '',
-}
-
-function generateCode(hospitalCode, assetType) {
-  const base = [
-    hospitalCode?.slice(0, 3).toUpperCase() ?? 'XXX',
-    assetType?.slice(0, 3).toUpperCase() ?? 'EQP',
-    String(Date.now()).slice(-4),
-  ].join('-')
-  return base
 }
 
 export default function AssetFormPage() {
@@ -146,7 +138,7 @@ export default function AssetFormPage() {
       if (!data || typeof data !== 'object') {
         setErrors({
           non_field_errors:
-            typeof data === 'string'
+            typeof data === 'string' && !data.trimStart().startsWith('<')
               ? data
               : 'No se pudo guardar el activo. Revisa tu conexión e intenta de nuevo.',
         })
@@ -266,7 +258,7 @@ export default function AssetFormPage() {
                     <input value={form.code} onChange={(e) => set('code', e.target.value)}
                       className={`${inp(errors.code)} flex-1`} placeholder="VEN-001" />
                     <button type="button"
-                      onClick={() => set('code', generateCode(selectedHospital?.code, form.asset_type))}
+                      onClick={() => set('code', generarCodigoActivo(selectedHospital?.code, form.asset_type))}
                       className="px-2.5 py-2 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 whitespace-nowrap flex-shrink-0">
                       Generar
                     </button>
