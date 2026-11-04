@@ -16,6 +16,7 @@ from apps.users.models import User
 from apps.users.permissions import IsAdmin, IsGestorDeOT, TienePermiso
 
 from . import integrity
+from .historica import bloqueo_historica
 from .integrity import verify_work_order
 from .models import WorkOrder, WorkOrderStatusHistory
 from .serializers import (
@@ -219,6 +220,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
                 {"detail": "Solo puedes editar tus propias OTs."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if blocked := bloqueo_historica(wo):
+            return blocked
         if blocked := _terminal_state_response(wo):
             return blocked
         # Reasignar por esta via es lo mismo que "Asignar": pide el mismo permiso.
@@ -237,6 +240,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def transition(self, request, pk=None):
         wo = self.get_object()
+        if blocked := bloqueo_historica(wo):
+            return blocked
         new_status = request.data.get("new_status")
         if not new_status:
             return Response(
@@ -280,6 +285,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if not permisos.puede(request.user, "ot.asignar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
+        if blocked := bloqueo_historica(wo):
+            return blocked
         # Segunda via de mutacion: `assign` no pasa por partial_update, asi que
         # necesita su propio guard o el tecnico de una OT cerrada seguiria
         # siendo editable (RF-OT-06 solo permite reasignar en estados activos).
@@ -333,6 +340,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if not permisos.puede(request.user, "ot.revisar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
+        if blocked := bloqueo_historica(wo):
+            return blocked
         if wo.status != WorkOrder.Status.IN_REVIEW:
             return Response(
                 {"detail": "Solo se corrige la fecha de una OT en revisión."},
@@ -421,6 +430,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
 
         wo = self.get_object()
+        if blocked := bloqueo_historica(wo):
+            return blocked
         if wo.status != WorkOrder.Status.COMPLETED:
             return Response(
                 {"detail": "Solo se puede generar el reporte de una OT completada."},
@@ -447,6 +458,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if not permisos.puede(request.user, "ot.cancelar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
+        if blocked := bloqueo_historica(wo):
+            return blocked
         comment = request.data.get("comment", "").strip()
         if not comment:
             return Response(
@@ -483,6 +496,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if not permisos.puede(request.user, "tareas.planificar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
+        if blocked := bloqueo_historica(wo):
+            return blocked
         entrada = TaskIdsSerializer(data=request.data, context={"request": request})
         entrada.is_valid(raise_exception=True)
         try:
@@ -503,6 +518,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if not permisos.puede(request.user, "tareas.planificar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
+        if blocked := bloqueo_historica(wo):
+            return blocked
         entrada = TaskIdsSerializer(
             data={"task_ids": [request.data.get("task_id")]}, context={"request": request}
         )
@@ -526,6 +543,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         if not permisos.puede(request.user, "tareas.planificar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         wo = self.get_object()
+        if blocked := bloqueo_historica(wo):
+            return blocked
         entrada = TaskChecklistSerializer(data=request.data, context={"work_order": wo})
         entrada.is_valid(raise_exception=True)
         services.change_task_checklist(

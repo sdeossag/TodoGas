@@ -9,6 +9,7 @@ from apps.audit.ip import client_ip
 from apps.audit.models import AuditLog
 from apps.users import permisos, scope
 from apps.users.models import User
+from apps.work_orders.historica import bloqueo_historica
 from apps.work_orders.models import WorkOrder
 
 from .models import Photo, Signature
@@ -113,6 +114,8 @@ class PhotoViewSet(viewsets.GenericViewSet):
             return err
         if not _can_write_evidence(request.user, wo):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        if blocked := bloqueo_historica(wo):
+            return blocked
 
         # La app reintenta la subida cuando no le llega la respuesta. Si la foto
         # ya entro, se devuelve la misma: offline_uuid es unico y crearla de
@@ -173,6 +176,8 @@ class PhotoViewSet(viewsets.GenericViewSet):
         wo = photo.work_order
         if not (_can_read_wo(request.user, wo) and _can_write_evidence(request.user, wo)):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        if blocked := bloqueo_historica(wo):
+            return blocked
         if not _acepta_fotos(request.user, wo):
             return Response(
                 {"detail": "La foto ya no se puede cambiar: la OT no está en proceso ni en revisión."},
@@ -231,6 +236,8 @@ class SignatureViewSet(viewsets.GenericViewSet):
             return err
         if not _can_write_evidence(request.user, wo):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        if blocked := bloqueo_historica(wo):
+            return blocked
         if wo.status != WorkOrder.Status.IN_PROGRESS:
             return Response(
                 {"detail": "Solo se puede agregar firmas a OTs en estado IN_PROGRESS."},

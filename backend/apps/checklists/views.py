@@ -14,6 +14,7 @@ from apps.users.models import User
 from apps.users import permisos
 from apps.users.permissions import IsAdminOrSupOrTec, TienePermiso
 from apps.work_orders.device_time import device_time
+from apps.work_orders.historica import bloqueo_historica
 
 from .models import ChecklistResponse, ChecklistTemplate, ChecklistTemplateVersion
 from .serializers import (
@@ -121,6 +122,8 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         revisarlos, pero responder y cerrar sigue siendo de quien tiene la OT
         (admin y supervisor, como hoy, pueden ademas con las ajenas).
         """
+        if (bloqueo := bloqueo_historica(response.task.work_order)) is not None:
+            return bloqueo
         if request.user.role == User.Role.TEC and response.task.work_order.assigned_to_id != request.user.id:
             return Response(
                 {"detail": "Solo quien tiene asignada la OT llena su checklist."},
@@ -180,6 +183,14 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if (bloqueo := bloqueo_historica(serializer.validated_data["task"].work_order)) is not None:
+            return bloqueo
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=["post"], url_path="submit-field")
     def submit_field(self, request, pk=None):
         response = self.get_object()
@@ -231,6 +242,8 @@ class ChecklistResponseViewSet(viewsets.ModelViewSet):
         if not permisos.puede(request.user, "ot.revisar"):
             return Response(status=status.HTTP_403_FORBIDDEN)
         response = self.get_object()
+        if (bloqueo := bloqueo_historica(response.task.work_order)) is not None:
+            return bloqueo
         if response.task.work_order.status != "IN_REVIEW":
             return Response(
                 {"detail": "Solo se corrige una OT en revisión. En proceso la llena quien la ejecuta."},

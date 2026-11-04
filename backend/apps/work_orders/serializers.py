@@ -94,7 +94,7 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
             "id", "wo_number", "wo_code", "title", "task_type", "status", "priority",
             "scheduled_date", "assets", "assets_count", "hospital", "location", "assigned_to",
             "created_at", "is_overdue", "has_report", "report_id", "pending_count",
-            "last_rejection",
+            "last_rejection", "origin", "fracttal_folio", "external_executor",
         ]
 
     def get_last_rejection(self, obj):
@@ -186,6 +186,9 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
     signatures_count = serializers.SerializerMethodField()
     location_detail = serializers.SerializerMethodField()
     intervention_corrected_by_name = serializers.SerializerMethodField()
+    # Fotos de una OT importada de Fracttal que aun no se han traido (solo el
+    # numero: las rutas internas de Fracttal no salen del servidor).
+    fracttal_photos_pending = serializers.SerializerMethodField()
 
     # La correccion de la fecha de intervencion es dato interno: la cuenta de
     # hospital ve el acta, no quien la corrigio.
@@ -202,6 +205,14 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
                 datos.pop(campo, None)
         return datos
 
+    def get_fracttal_photos_pending(self, obj):
+        if not obj.origin:
+            return 0
+        try:
+            return max(int((obj.fracttal_data or {}).get("fotos_pendientes") or 0), 0)
+        except (TypeError, ValueError):
+            return 0
+
     def get_intervention_corrected_by_name(self, obj):
         u = obj.intervention_corrected_by
         return f"{u.first_name} {u.last_name}".strip() or u.email if u else None
@@ -210,7 +221,7 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
         model = WorkOrder
         fields = WorkOrderListSerializer.Meta.fields + [
             "photos_count", "signatures_count", "location_detail",
-            "description", "classification_1", "classification_2",
+            "fracttal_photos_pending", "description", "classification_1", "classification_2",
             "progress", "progress_measure", "request_number",
             "started_at", "completed_at", "estimated_duration",
             "actual_duration", "downtime", "rating", "notes",

@@ -17,6 +17,7 @@ import { formatDate } from '../../utils/maintenance'
 import { useUsers } from '../../api/users'
 import { formatWoCode } from '../../utils/workOrder'
 import { ultimoRechazo, fechaDeRechazo } from '../../utils/rechazoOT'
+import { asignadoA, avisoHistorica, esHistorica, textoFotosPendientes } from '../../utils/otHistorica'
 import {
   useChecklistResponse,
   useChecklistTemplates,
@@ -27,7 +28,7 @@ import {
   useSetBlockCount,
   useSetPendientes,
 } from '../../api/checklists'
-import { booleanLabel, booleanOptions, getFieldType } from '../../constants/checklistFields'
+import { booleanLabel, booleanOptions, getFieldType, PASS_ALERT_FAIL_CLASSES, passAlertFailLabel, passAlertFailOptions } from '../../constants/checklistFields'
 import StatusBadge from '../../components/workOrders/StatusBadge'
 import PriorityBadge from '../../components/workOrders/PriorityBadge'
 import CorreccionIntervencion from '../../components/workOrders/CorreccionIntervencion'
@@ -136,17 +137,19 @@ export default function WorkOrderDetailPage() {
   const { user } = useAuthStore()
   const role = user?.role
   const isAdmin = role === 'ADMIN'
+  const { data: wo, isLoading, isError, error, refetch } = useWorkOrder(id)
   // Cada boton sigue a su permiso (rol + los que sumo el administrador).
-  const puedeEditar = editaOrden(user)
-  const puedeAsignar = puede(user, 'ot.asignar')
-  const puedeRevisar = puede(user, 'ot.revisar')
+  // Una OT importada de Fracttal es solo consulta: ninguna accion de escritura.
+  const historica = esHistorica(wo)
+  const puedeEditar = editaOrden(user) && !historica
+  const puedeAsignar = puede(user, 'ot.asignar') && !historica
+  const puedeRevisar = puede(user, 'ot.revisar') && !historica
   const veHistorial = veOrdenes(user)
 
   const [tab, setTab] = useState(role === 'TEC' ? 1 : 0)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
 
-  const { data: wo, isLoading, isError, error, refetch } = useWorkOrder(id)
   const asignarMut = useUpdateWorkOrder(id)
   // En revision el admin o supervisor corrige fotos y respuestas antes de aprobar.
   const corrigeEnRevision = puedeRevisar && wo?.status === 'IN_REVIEW'
@@ -204,6 +207,11 @@ export default function WorkOrderDetailPage() {
               </span>
               <StatusBadge status={wo.status} />
               <PriorityBadge priority={wo.priority} />
+              {historica && (
+                <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                  Fracttal
+                </span>
+              )}
             </div>
             <h1 className="text-xl font-bold text-gray-800">{wo.title}</h1>
           </div>
@@ -220,9 +228,15 @@ export default function WorkOrderDetailPage() {
           </div>
         </div>
 
-        {/* Botones de transición */}
-        <TransitionButton workOrder={wo} onSuccess={refetch} />
+        {/* Botones de transición (una histórica no cambia de estado) */}
+        {!historica && <TransitionButton workOrder={wo} onSuccess={refetch} />}
       </div>
+
+      {historica && (
+        <div role="status" className="px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-sm flex items-center gap-2">
+          {avisoHistorica(wo)}
+        </div>
+      )}
 
       {/* Por qué la devolvieron: lo que hay que corregir antes de reenviarla */}
       {(() => {
@@ -294,9 +308,9 @@ export default function WorkOrderDetailPage() {
           <h2 className="font-semibold text-gray-800 text-sm">Asignación</h2>
           <dl className="grid grid-cols-2 gap-4">
             <div>
-              <dt className="text-xs font-medium text-gray-500 mb-0.5">Asignado a</dt>
+              <dt className="text-xs font-medium text-gray-500 mb-0.5">{asignadoA(wo).etiqueta}</dt>
               <dd className="text-sm text-gray-800 flex items-center gap-2 flex-wrap">
-                {wo.assigned_to?.full_name ?? '—'}
+                {asignadoA(wo).valor}
                 {puedeAsignar && (
                   <button
                     onClick={() => setShowAssignModal(true)}
@@ -305,7 +319,7 @@ export default function WorkOrderDetailPage() {
                     Reasignar
                   </button>
                 )}
-                {puedeAsignar && ['PENDING', 'IN_PROGRESS'].includes(wo.status) && wo.assigned_to?.id !== user?.id && (
+                {puedeAsignar && !historica && ['PENDING', 'IN_PROGRESS'].includes(wo.status) && wo.assigned_to?.id !== user?.id && (
                   <button
                     onClick={asignarmela}
                     disabled={asignarMut.isPending}
@@ -416,17 +430,22 @@ export default function WorkOrderDetailPage() {
           {tab === 0 && <HistoryTab id={id} isAdminOrSup={veHistorial} />}
           {tab === 1 && <TasksTab wo={wo} user={user} refetch={refetch} />}
           {tab === 3 && <RepuestosTab wo={wo} user={user} />}
-          {tab === 5 && <FindingsPanel wo={wo} />}
+          {tab === 5 && <FindingsPanel wo={wo} readOnly={historica} />}
           {tab === 4 && (
             <ReportsTab
               workOrderId={id}
               woStatus={wo.status}
               reportStatus={wo.report_status}
-              role={role}
+              role={historica ? null : role}
             />
           )}
           {tab === 2 && (
             <div className="space-y-8">
+              {textoFotosPendientes(wo) && (
+                <p className="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+                  {textoFotosPendientes(wo)}
+                </p>
+              )}
               {/* El tecnico ya no la toca en revision; el admin o supervisor si, para corregir. */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
@@ -434,7 +453,7 @@ export default function WorkOrderDetailPage() {
                 </h3>
                 <SignatureList workOrderId={id} />
               </div>
-              {(isAdmin || laEjecuto(user, wo)) && (
+              {!historica && (isAdmin || laEjecuto(user, wo)) && (
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                     Agregar firma
@@ -476,10 +495,10 @@ export default function WorkOrderDetailPage() {
                 )}
                 <PhotoGallery
                   workOrderId={id}
-                  editable={corrigeEnRevision || (wo.status === 'IN_PROGRESS' && (isAdmin || laEjecuto(user, wo)))}
+                  editable={!historica && (corrigeEnRevision || (wo.status === 'IN_PROGRESS' && (isAdmin || laEjecuto(user, wo))))}
                 />
               </div>
-              {(isAdmin || laEjecuto(user, wo) || corrigeEnRevision) && (
+              {!historica && (isAdmin || laEjecuto(user, wo) || corrigeEnRevision) && (
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">
                     Agregar foto
@@ -825,10 +844,11 @@ function TasksTab({ wo, user, refetch }) {
   const isTecAssigned = laEjecuto(user, wo)
   // Misma regla que firmas, fotos y repuestos: solo con la OT en curso.
   const isInProgress = wo.status === 'IN_PROGRESS'
-  const canEdit = isTecAssigned && isInProgress
+  const historica = esHistorica(wo)
+  const canEdit = isTecAssigned && isInProgress && !historica
   // En revision, el admin o supervisor corrige antes de aprobar (2026-10-01).
-  const canCorrect = puede(user, 'ot.revisar') && wo.status === 'IN_REVIEW'
-  const puedeAjustar = puede(user, 'tareas.planificar') && wo.status === 'PENDING'
+  const canCorrect = puede(user, 'ot.revisar') && wo.status === 'IN_REVIEW' && !historica
+  const puedeAjustar = puede(user, 'tareas.planificar') && wo.status === 'PENDING' && !historica
   const varias = visibles.length > 1
 
   /**
@@ -1942,6 +1962,26 @@ function ChecklistFieldInput({ field, workOrderId, taskId, value, fieldResponse,
         </div>
       )}
 
+      {/* APROBO / ALERTA / FALLO: tres botones grandes (táctiles, mínimo 44 px) */}
+      {field.field_type === 'PASS_ALERT_FAIL' && (
+        <div className="flex gap-2 flex-wrap">
+          {passAlertFailOptions(field).map((v) => (
+            <button
+              key={v}
+              type="button"
+              disabled={disabled}
+              aria-pressed={value === v}
+              onClick={() => onCommit(v)}
+              className={`flex-1 min-w-[88px] min-h-[44px] px-4 py-2 rounded-lg border text-sm font-semibold transition-colors disabled:cursor-default ${
+                value === v ? PASS_ALERT_FAIL_CLASSES[v] : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {passAlertFailLabel(v)}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* SELECT */}
       {field.field_type === 'SELECT' && (
         <select
@@ -2210,7 +2250,7 @@ function ChecklistPhotoField({ workOrderId, taskId, value, disabled, onCommit })
 
 function RepuestosTab({ wo, user }) {
   const role = user?.role
-  const canAdd = wo.status === 'IN_PROGRESS'
+  const canAdd = wo.status === 'IN_PROGRESS' && !esHistorica(wo)
   const isTecAssigned = laEjecuto(user, wo)
 
   const { data: movements = [], isLoading } = useStockMovements({ work_order_id: wo.id })

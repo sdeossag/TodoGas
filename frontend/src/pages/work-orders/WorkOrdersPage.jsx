@@ -11,6 +11,7 @@ import { taskTypeLabel } from '../../constants/labels'
 import TaskTypeSelect from '../../components/ui/TaskTypeSelect'
 import Spinner from '../../components/ui/Spinner'
 import { formatWoCode } from '../../utils/workOrder'
+import { etiquetaOrigen } from '../../utils/otHistorica'
 import { puede } from '../../utils/permisos'
 
 const PAGE_SIZE = 20
@@ -237,6 +238,11 @@ export default function WorkOrdersPage() {
                     >
                       <td className="px-4 py-3 font-mono text-xs text-gray-500 font-semibold">
                         {formatWoCode(wo)}
+                        {etiquetaOrigen(wo) && (
+                          <span className="ml-1.5 align-middle text-[10px] font-medium px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                            {etiquetaOrigen(wo)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
                         {taskTypeLabel(wo.task_type)}

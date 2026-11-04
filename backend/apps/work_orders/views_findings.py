@@ -23,6 +23,7 @@ from apps.users.permissions import TienePermiso
 
 from . import findings as servicio
 from .device_time import device_time
+from .historica import bloqueo_historica
 from .models import Finding, WorkOrder
 
 
@@ -178,6 +179,8 @@ class FindingViewSet(
                 {"detail": "Solo el técnico de la OT registra sus hallazgos."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if (bloqueo := bloqueo_historica(wo)) is not None:
+            return bloqueo
         if wo.status not in servicio.EDITABLE:
             return Response(
                 {"detail": "La OT ya se envió a revisión: no se agregan hallazgos."},
@@ -194,6 +197,8 @@ class FindingViewSet(
     def _editable(self, request, hallazgo):
         if request.user.role == User.Role.CLI or not _puede_registrar(request.user, hallazgo.work_order):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        if (bloqueo := bloqueo_historica(hallazgo.work_order)) is not None:
+            return bloqueo
         if hallazgo.work_order.status not in servicio.EDITABLE:
             return Response(
                 {"detail": "La OT ya se envió a revisión: el hallazgo es evidencia y no se modifica."},
