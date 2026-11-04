@@ -41,7 +41,28 @@ def _resolve_url(file_key):
     return default_storage.url(file_key)
 
 
-def _valor(fr, corto=False, vacio="—"):
+def _unidad(field, unidades):
+    """
+    El simbolo de la unidad de un resultado numerico ("A", "PSI", "h"): la del
+    medidor al que esta atado un campo de lectura, o la que traiga el campo
+    numerico. `unidades` es un cache {id: MeterUnit} que se llena una vez.
+    """
+    if field.field_type not in ("NUMBER", "METER"):
+        return ""
+    opciones = field.options_json if isinstance(field.options_json, dict) else {}
+    if opciones.get("meter_unit"):
+        if unidades is not None and not unidades:
+            from apps.assets.models import MeterUnit
+
+            unidades.update({str(u.pk): u for u in MeterUnit.objects.all()})
+        u = (unidades or {}).get(str(opciones["meter_unit"]))
+        if u is not None:
+            return _texto(u.symbol or u.name)
+    unidad = opciones.get("unit")
+    return _texto(unidad) if isinstance(unidad, str) else ""
+
+
+def _valor(fr, corto=False, vacio="—", unidades=None):
     """Lo que el acta imprime de una respuesta. Una foto guarda foto:<id> o
     sin-conexion:<uuid>: la imagen va en las fotos del activo. En una tabla de
     tomas la celda es angosta: basta con "Foto"."""
@@ -55,7 +76,61 @@ def _valor(fr, corto=False, vacio="—"):
     if fr.field.field_type == "GPS" and fr.geo_address:
         # Como el *LOCALIZACION de Fracttal: la direccion, y las coordenadas.
         return fr.geo_address if corto else f"{fr.geo_address} ({fr.value})"
+    unidad = _unidad(fr.field, unidades)
+    if unidad:
+        return f"{fr.value} {unidad}"
     return fr.value
+
+
+_VERDADERO = ("true", "1", "yes", "si", "sí")
+_FALSO = ("false", "0", "no")
+# Valor guardado de Aprobo/Alerta/Fallo (FieldType.PASS_ALERT_FAIL, que otro
+# modulo define): se compara por la cadena para no depender de que exista.
+_APROBO_ALERTA_FALLO = (("APROBO", "Aprobó"), ("ALERTA", "Alerta"), ("FALLO", "Falló"))
+
+
+def _casillas(fr):
+    """
+    Las casillas de una respuesta de opciones: [(rotulo, marcada)], como el
+    "Aprobó / Alerta / Falló" del acta de Fracttal. None si la respuesta no es
+    de ese tipo o no es una de las opciones (el N/A sale como texto).
+    """
+    if fr is None or not fr.value:
+        return None
+    tipo = fr.field.field_type
+    valor = str(fr.value).strip()
+    if tipo == "BOOLEAN":
+        if valor.lower() in _VERDADERO:
+            return [("Sí", True), ("No", False)]
+        if valor.lower() in _FALSO:
+            return [("Sí", False), ("No", True)]
+    elif tipo == "PASS_ALERT_FAIL":
+        if valor.upper() in {c for c, _ in _APROBO_ALERTA_FALLO}:
+            return [(rotulo, valor.upper() == codigo) for codigo, rotulo in _APROBO_ALERTA_FALLO]
+    return None
+
+
+def _texto_de_casillas(fr, valor):
+    """El texto de una respuesta de opciones fuera de las casillas: N/A y valores raros."""
+    if fr is not None and fr.field.field_type == "PASS_ALERT_FAIL":
+        return "N/A" if str(fr.value).strip().upper() in ("NA", "N/A") else valor
+    return valor
+
+
+def _localizacion(fr):
+    """
+    Lo que el acta imprime de una respuesta GPS, como la fila *LOCALIZACION de
+    Fracttal: direccion, coordenadas (una por linea) y fecha y hora en que el
+    tecnico tomo el punto. None si el campo no es GPS o no tiene respuesta.
+    """
+    if fr is None or fr.field.field_type != "GPS" or not _texto(fr.value):
+        return None
+    partes = [p.strip() for p in str(fr.value).split(",")]
+    return {
+        "address": _texto(fr.geo_address),
+        "coords": partes if len(partes) == 2 else [_texto(fr.value)],
+        "when": _fecha(fr.answered_at, "d/m/Y H:i:s") if fr.answered_at else "",
+    }
 
 
 _ORDEN_ETAPA = {"BEFORE": 0, "AFTER": 1}
@@ -141,12 +216,20 @@ def _sections(respuesta, opciones=None):
     por_grupo = {}
     for fr in respuesta.field_responses.all():
         por_grupo.setdefault(fr.field.group, []).append(fr)
+    unidades = {}  # cache de unidades de medidor, una consulta por acta
 
     secciones = []
     for grupo, respuestas in por_grupo.items():
         if grupo not in repetibles:
             secciones.append({"name": grupo, "repeated": False, "rows": [
-                {"label": fr.field.label, "value": _valor(fr, vacio="Sin respuesta"), "notes": _texto(fr.notes), "map": _mapa(fr, opciones)}
+                {
+                    "label": fr.field.label,
+                    "value": _texto_de_casillas(fr, _valor(fr, vacio="Sin respuesta", unidades=unidades)),
+                    "boxes": _casillas(fr),
+                    "notes": _texto(fr.notes),
+                    "map": _mapa(fr, opciones),
+                    "gps": _localizacion(fr),
+                }
                 for fr in respuestas
             ]})
             continue
@@ -157,7 +240,15 @@ def _sections(respuesta, opciones=None):
         indice = {(fr.field_id, fr.repetition): fr for fr in respuestas}
         filas = []
         for n in range(1, respuesta.count_for(grupo) + 1):
-            celdas = [_valor(indice.get((f.id, n)), corto=True) for f in campos]
+            celdas = [
+                {
+                    "text": _texto_de_casillas(
+                        indice.get((f.id, n)), _valor(indice.get((f.id, n)), corto=True, unidades=unidades)
+                    ),
+                    "boxes": _casillas(indice.get((f.id, n))),
+                }
+                for f in campos
+            ]
             notas = "; ".join(
                 _texto(indice[(f.id, n)].notes) for f in campos
                 if (f.id, n) in indice and _texto(indice[(f.id, n)].notes)
@@ -171,6 +262,51 @@ def _sections(respuesta, opciones=None):
             "with_notes": any(f["notes"] for f in filas),
         })
     return secciones
+
+
+def _sin_localizaciones(secciones):
+    """
+    Separa las respuestas GPS del resto: van en la primera fila de SUBTAREAS
+    (LOCALIZACION), no en el grupo donde estaban. Devuelve (secciones sin ellas,
+    localizaciones); un grupo que solo tenia GPS desaparece.
+    """
+    localizaciones, resto = [], []
+    for sec in secciones:
+        if sec["repeated"]:
+            resto.append(sec)
+            continue
+        filas = []
+        for f in sec["rows"]:
+            (localizaciones if f.get("gps") else filas).append(f)
+        if filas:
+            resto.append(dict(sec, rows=filas))
+    return resto, localizaciones
+
+
+def _tablas_de_subtareas(localizaciones, secciones):
+    """
+    Las tablas de SUBTAREAS: una de 3 columnas (grupo, que se reviso,
+    resultado) que abre con las LOCALIZACION y sigue con los grupos normales
+    en su orden; un grupo repetible corta la tabla y sale como la suya (una fila
+    por toma). Cada elemento es {"repeated": bool, ...}.
+    """
+    tablas, filas = [], []
+
+    def cerrar():
+        if filas:
+            tablas.append({"repeated": False, "rows": list(filas)})
+            filas.clear()
+
+    for loc in localizaciones:
+        filas.append(dict(loc, group=""))
+    for sec in secciones:
+        if sec["repeated"]:
+            cerrar()
+            tablas.append(sec)
+        else:
+            filas.extend(dict(f, group=sec["name"]) for f in sec["rows"])
+    cerrar()
+    return tablas
 
 
 def _nombre(user):
@@ -301,11 +437,14 @@ def _de_a_dos(datos):
 
 def _ficha_activo(tarea, respuesta, sub, op):
     """
-    El cuadro de un activo: su ubicacion y su ficha tecnica juntas, al inicio
-    de su bloque. Un activo que es una ubicacion entera (Asset.represents_node)
-    se lee como "Ubicacion intervenida", sin codigo interno ni tipo.
+    El recuadro ACTIVOS de un activo, como el de Fracttal: una descripcion
+    corrida (nombre, marca, modelo, serie y codigo), el "Ubicado en" con la ruta
+    del arbol y debajo sus datos en dos columnas. Un activo que es una
+    ubicacion entera (Asset.represents_node) se lee como ubicacion, sin codigo
+    interno ni datos de equipo.
 
-    Es presentacion: no entra en el hash de integridad.
+    Solo salen los datos que existen en el modelo y tienen valor. Es
+    presentacion: no entra en el hash de integridad.
     """
     a = tarea.asset
     es_ubicacion = a.is_location
@@ -314,31 +453,115 @@ def _ficha_activo(tarea, respuesta, sub, op):
     ubicacion = None
     direccion, mapa = _texto((sub or {}).get("address")), (sub or {}).get("map", "")
     # Una ubicacion cuyo nombre ya es toda su ruta (y sin direccion ni mapa) no
-    # repite lo que dice el titulo del bloque.
+    # repite lo que dice la descripcion.
     if op["activo_ubicacion"] and ruta and not (es_ubicacion and ruta == _texto(a.name) and not (direccion or mapa)):
-        ubicacion = _dato("Ubicación", ruta, extra=direccion, mapa=mapa)
+        ubicacion = _dato("Ubicado en", ruta, extra=direccion, mapa=mapa)
 
+    partes = [_texto(a.name) or _texto(a.code)]
+    if not es_ubicacion:
+        if op["activo_fabricante"] and _texto(a.manufacturer):
+            partes.append(f"marca {_texto(a.manufacturer)}")
+        if op["activo_modelo"] and _texto(a.model):
+            partes.append(f"modelo {_texto(a.model)}")
+        if op["activo_serie"] and _texto(a.serial_number):
+            partes.append(f"serie {_texto(a.serial_number)}")
+        if _texto(a.code) and _texto(a.name):
+            partes.append(f"cód. {_texto(a.code)}")
+    descripcion = _dato(
+        "Ubicación intervenida" if es_ubicacion else "Descripción", " ".join(p for p in partes if p)
+    )
+
+    clasificaciones = [
+        _dato("Clasificación 1", a.classification_1),
+        _dato("Clasificación 2", a.classification_2),
+    ] if op["activo_clasificaciones"] and not es_ubicacion else []
     equipo = [] if es_ubicacion else [
-        _dato("Código", a.code),
         _dato("Tipo de equipo", a.asset_type) if op["activo_tipo"] else None,
-        _dato("Fabricante", a.manufacturer) if op["activo_fabricante"] else None,
-        _dato("Modelo", a.model) if op["activo_modelo"] else None,
-        _dato("Número de serie", a.serial_number) if op["activo_serie"] else None,
+        _dato("Prioridad", a.get_priority_display()) if op["activo_prioridad"] else None,
+        _dato("Código de barras", a.barcode) if op["activo_codigo_barras"] else None,
         # La ubicacion del equipo sale solo si dice algo que la ruta no dice.
         _dato("Dónde está el equipo", a.equipment_location)
         if op["activo_ubicacion_equipo"] and _texto(a.equipment_location) != ruta else None,
     ]
+    return {
+        "full": [d for d in (descripcion, ubicacion) if d],
+        "rows": _de_a_dos(clasificaciones + equipo),
+    }
+
+
+def _unidad_de_frecuencia(valor, unidad):
+    nombres = {"DAYS": ("día", "días"), "WEEKS": ("semana", "semanas"),
+               "MONTHS": ("mes", "meses"), "YEARS": ("año", "años")}
+    singular, plural = nombres.get(unidad, (unidad.lower(), unidad.lower()))
+    return singular if valor == 1 else plural
+
+
+def _numero(valor):
+    """Un Decimal sin ceros de mas: 500.000 -> '500'."""
+    return format(valor.normalize(), "f") if valor is not None else ""
+
+
+def _activador(plan_task):
+    """
+    El activador de la tarea del protocolo, como el "Fecha Cada 6 Meses" de
+    Fracttal: por fecha ("Cada 6 meses"), por evento o por medidor. Vacio si la
+    tarea no viene de un protocolo.
+    """
+    if plan_task is None:
+        return ""
+    T = type(plan_task).Trigger
+    if plan_task.trigger == T.DATE and plan_task.frequency_value:
+        n = plan_task.frequency_value
+        return f"Cada {n} {_unidad_de_frecuencia(n, plan_task.frequency_unit)}"
+    if plan_task.trigger == T.EVENT:
+        return "Por evento"
+    unidad = plan_task.meter_unit
+    nombre = _texto(unidad.symbol or unidad.name) if unidad else ""
+    if plan_task.trigger == T.EVERY and plan_task.meter_interval:
+        return f"Cada {_numero(plan_task.meter_interval)} {nombre}".strip()
+    if plan_task.trigger == T.WHEN and plan_task.meter_threshold is not None:
+        comparador = type(plan_task).Comparator(plan_task.meter_comparator).label.lower()
+        return f"Cuando {_texto(unidad.name) if unidad else 'la lectura'} sea {comparador} {_numero(plan_task.meter_threshold)}"
+    return ""
+
+
+def _ficha_tarea(tarea, respuesta, tiempos, work_order, op):
+    """
+    El recuadro TAREAS PLANIFICADAS de una tarea: su descripcion, fechas y
+    horas reales del trabajo (las de _trabajo_en_campo, no las de la OT), tipo,
+    activador del protocolo, duraciones y paro. Es presentacion: no entra en el
+    hash de integridad.
+    """
     plan = tarea.plan_task.plan.name if tarea.plan_task_id else ""
+    detalle = _texto(tarea.description)
+    descripcion = _dato(
+        "Descripción", _texto(tarea.title) + (f" — {detalle}" if detalle and detalle != _texto(tarea.title) else "")
+    )
     lista = (
         tarea.checklist_version.template.name
         if op["activo_checklist"] and respuesta is not None and tarea.checklist_version_id else ""
     )
-    trabajo = [
-        _dato("Tarea realizada", tarea.title),
-        _dato("Protocolo", plan if _texto(plan) != _texto(tarea.title) else ""),
-        _dato("Lista de revisión", lista),
-    ]
-    return {"location": ubicacion, "rows": _de_a_dos(equipo + trabajo)}
+    programada = tarea.scheduled_date or work_order.scheduled_date
+    return {
+        "full": [d for d in (descripcion,) if d],
+        "rows": _de_a_dos([
+            _dato("Protocolo", plan if _texto(plan) != _texto(tarea.title) else ""),
+            _dato("Lista de revisión", lista),
+            _dato("Fecha programada", _fecha(programada)) if op["visita_fecha_programada"] and programada else None,
+            _dato("Fecha y hora de inicio", _fecha(tiempos["start"], "d/m/Y H:i"))
+            if op["visita_trabajo_en_campo"] and tiempos else None,
+            _dato("Tipo de tarea", tarea.get_task_type_display()) if op["tarea_tipo"] else None,
+            _dato("Fecha y hora de finalización", _fecha(tiempos["end"], "d/m/Y H:i"))
+            if op["visita_trabajo_en_campo"] and tiempos else None,
+            _dato("Prioridad", tarea.get_priority_display()) if op["tarea_tipo"] else None,
+            _dato("Duración estimada", _duration_label(tarea.estimated_duration))
+            if op["tarea_duracion_estimada"] else None,
+            _dato("Activador", _activador(tarea.plan_task)) if op["tarea_activador"] else None,
+            _dato("Tiempo de ejecución", tiempos["duration"]) if op["visita_duracion"] and tiempos else None,
+            _dato("Tiempo real de paro del activo", _duration_label(work_order.downtime))
+            if op["tarea_paro"] else None,
+        ]),
+    }
 
 
 def _revision(respuesta):
@@ -352,32 +575,40 @@ def _revision(respuesta):
     return {"when": _rango(trabajo["start"], trabajo["end"]), "by": por}
 
 
-def _datos_de_la_visita(work_order, bloques, ejecutores, trabajo, op):
-    """Los datos de la visita en filas de dos celdas; lo apagado o vacio no ocupa lugar."""
+def _datos_de_la_visita(work_order, bloques, ejecutores, op):
+    """
+    El primer recuadro del acta, como el de Fracttal: quien genero la orden,
+    el responsable (quien hizo el trabajo, segun lo registrado en campo, no el
+    asignado ni quien aprobo), duracion estimada y notas. Lo apagado o vacio
+    no ocupa lugar. Las fechas y horas del trabajo van en cada tarea.
+    """
     todas_ubicaciones = bool(bloques) and all(b["asset"].is_location for b in bloques)
+    creador = _nombre(work_order.created_by) if work_order.created_by_id else ""
     return _de_a_dos([
+        _dato("Generó", creador) if op["visita_genero"] else None,
+        _dato("Responsable", ", ".join(ejecutores)) if op["visita_ejecutor"] else None,
         _dato("Hospital", work_order.hospital.name),
         _dato("Ubicación de la visita", work_order.location.path)
         if op["visita_ubicacion"] and work_order.location_id else None,
+        _dato("Duración estimada", _duration_label(work_order.estimated_duration))
+        if op["visita_duracion_estimada"] else None,
         _dato("Ubicaciones intervenidas" if todas_ubicaciones else "Activos intervenidos", len(bloques))
         if op["visita_activos"] and bloques else None,
-        # Quien hizo el trabajo y cuando, segun lo registrado en campo; no el
-        # asignado ni la hora de aprobar.
-        _dato("Trabajo realizado por", ", ".join(ejecutores)) if op["visita_ejecutor"] else None,
-        _dato("Fecha programada", _fecha(work_order.scheduled_date))
-        if op["visita_fecha_programada"] and work_order.scheduled_date else None,
-        _dato("Fecha y hora del trabajo", _rango(trabajo["start"], trabajo["end"]))
-        if op["visita_trabajo_en_campo"] and trabajo else None,
-        _dato("Tiempo de trabajo", trabajo["duration"]) if op["visita_duracion"] and trabajo else None,
+        _dato("Descripción del trabajo", work_order.description) if op["visita_descripcion"] else None,
+        _dato("Notas", work_order.notes) if op["visita_notas"] else None,
     ])
 
 
-def _render(work_order, opciones):
+def _render(work_order, opciones, empresa=None):
     """
     El acta en PDF con los interruptores `opciones` (apps.reports.options).
+    `empresa` trae la razon social y el NIT del encabezado (ReportSettings);
+    sin ellos el encabezado no los muestra.
     Devuelve (pdf_bytes, report_hash, generated_at); no guarda nada.
     """
     from weasyprint import HTML
+
+    empresa = empresa or {}
 
     technician = work_order.assigned_to
 
@@ -385,7 +616,8 @@ def _render(work_order, opciones):
     # canceladas no se hicieron y no van en el acta.
     tareas = list(
         work_order.tasks.exclude(status="CANCELLED")
-        .select_related("asset__hospital", "asset__node", "plan_task__plan", "checklist_version__template")
+        .select_related("asset__hospital", "asset__node", "plan_task__plan", "plan_task__meter_unit",
+            "checklist_version__template")
         .order_by("sort_order", "created_at")
     )
     respuestas = {
@@ -412,34 +644,15 @@ def _render(work_order, opciones):
             fotos_por_tarea.setdefault(p.task_id, []).append(p)
         else:
             fotos_visita.append(p)
-    resolvedores, mapas = {}, {}
-    secciones_por_tarea = {t.id: _sections(respuestas.get(t.id), opciones) for t in tareas}
-    bloques = []
-    for t in tareas:
-        sublocation = _ubicacion_del_activo(t, secciones_por_tarea[t.id], resolvedores, mapas, opciones)
-        bloques.append({
-            "task": t,
-            "asset": t.asset,
-            "checklist_response": respuestas.get(t.id),
-            "sections": secciones_por_tarea[t.id],
-            "sublocation": sublocation,
-            "card": _ficha_activo(t, respuestas.get(t.id), sublocation, opciones),
-            "title": _texto(t.asset.name) or _texto(t.asset.code),
-            "review": _revision(respuestas.get(t.id)),
-            "photos": fotos_por_tarea.get(t.id, []),
-            "photo_groups": _grupos_de_fotos(fotos_por_tarea.get(t.id, []), 6),
-            "field_work": _trabajo_en_campo(
-                [respuestas[t.id]] if t.id in respuestas else [], [], []
-            ),
-        })
-
     signatures = list(signatures_qs)
     for s in signatures:
         s.file_url = _resolve_url(s.file_url)
 
     # Hash del contenido probatorio: checklist, fotos, firmas, tecnico y
     # observaciones. Es el que se imprime en el PDF y contra el que verifica
-    # /api/work-orders/{id}/integrity/.
+    # /api/work-orders/{id}/integrity/. Lo que el acta agrega para parecerse
+    # al de Fracttal (encabezado, activador, localizacion...) es presentacion
+    # y no entra.
     report_hash = compute_wo_content_hash(work_order)
     generated_at = timezone.now()
 
@@ -448,12 +661,47 @@ def _render(work_order, opciones):
     )
     ejecutores = _ejecutores(work_order, list(respuestas.values()))
 
+    resolvedores, mapas = {}, {}
+    secciones_por_tarea = {t.id: _sections(respuestas.get(t.id), opciones) for t in tareas}
+    bloques = []
+    for t in tareas:
+        sublocation = _ubicacion_del_activo(t, secciones_por_tarea[t.id], resolvedores, mapas, opciones)
+        secciones, localizaciones = _sin_localizaciones(secciones_por_tarea[t.id])
+        propio = _trabajo_en_campo([respuestas[t.id]] if t.id in respuestas else [], [], [])
+        # Fecha y hora de la tarea: las de su checklist; sin ellas, las del
+        # trabajo de la orden. La correccion de revision manda sobre ambas.
+        tiempos = _con_correccion(work_order, propio or trabajo)
+        bloques.append({
+            "task": t,
+            "asset": t.asset,
+            "checklist_response": respuestas.get(t.id),
+            "sections": secciones,
+            "tables": _tablas_de_subtareas(localizaciones, secciones),
+            "locations": localizaciones,
+            "sublocation": sublocation,
+            "card": _ficha_activo(t, respuestas.get(t.id), sublocation, opciones),
+            "task_card": _ficha_tarea(t, respuestas.get(t.id), tiempos, work_order, opciones),
+            "title": _texto(t.asset.name) or _texto(t.asset.code),
+            "review": _revision(respuestas.get(t.id)),
+            "photos": fotos_por_tarea.get(t.id, []),
+            "photo_groups": _grupos_de_fotos(fotos_por_tarea.get(t.id, []), 6),
+            "field_work": propio,
+        })
+
     context = {
         "work_order": work_order,
         "technician": technician,
         "field_work": trabajo,
         "executors": ejecutores,
-        "visit_rows": _datos_de_la_visita(work_order, bloques, ejecutores, trabajo, opciones),
+        "visit_rows": _datos_de_la_visita(work_order, bloques, ejecutores, opciones),
+        "company": {
+            "name": _texto(empresa.get("company_name")),
+            "tax_id": _texto(empresa.get("company_tax_id")),
+        },
+        # La fecha de la orden (como en Fracttal): la programada o, sin ella, la
+        # del inicio real del trabajo.
+        "order_date": work_order.scheduled_date or (trabajo or {}).get("start"),
+        "rating": work_order.rating if opciones["encabezado_calificacion"] else None,
         "validation": _validacion(work_order),
         "technician_signature": next(
             (s for s in signatures if s.signature_type == Signature.SignatureType.TECHNICIAN), None
@@ -478,7 +726,7 @@ def _render(work_order, opciones):
         "stock_movements": stock_movements,
         "report_hash": report_hash,
         "generated_at": generated_at,
-        "logo_base64": get_logo_base64("on_dark"),
+        "logo_base64": get_logo_base64("on_light"),
         "op": opciones,
         "n": numeracion(opciones),
     }
@@ -488,9 +736,14 @@ def _render(work_order, opciones):
     return pdf_bytes, report_hash, generated_at
 
 
-def preview_service_report_pdf(work_order, opciones):
+def _empresa_vigente():
+    ajustes = ReportSettings.current()
+    return {"company_name": ajustes.company_name, "company_tax_id": ajustes.company_tax_id}
+
+
+def preview_service_report_pdf(work_order, opciones, empresa=None):
     """El acta como quedaria con estas opciones, sin guardarla ni registrarla."""
-    return _render(work_order, efectivas(opciones))[0]
+    return _render(work_order, efectivas(opciones), empresa)[0]
 
 
 def generate_service_report_pdf(work_order):
@@ -499,7 +752,7 @@ def generate_service_report_pdf(work_order):
     vigente y lo sube al storage. Devuelve (pdf_bytes, s3_key, report_hash).
     """
     opciones = efectivas(ReportSettings.current().options)
-    pdf_bytes, report_hash, generated_at = _render(work_order, opciones)
+    pdf_bytes, report_hash, generated_at = _render(work_order, opciones, _empresa_vigente())
 
     filename = f"reports/{work_order.id}/OT-{work_order.wo_number}.pdf"
     s3_key = default_storage.save(filename, ContentFile(pdf_bytes))

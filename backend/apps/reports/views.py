@@ -208,6 +208,8 @@ def _configuracion_del_acta(ajustes):
 
     return {
         "options": efectivas(ajustes.options),
+        "company_name": ajustes.company_name,
+        "company_tax_id": ajustes.company_tax_id,
         "catalog": [{"key": k, "section": s, "label": lbl} for k, s, lbl in CATALOGO],
         "always_included": SIEMPRE_INCLUIDO,
         "updated_at": ajustes.updated_at,
@@ -218,10 +220,18 @@ def _configuracion_del_acta(ajustes):
     }
 
 
-def _opciones_validas(data):
-    """Solo claves del catalogo y valores si/no; si no, un mensaje de error."""
+CAMPOS_EMPRESA = {"company_name": 200, "company_tax_id": 50}
+
+
+def _opciones_validas(data, exigir=True):
+    """
+    Solo claves del catalogo y valores si/no; si no, un mensaje de error.
+    Con `exigir` falso, la ausencia de 'options' no es error (se devuelve {}).
+    """
     from .options import CLAVES
 
+    if not exigir and "options" not in data:
+        return {}, None
     opciones = data.get("options")
     if not isinstance(opciones, dict):
         return None, "Falta 'options' con los interruptores del acta."
@@ -231,6 +241,24 @@ def _opciones_validas(data):
     if any(not isinstance(v, bool) for v in opciones.values()):
         return None, "Cada opción es verdadero o falso."
     return opciones, None
+
+
+def _empresa_valida(data):
+    """Razon social y NIT enviados (los que vengan), recortados; o un error."""
+    empresa = {}
+    for campo, largo in CAMPOS_EMPRESA.items():
+        if campo not in data:
+            continue
+        valor = data.get(campo)
+        if valor is None:
+            valor = ""
+        if not isinstance(valor, str):
+            return None, {campo: "Debe ser un texto."}
+        valor = valor.strip()
+        if len(valor) > largo:
+            return None, {campo: f"Máximo {largo} caracteres."}
+        empresa[campo] = valor
+    return empresa, None
 
 
 class ReportSettingsView(APIView):
@@ -245,11 +273,17 @@ class ReportSettingsView(APIView):
         return Response(_configuracion_del_acta(ReportSettings.current()))
 
     def patch(self, request):
-        opciones, error = _opciones_validas(request.data)
+        empresa, error_empresa = _empresa_valida(request.data)
+        if error_empresa:
+            return Response(error_empresa, status=status.HTTP_400_BAD_REQUEST)
+        # Los interruptores son opcionales si solo se cambia la razon social o el NIT.
+        opciones, error = _opciones_validas(request.data, exigir=not empresa)
         if error:
             return Response({"options": error}, status=status.HTTP_400_BAD_REQUEST)
         ajustes = ReportSettings.current()
         ajustes.options = {**ajustes.options, **opciones}
+        for campo, valor in empresa.items():
+            setattr(ajustes, campo, valor)
         ajustes.updated_by = request.user
         ajustes.save()
         return Response(_configuracion_del_acta(ajustes))
@@ -272,6 +306,9 @@ class ReportSettingsPreviewView(APIView):
         opciones, error = _opciones_validas(request.data)
         if error:
             return Response({"options": error}, status=status.HTTP_400_BAD_REQUEST)
+        empresa, error_empresa = _empresa_valida(request.data)
+        if error_empresa:
+            return Response(error_empresa, status=status.HTTP_400_BAD_REQUEST)
         ot = (
             WorkOrder.objects.filter(status=WorkOrder.Status.COMPLETED)
             .select_related("hospital", "assigned_to", "location")
@@ -283,7 +320,16 @@ class ReportSettingsPreviewView(APIView):
                 {"detail": "Todavía no hay OTs finalizadas para mostrar un acta de ejemplo."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        pdf = preview_service_report_pdf(ot, {**ReportSettings.current().options, **opciones})
+        ajustes = ReportSettings.current()
+        pdf = preview_service_report_pdf(
+            ot,
+            {**ajustes.options, **opciones},
+            {
+                "company_name": ajustes.company_name,
+                "company_tax_id": ajustes.company_tax_id,
+                **empresa,
+            },
+        )
         respuesta = HttpResponse(pdf, content_type="application/pdf")
         respuesta["Content-Disposition"] = f'inline; filename="vista-previa-{ot.wo_code}.pdf"'
         respuesta["X-Work-Order"] = ot.wo_code

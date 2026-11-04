@@ -188,7 +188,7 @@ def test_el_acta_dice_cuando_se_hizo_el_trabajo_no_cuando_se_aprobo(ot, tec, adm
 
     texto = acta_html(ot)
     local = timezone.localtime
-    assert "Fecha y hora del trabajo" in texto
+    assert "Fecha y hora de inicio" in texto and "Fecha y hora de finalización" in texto
     assert local(timezone.now() - timedelta(hours=2)).strftime("%H:%M") in texto
     assert "30 min" in texto, "la duracion va de la primera respuesta al cierre"
     assert "Fecha de intervención" not in texto
@@ -204,7 +204,7 @@ def test_el_ejecutor_es_quien_cerro_no_el_asignado_despues(ot, tec, otro_tec, ad
     ot.refresh_from_db()
 
     texto = acta_html(ot)
-    assert "Trabajo realizado por" in texto
+    assert "Responsable:</span> Juan Zuleta" in texto
     assert "Juan Zuleta" in texto
     assert "Victor Vargas" not in texto
 

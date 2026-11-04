@@ -148,7 +148,7 @@ def test_no_se_aceptan_opciones_raras(admin, opciones):
 
 def test_el_acta_sin_configurar_trae_todo(ot):
     texto, reporte = acta_html(ot)
-    for rotulo in ("Fabricante", "AMICO", "Observaciones", "Borne flojo", "Nota interna",
+    for rotulo in ("marca AMICO", "Observaciones", "Borne flojo", "Nota interna",
                    "Materiales utilizados", "Realizado por", "Validado por", "Aceptado por"):
         assert rotulo in texto
     assert reporte.options_used == efectivas()

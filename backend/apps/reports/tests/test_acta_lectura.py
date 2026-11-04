@@ -1,7 +1,8 @@
 """
-Revision del 2026-10-23: el acta se lee sin ser tecnico. Un cuadro por activo
-con su ubicacion y su ficha juntas, etiquetas en lenguaje comun, sin quien
-corrigio, sin hora en "Emitido", sin estado y sin datos vacios.
+Revision del 2026-10-23: el acta se lee sin ser tecnico. Un recuadro ACTIVOS por
+activo con su ubicacion y su ficha juntas, etiquetas en lenguaje comun, sin
+quien corrigio, sin hora en la fecha, sin estado y sin datos vacios. (Con el
+estilo de Fracttal: ver test_acta_estilo_fracttal.py.)
 """
 
 import re
@@ -79,18 +80,21 @@ def _texto(html):
 
 
 def _cuadro_del_activo(html):
-    """El HTML del primer cuadro (table.ficha) del primer bloque de activo."""
-    inicio = html.index("2.1 ")
-    ficha = html.index('class="ficha"', inicio)
-    return html[ficha:html.index("</table>", ficha)]
+    """El HTML del recuadro ACTIVOS del primer bloque de activo."""
+    inicio = html.index('<h2 class="sec">', html.index("</table>"))
+    return html[inicio:html.index("Tareas planificadas</h2>", inicio)]
+
+
+def _titulos(html):
+    return re.findall(r'<h2 class="sec">(.*?)</h2>', html)
 
 
 # -- Encabezado ---------------------------------------------------------------
 
-def test_emitido_lleva_solo_la_fecha(equipo):
+def test_la_fecha_del_encabezado_lleva_solo_la_fecha(equipo):
     html, _ = acta_html(equipo[0])
-    assert re.search(r"Emitido: \d{2}/\d{2}/\d{4}\s*<", html)
-    assert not re.search(r"Emitido: \d{2}/\d{2}/\d{4} \d{2}:\d{2}", html)
+    assert re.search(r'Fecha: <span class="rojo">\d{2}/\d{2}/\d{4}</span>', html)
+    assert not re.search(r"Fecha: <span class=\"rojo\">\d{2}/\d{2}/\d{4} \d{2}:\d{2}", html)
 
 
 def test_el_acta_no_dice_el_estado_de_la_orden(equipo):
@@ -121,11 +125,14 @@ def test_el_activo_trae_su_ubicacion_y_su_ficha_juntas(equipo):
     html, _ = acta_html(equipo[0])
     cuadro = _texto(_cuadro_del_activo(html))
     for dato in ("Bloque A/Piso 1", "Calle 10 #20-30", "ALR-1", "Alarma", "AMICO", "X-100",
-                 "SN-998", "Sala de maquinas", "Lista de revisión"):
+                 "SN-998", "Sala de maquinas"):
         assert dato in cuadro, dato
-    for etiqueta in ("Ubicación", "Código", "Tipo de equipo", "Fabricante", "Modelo",
-                     "Número de serie", "Tarea realizada"):
+    for etiqueta in ("Ubicado en", "Descripción", "marca", "modelo", "serie", "cód.",
+                     "Tipo de equipo", "Dónde está el equipo"):
         assert etiqueta in cuadro, etiqueta
+    # La tarea y su lista de revision van en su propio recuadro.
+    texto = _texto(html)
+    assert "Lista de revisión: Alarma" in texto and "Descripción: MANT. ALARMA" in texto
 
 
 def test_la_ficha_no_se_repite_ni_hay_tabla_resumen(equipo):
@@ -135,7 +142,7 @@ def test_la_ficha_no_se_repite_ni_hay_tabla_resumen(equipo):
     assert texto.count("AMICO") == 1
     assert texto.count("ALR-1") == 1
     assert "Incompleto" not in texto and "Completo" not in texto
-    assert re.findall(r"<h2>(\d+(?:\.\d+)?)\.? ", html)[:3] == ["1", "2.1", "3"]
+    assert _titulos(html)[:3] == ["Activos", "Tareas planificadas", "Hallazgos encontrados y reportados"]
 
 
 def test_el_checklist_se_lee_sin_version_ni_jerga(equipo):
@@ -206,17 +213,17 @@ def test_sin_ejecutor_la_fila_no_dice_no_registrado(admin):  # noqa: F811
     ot.refresh_from_db()
     texto = _texto(acta_html(ot)[0])
     assert "No registrado" not in texto
-    assert "Trabajo realizado por" not in texto
+    assert "Responsable" not in texto
 
 
 # -- Fechas y horas operativas ------------------------------------------------
 
 FECHAS = {
     "visita_fecha_programada": "Fecha programada",
-    "visita_trabajo_en_campo": "Fecha y hora del trabajo",
-    "visita_duracion": "Tiempo de trabajo",
+    "visita_trabajo_en_campo": "Fecha y hora de inicio",
+    "visita_duracion": "Tiempo de ejecución",
     "checklist_respondido": "Revisión hecha el",
-    "visita_ejecutor": "Trabajo realizado por",
+    "visita_ejecutor": "Responsable",
 }
 
 
@@ -243,7 +250,7 @@ def test_sin_fechas_la_tabla_de_la_visita_no_deja_huecos(equipo):
         "visita_activos": False,
     })
     html, _ = acta_html(equipo[0])
-    visita = html[html.index("1. Datos de la visita"):html.index("2.1 ")]
+    visita = html[html.index('class="recuadro"'):html.index('<h2 class="sec">')]
     celdas = re.findall(r"<td[^>]*>(.*?)</td>", visita, flags=re.S)
     assert celdas and all(_texto(c).strip() for c in celdas)
     assert "Clinica Demo Norte" in visita
@@ -253,8 +260,8 @@ def test_sin_fechas_la_tabla_de_la_visita_no_deja_huecos(equipo):
 def test_la_numeracion_sigue_sin_huecos_con_secciones_apagadas(equipo):
     ReportSettings.objects.create(options={"hallazgos": False, "fotos_visita": False})
     html, _ = acta_html(equipo[0])
-    numeros = re.findall(r"<h2>(\d+)(?:\.\d+)?\.? ", html)
-    assert numeros == ["1", "2", "3", "4"], numeros  # visita, activo, materiales, firmas
+    # Sin numeros de seccion (como Fracttal): solo salen las encendidas.
+    assert _titulos(html) == ["Activos", "Tareas planificadas", "Materiales utilizados"]
     assert numeracion(efectivas({"hallazgos": False, "fotos_visita": False})) == {
         "visita": 1, "activos": 2, "materiales": 3, "firmas": 4,
     }

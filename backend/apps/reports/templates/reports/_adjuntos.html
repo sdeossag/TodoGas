@@ -1,0 +1,23 @@
+{% comment %}Adjuntos (fotos) como en Fracttal: tabla de dos columnas, descripcion e imagen.
+Las etapas (Antes / Despues) salen como una fila de subtitulo y cada foto lleva su fecha.
+Recibe: groups (generator._grupos_de_fotos), titulo, alt y op.{% endcomment %}
+{% if groups %}
+<div class="subtitle">{{ titulo }}</div>
+<table class="sub adj">
+  <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+  <tr class="cabecera"><th>Descripción</th><th>Imagen</th></tr>
+  {% for g in groups %}
+  {% if g.label %}<tr class="etapa"><td colspan="2">{{ g.label }}</td></tr>{% endif %}
+  {% for photo in g.photos %}
+  <tr class="foto">
+    <td>
+      {% if photo.caption %}<div>{{ photo.caption }}</div>{% endif %}
+      <div class="peq">{{ photo.taken_at|date:"d/m/Y H:i" }}</div>
+      {% if op.fotos_gps and photo.latitude and photo.longitude %}<div class="peq">Coordenadas: {{ photo.latitude }}, {{ photo.longitude }}</div>{% endif %}
+    </td>
+    <td class="imagen"><img src="{{ photo.file_url }}" alt="{{ alt }}"></td>
+  </tr>
+  {% endfor %}
+  {% endfor %}
+</table>
+{% endif %}

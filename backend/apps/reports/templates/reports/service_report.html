@@ -6,209 +6,237 @@
 <style>
   @page {
     size: letter;
-    margin: 2cm;
+    margin: 1.5cm 1.6cm 2cm 1.6cm;
     @bottom-left {
-      content: "TodoGas CMMS \2014 Documento generado automaticamente";
+      content: "Realizado con TodoGas CMMS \00B7  Pág " counter(page) " de " counter(pages);
+      font-family: Arial, Helvetica, sans-serif;
       font-size: 8pt;
-      color: #666;
-    }
-    @bottom-center {
-      content: counter(page) " de " counter(pages);
-      font-size: 8pt;
-      color: #666;
+      color: #555;
     }
     @bottom-right {
       content: "Código de verificación: {{ report_hash|slice:':16' }}";
+      font-family: Arial, Helvetica, sans-serif;
       font-size: 8pt;
-      color: #666;
+      color: #555;
     }
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #222; }
-  h2 { font-size: 12pt; color: #1e3a5f; margin-bottom: 8px; margin-top: 16px; border-bottom: 1px solid #1e3a5f; padding-bottom: 4px; }
-  h3 { font-size: 10pt; font-weight: bold; color: #333; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-  td, th { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; font-size: 9pt; }
-  th { background-color: #e8edf3; font-weight: bold; text-align: left; }
-  .header { background-color: #1e3a5f; color: white; padding: 16px 20px; margin-bottom: 20px; }
-  .header-title { font-size: 18pt; font-weight: bold; letter-spacing: 1px; white-space: nowrap; }
-  .header-sub { font-size: 10pt; margin-top: 4px; opacity: 0.9; }
-  .header-table td { border: none; background: transparent; color: white; padding: 2px 0; }
-  .section { page-break-inside: avoid; margin-bottom: 20px; }
-  table.repeated th, table.repeated td { font-size: 7.5pt; padding: 2px 3px; }
-  .group-header td { background-color: #f0f0f0; font-weight: bold; font-size: 9pt; }
-  .out-of-range { background-color: #fff9c4; }
-  .photo-grid td { border: none; padding: 8px; vertical-align: top; text-align: center; }
-  .photo-grid img { max-width: 100%; max-height: 200px; border: 1px solid #ddd; }
-  .photo-stage { font-size: 10pt; margin: 10px 0 2px; color: #333; }
-  .photo-caption { font-size: 8pt; color: #555; margin-top: 4px; }
-  .gps-map { width: 100%; max-width: 260px; margin-top: 4px; border: 1px solid #ddd; }
-  .sig-table td { border: 1px solid #ccc; padding: 10px; text-align: center; vertical-align: top; }
-  .sig-table img { max-width: 160px; max-height: 90px; border: 1px solid #ddd; background: white; }
-  .validated { display: inline-block; border: 1px solid #1e3a5f; color: #1e3a5f; padding: 6px 8px; font-size: 8pt; font-weight: bold; }
-  .label { font-size: 8pt; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
-  .no-data { color: #888; font-style: italic; font-size: 9pt; padding: 8px 0; }
-  .meta-row { font-size: 8pt; color: #666; margin-top: 8px; }
-  .kv { margin-bottom: 10px; }
-  table.ficha { table-layout: fixed; }
-  table.ficha td { background: #f8fafc; }
-  td, th, .meta-row { overflow-wrap: anywhere; word-break: break-word; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #111; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Encabezado blanco: logo, razon social y NIT, numero y fecha de la orden */
+  table.encabezado td { padding: 0 4px 6px; vertical-align: middle; font-size: 9pt; }
+  .encabezado .logo img { height: 44px; width: auto; }
+  .encabezado .centro { text-align: center; line-height: 1.7; }
+  .encabezado .empresa { font-size: 11pt; font-weight: bold; }
+  .encabezado .derecha { line-height: 1.9; }
+  .encabezado .gris { color: #555; font-size: 8pt; }
+  .rojo { color: #c00000; font-weight: bold; }
+
+  /* Recuadros con bordes redondeados y pares ETIQUETA: valor en dos columnas */
+  .recuadro { border: 1px solid #666; border-radius: 6px; padding: 4px 8px; margin: 6px 0; page-break-inside: avoid; }
+  .recuadro table { table-layout: fixed; }
+  .recuadro td { padding: 4px 4px; font-size: 9pt; }
+  .et { font-weight: bold; text-transform: uppercase; }
+  .peq { font-size: 7.5pt; color: #555; }
+  .mapa { width: 100%; max-width: 260px; margin-top: 4px; border: 1px solid #ddd; }
+
+  /* Titulo de seccion: mayusculas, subrayado, con una regla encima */
+  h2.sec { font-size: 12pt; font-weight: bold; text-transform: uppercase; text-decoration: underline;
+           margin: 14px 0 4px; padding-top: 10px; border-top: 1.5px solid #666; page-break-after: avoid; }
+
+  /* Tablas con bordes (SUBTAREAS, adjuntos, hallazgos, materiales) */
+  .subtitle { border: 1px solid #555; text-align: center; font-weight: bold; text-transform: uppercase;
+              font-size: 14pt; padding: 7px 6px; margin-top: 12px; page-break-after: avoid; }
+  table.sub, table.tabla { margin: 0 0 -1px; }
+  table.sub td, table.sub th, table.tabla td, table.tabla th { border: 1px solid #555; padding: 5px 6px; font-size: 9pt; }
+  table.sub tr, table.tabla tr { page-break-inside: avoid; }
+  table.sub { table-layout: fixed; }
+  table.tabla { margin-top: 6px; }
+  th { background: #eceff3; font-weight: bold; text-align: left; font-size: 8.5pt; }
+  tr.cabecera th { background: #eceff3; }
+  table.sub td.grupo { font-weight: normal; }
+  .obs { margin-top: 3px; font-size: 8pt; color: #555; font-style: italic; }
+  table.repeated { margin: 0 0 -1px; }
+  table.repeated th, table.repeated td { border: 1px solid #555; font-size: 7.5pt; padding: 2px 3px; }
+  table.repeated tr { page-break-inside: avoid; }
+  tr.group-header td { background: #f0f0f0; font-weight: bold; font-size: 9pt; }
+  tr.etapa td { background: #f3f3f3; font-weight: bold; }
+  table.adj td.imagen { text-align: center; vertical-align: middle; padding: 8px; }
+  table.adj td.imagen img { max-width: 100%; max-height: 200px; }
   .alert { color: #b42318; }
-  .kv:last-child { margin-bottom: 0; }
+
+  /* Casillas dibujadas: no dependen de que la fuente tenga los simbolos */
+  .cb { display: inline-block; width: 7px; height: 7px; border: 1px solid #222; vertical-align: -1px;
+        margin: 0 3px 0 8px; padding: 1px; background-clip: content-box; background-color: #fff; }
+  .cb.on { background-color: #222; }
+  .cb.primera { margin-left: 0; }
+
+  .no-data { color: #777; font-style: italic; font-size: 9pt; padding: 6px 0; }
+  .meta-row { font-size: 8pt; color: #555; margin-top: 6px; }
+
+  /* Firmas: la firma sobre una linea y el rotulo debajo */
+  .firmas { border: 1px solid #666; border-radius: 6px; margin-top: 16px; page-break-inside: avoid; overflow: hidden; }
+  .firmas table { table-layout: fixed; }
+  .firmas td.firma { height: 105px; vertical-align: bottom; text-align: center; padding: 6px 8px 4px; font-size: 8pt; }
+  .firmas td.firma img { max-width: 170px; max-height: 62px; display: block; margin: 0 auto 3px; }
+  .firmas td.rotulo { border-top: 1.5px solid #222; text-align: center; padding: 4px 6px; font-size: 9pt; }
+  .validated { display: table; margin-left: auto; margin-right: auto; border: 1px solid #1e3a5f; color: #1e3a5f; padding: 6px 8px; font-size: 8pt; font-weight: bold; margin-bottom: 3px; }
+
   .legal { margin-top: 18px; padding-top: 6px; border-top: 1px solid #ccc; font-size: 7pt; line-height: 1.35; color: #666; overflow-wrap: anywhere; word-break: break-word; page-break-inside: avoid; }
   .legal .hash { font-family: 'Courier New', monospace; }
 </style>
 </head>
 <body>
 
-<!-- ENCABEZADO -->
-<div class="header">
-  <table class="header-table">
-    <tr>
-      {% if logo_base64 %}
-      <td style="width:1%; white-space:nowrap; vertical-align:middle; padding-right:18px">
-        <img src="data:image/png;base64,{{ logo_base64 }}"
-             style="height:46px; width:auto;" />
-      </td>
-      {% endif %}
-      <td style="vertical-align:middle">
-        <div class="header-title">ACTA DE SERVICIO</div>
-        <div class="header-sub">{{ work_order.get_task_type_display }}</div>
-      </td>
-      <td style="width:1%; white-space:nowrap; text-align:right; vertical-align:middle; padding-left:18px">
-        <div style="font-size:14pt; font-weight:bold">{{ work_order.wo_code }}</div>
-        <div class="header-sub">Emitido: {{ generated_at|date:"d/m/Y" }}</div>
-      </td>
-    </tr>
-  </table>
-</div>
+<!-- ENCABEZADO: logo a la izquierda; al centro razon social, NIT y "Orden de trabajo"
+     (la razon social y el NIT salen de Formato del acta; vacios, no se muestran);
+     a la derecha numero, fecha y calificacion. -->
+<table class="encabezado">
+  <tr>
+    <td class="logo" style="width:30%">{% if logo_base64 %}<img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">{% endif %}</td>
+    <td class="centro" style="width:40%">
+      {% if company.name %}<div class="empresa">{{ company.name }}</div>{% endif %}
+      {% if company.tax_id %}<div>{{ company.tax_id }}</div>{% endif %}
+      <div>Orden de trabajo</div>
+      <div class="gris">{{ work_order.get_task_type_display }}</div>
+    </td>
+    <td class="derecha" style="width:30%">
+      <div>N°: {{ work_order.wo_code }}</div>
+      <div>Fecha: <span class="rojo">{{ order_date|date:"d/m/Y" }}</span></div>
+      {% if rating %}<div>Calificación: {{ rating }}</div>{% endif %}
+    </td>
+  </tr>
+</table>
 
-<!-- Cada seccion y campo obedece a los interruptores de Configuracion > Acta
-     (op.*, apps/reports/options.py). Los numeros de seccion (n.*) se calculan
-     con las que estan encendidas, para que no queden huecos. Un dato sin valor
-     no se imprime (ni su etiqueta): las filas se arman en generator.py. -->
+<!-- Cada seccion y campo obedece a los interruptores de Configuracion > Formato
+     del acta (op.*, apps/reports/options.py). Un dato sin valor no se imprime (ni
+     su etiqueta): las filas se arman en generator.py. -->
 
-<!-- Datos de la visita -->
-<div class="section">
-  <h2>{{ n.visita }}. Datos de la visita</h2>
-  <table class="ficha">
+<!-- Primer recuadro: genero, responsable, hospital, duracion estimada, notas -->
+<div class="recuadro">
+  <table>
     {% for fila in visit_rows %}
     <tr>
       {% for d in fila %}
-      <td style="width:50%"{% if forloop.last and fila|length == 1 %} colspan="2"{% endif %}><span class="label">{{ d.label }}</span><br>{% if forloop.parentloop.first and forloop.first %}<strong>{{ d.value }}</strong>{% else %}{{ d.value }}{% endif %}</td>
+      <td style="width:50%"{% if forloop.last and fila|length == 1 %} colspan="2"{% endif %}><span class="et">{{ d.label }}:</span> {{ d.value }}</td>
       {% endfor %}
     </tr>
     {% endfor %}
   </table>
-  {% if op.visita_descripcion and work_order.description %}
-  <table><tr><th>Descripción del trabajo</th></tr><tr><td>{{ work_order.description }}</td></tr></table>
-  {% endif %}
-  {% if op.visita_notas and work_order.notes %}
-  <table><tr><th>Notas</th></tr><tr><td>{{ work_order.notes }}</td></tr></table>
-  {% endif %}
 </div>
 
 {% if not blocks %}
-<div class="section">
-  <h2>{{ n.activos }}. Activos intervenidos</h2>
-  <p class="no-data">La orden no tiene activos registrados.</p>
-</div>
+<h2 class="sec">Activos</h2>
+<p class="no-data">La orden no tiene activos registrados.</p>
 {% endif %}
 
-<!-- Un bloque por activo (o ubicacion): su cuadro de datos y, debajo, su trabajo -->
+<!-- Un bloque por tarea: su activo, la tarea, sus subtareas y sus adjuntos -->
 {% for b in blocks %}
-<div class="section">
-  <h2>{{ n.activos }}.{{ forloop.counter }} {% if b.asset.is_location %}Ubicación intervenida: {% endif %}{{ b.title }}</h2>
-  <table class="ficha">
-    {% if b.card.location %}
+<h2 class="sec">{% if b.asset.is_location %}Ubicaciones{% else %}Activos{% endif %}</h2>
+<div class="recuadro">
+  <table>
+    {% for d in b.card.full %}
     <tr>
-      <td colspan="2"><span class="label">{{ b.card.location.label }}</span><br><strong>{{ b.card.location.value }}</strong>{% if b.card.location.extra %}<br><span class="label">{{ b.card.location.extra }}</span>{% endif %}{% if b.card.location.map %}<br><img class="gps-map" src="{{ b.card.location.map }}" alt="Mapa de la ubicación">{% endif %}</td>
+      <td colspan="2"><span class="et">{{ d.label }}:</span> {{ d.value }}{% if d.extra %}<div class="peq">{{ d.extra }}</div>{% endif %}{% if d.map %}<br><img class="mapa" src="{{ d.map }}" alt="Mapa de la ubicación">{% endif %}</td>
     </tr>
-    {% endif %}
+    {% endfor %}
     {% for fila in b.card.rows %}
     <tr>
       {% for d in fila %}
-      <td style="width:50%"{% if forloop.last and fila|length == 1 %} colspan="2"{% endif %}><span class="label">{{ d.label }}</span><br>{{ d.value }}</td>
+      <td style="width:50%"{% if forloop.last and fila|length == 1 %} colspan="2"{% endif %}><span class="et">{{ d.label }}:</span> {{ d.value }}</td>
       {% endfor %}
     </tr>
     {% endfor %}
   </table>
+</div>
 
-  {% if b.checklist_response %}
-    {% for sec in b.sections %}
-      {% if sec.repeated %}
-      {# Bloque repetible: una fila por toma, una columna por pregunta. #}
-      <table class="repeated">
-        <tr class="group-header"><td colspan="{{ sec.columns|length|add:2 }}">{{ sec.name }} &times; {{ sec.rows|length }}</td></tr>
-        <tr><th>N°</th>{% for col in sec.columns %}<th>{{ col }}</th>{% endfor %}{% if op.checklist_observaciones and sec.with_notes %}<th>Observaciones</th>{% endif %}</tr>
-        {% for fila in sec.rows %}
-        <tr><td>{{ fila.n }}</td>{% for c in fila.cells %}<td>{{ c }}</td>{% endfor %}{% if op.checklist_observaciones and sec.with_notes %}<td>{{ fila.notes }}</td>{% endif %}</tr>
-        {% endfor %}
-      </table>
-      {% else %}
-      {% with con_notas=op.checklist_observaciones %}
-      <table>
-        <tr class="group-header"><td colspan="{% if con_notas %}3{% else %}2{% endif %}">{% if sec.name %}{{ sec.name }}{% else %}General{% endif %}</td></tr>
-        {% if con_notas %}
-        <tr><th style="width:35%">Qué se revisó</th><th style="width:35%">Resultado</th><th style="width:30%">Observaciones</th></tr>
-        {% else %}
-        <tr><th style="width:50%">Qué se revisó</th><th style="width:50%">Resultado</th></tr>
-        {% endif %}
-        {% for fila in sec.rows %}
-        <tr>
-          <td>{{ fila.label }}</td>
-          <td>{{ fila.value }}{% if fila.map %}<br><img class="gps-map" src="{{ fila.map }}" alt="Mapa de la localización">{% endif %}</td>
-          {% if con_notas %}<td>{{ fila.notes }}</td>{% endif %}
-        </tr>
-        {% endfor %}
-      </table>
-      {% endwith %}
-      {% endif %}
-    {% empty %}
-      <p class="no-data">La revisión no tiene respuestas.</p>
+<h2 class="sec">Tareas planificadas</h2>
+<div class="recuadro">
+  <table>
+    {% for d in b.task_card.full %}
+    <tr><td colspan="2"><span class="et">{{ d.label }}:</span> {{ d.value }}</td></tr>
     {% endfor %}
-    {# started_at del checklist es cuando se creo con la OT: la hora real es la de sus respuestas. #}
-    {% if op.checklist_respondido and b.review %}
-    <div class="meta-row">
-      Revisión hecha el {{ b.review.when }}{% if b.review.by %} por {{ b.review.by }}{% endif %}
-    </div>
-    {% endif %}
-  {% else %}
-    <p class="no-data">Esta tarea no tenía lista de revisión.</p>
-  {% endif %}
-
-  {% if op.fotos_activo and b.photos %}
-  {% for g in b.photo_groups %}
-  {% if g.label %}<h3 class="photo-stage">{{ g.label }}</h3>{% endif %}
-  <table class="photo-grid">
-    {% for photo in g.photos %}
-      {% if forloop.counter0|divisibleby:2 %}<tr>{% endif %}
-      <td style="width:50%">
-        <img src="{{ photo.file_url }}" alt="Foto de {{ b.title }}">
-        {% if photo.caption %}<div class="photo-caption">{{ photo.caption }}</div>{% endif %}
-        <div class="photo-caption">{{ photo.taken_at|date:"d/m/Y H:i" }}{% if op.fotos_gps and photo.latitude and photo.longitude %} · Coordenadas: {{ photo.latitude }}, {{ photo.longitude }}{% endif %}</div>
-      </td>
-      {% if forloop.counter|divisibleby:2 or forloop.last %}</tr>{% endif %}
+    {% for fila in b.task_card.rows %}
+    <tr>
+      {% for d in fila %}
+      <td style="width:50%"{% if forloop.last and fila|length == 1 %} colspan="2"{% endif %}><span class="et">{{ d.label }}:</span> {{ d.value }}</td>
+      {% endfor %}
+    </tr>
     {% endfor %}
   </table>
-  {% endfor %}
-  {% if b.photos|length > 6 %}<p class="no-data">Se muestran 6 de {{ b.photos|length }} fotos. Las demás están en el sistema TodoGas.</p>{% endif %}
-  {% endif %}
 </div>
+
+{% if b.checklist_response %}
+<div class="subtitle">Subtareas</div>
+  {% for t in b.tables %}
+    {% if t.repeated %}
+    {# Bloque repetible: una fila por toma, una columna por pregunta. #}
+    <table class="repeated">
+      <tr class="group-header"><td colspan="{{ t.columns|length|add:2 }}">{{ t.name }} &times; {{ t.rows|length }}</td></tr>
+      <tr><th>N°</th>{% for col in t.columns %}<th>{{ col }}</th>{% endfor %}{% if op.checklist_observaciones and t.with_notes %}<th>Observaciones</th>{% endif %}</tr>
+      {% for fila in t.rows %}
+      <tr><td>{{ fila.n }}</td>{% for c in fila.cells %}<td>{% if c.boxes %}{% for rotulo, marcada in c.boxes %}<span class="cb{% if marcada %} on{% endif %}{% if forloop.first %} primera{% endif %}"></span>{{ rotulo }}{% endfor %}{% else %}{{ c.text }}{% endif %}</td>{% endfor %}{% if op.checklist_observaciones and t.with_notes %}<td>{{ fila.notes }}</td>{% endif %}</tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <table class="sub">
+      <colgroup><col style="width:25%"><col style="width:37%"><col style="width:38%"></colgroup>
+      {% if forloop.first %}<tr class="cabecera"><th>Componente</th><th>Qué se revisó</th><th>Resultado</th></tr>{% endif %}
+      {% for fila in t.rows %}
+      <tr>
+        <td class="grupo">{{ fila.group }}</td>
+        {% if fila.gps %}
+        {# Como la fila LOCALIZACION de Fracttal: direccion, coordenadas, fecha y hora #}
+        <td>{{ fila.label|default:"Localización" }}</td>
+        <td>
+          {% if fila.gps.address %}{{ fila.gps.address }}<br>{% endif %}
+          {% for c in fila.gps.coords %}{{ c }}<br>{% endfor %}
+          {% if fila.gps.when %}{{ fila.gps.when }}{% endif %}
+          {% if fila.map %}<br><img class="mapa" src="{{ fila.map }}" alt="Mapa de la localización">{% endif %}
+        </td>
+        {% else %}
+        <td>{{ fila.label }}</td>
+        <td>
+          {% if fila.boxes %}{% for rotulo, marcada in fila.boxes %}<span class="cb{% if marcada %} on{% endif %}{% if forloop.first %} primera{% endif %}"></span>{{ rotulo }}{% endfor %}{% else %}{{ fila.value }}{% endif %}
+          {% if op.checklist_observaciones and fila.notes %}<div class="obs">Observaciones: {{ fila.notes }}</div>{% endif %}
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  {% empty %}
+    <p class="no-data">La revisión no tiene respuestas.</p>
+  {% endfor %}
+  {# started_at del checklist es cuando se creo con la OT: la hora real es la de sus respuestas. #}
+  {% if op.checklist_respondido and b.review %}
+  <div class="meta-row">
+    Revisión hecha el {{ b.review.when }}{% if b.review.by %} por {{ b.review.by }}{% endif %}
+  </div>
+  {% endif %}
+{% else %}
+<p class="no-data">Esta tarea no tenía lista de revisión.</p>
+{% endif %}
+
+{% if op.fotos_activo and b.photos %}
+{% include "reports/_adjuntos.html" with groups=b.photo_groups titulo="Adjuntos de la tarea" alt=b.title %}
+{% if b.photos|length > 6 %}<p class="no-data">Se muestran 6 de {{ b.photos|length }} fotos. Las demás están en el sistema TodoGas.</p>{% endif %}
+{% endif %}
 {% endfor %}
 
 {% if op.hallazgos %}
 <!-- Hallazgos -->
-<div class="section">
-  <h2>{{ n.hallazgos }}. Hallazgos encontrados y reportados</h2>
+<h2 class="sec">Hallazgos encontrados y reportados</h2>
   {% if findings %}
-  <table>
+  <table class="tabla" style="margin-top:0">
     <tr><th style="width:22%">Activo</th><th style="width:12%">Gravedad</th><th>Hallazgo</th><th style="width:28%">Situación</th></tr>
     {% for f in findings %}
     <tr>
-      <td>{{ f.asset.name }}{% if f.asset.is_location %}<br><span class="label">Ubicación</span>{% elif f.asset.code %}<br><span class="label">{{ f.asset.code }}</span>{% endif %}</td>
+      <td>{{ f.asset.name }}{% if f.asset.is_location %}<br><span class="peq">Ubicación</span>{% elif f.asset.code %}<br><span class="peq">{{ f.asset.code }}</span>{% endif %}</td>
       <td>{{ f.get_severity_display }}{% if f.out_of_service %}<br><strong class="alert">Fuera de servicio</strong>{% endif %}</td>
-      <td>{{ f.description }}{% if f.n_fotos %}<br><span class="label">{{ f.n_fotos }} foto{{ f.n_fotos|pluralize }}</span>{% endif %}</td>
+      <td>{{ f.description }}{% if f.n_fotos %}<br><span class="peq">{{ f.n_fotos }} foto{{ f.n_fotos|pluralize }}</span>{% endif %}</td>
       <td>{% if f.resolved_on_site %}<strong>Resuelto en sitio</strong>{% if f.resolution_notes %}<br>{{ f.resolution_notes }}{% endif %}{% else %}<strong>Pendiente de corrección</strong>{% endif %}</td>
     </tr>
     {% endfor %}
@@ -216,50 +244,30 @@
   {% else %}
   <p class="no-data">No se reportaron hallazgos en esta visita.</p>
   {% endif %}
-</div>
 {% endif %}
 
 {% if op.fotos_visita %}
-<!-- Evidencia fotografica de la visita -->
-<div class="section">
-  <h2>{{ n.fotos_visita }}. Evidencia fotográfica de la visita</h2>
+<!-- Evidencia fotografica de la visita (las fotos que no son de una tarea) -->
+<h2 class="sec">Evidencia fotográfica de la visita</h2>
   {% if visit_photos %}
-    {% for g in visit_photo_groups %}
-    {% if g.label %}<h3 class="photo-stage">{{ g.label }}</h3>{% endif %}
-    <table class="photo-grid">
-      {% for photo in g.photos %}
-        {% if forloop.counter0|divisibleby:2 %}<tr>{% endif %}
-        <td style="width:50%">
-          <img src="{{ photo.file_url }}" alt="Foto {{ forloop.counter }}">
-          {% if photo.caption %}<div class="photo-caption">{{ photo.caption }}</div>{% endif %}
-          <div class="photo-caption">{{ photo.taken_at|date:"d/m/Y H:i" }}</div>
-          {% if op.fotos_gps and photo.latitude and photo.longitude %}
-          <div class="photo-caption">Coordenadas: {{ photo.latitude }}, {{ photo.longitude }}</div>
-          {% endif %}
-        </td>
-        {% if forloop.counter|divisibleby:2 or forloop.last %}</tr>{% endif %}
-      {% endfor %}
-    </table>
-    {% endfor %}
+    {% include "reports/_adjuntos.html" with groups=visit_photo_groups titulo="Adjuntos de la visita" alt="Foto de la visita" %}
     {% if visit_photos|length > 10 %}
     <p class="no-data">Nota: Se muestran las primeras 10 fotos. Las demás están en el sistema TodoGas.</p>
     {% endif %}
   {% elif photos and op.fotos_activo %}
-    <p class="no-data">Todas las fotos están con su activo, en la sección {{ n.activos }}.</p>
+    <p class="no-data">Todas las fotos están con su tarea, en sus adjuntos.</p>
   {% elif photos %}
     <p class="no-data">No hay fotos generales de la visita.</p>
   {% else %}
     <p class="no-data">No se registraron fotos de evidencia.</p>
   {% endif %}
-</div>
 {% endif %}
 
 {% if op.materiales %}
 <!-- Materiales -->
-<div class="section">
-  <h2>{{ n.materiales }}. Materiales utilizados</h2>
+<h2 class="sec">Materiales utilizados</h2>
   {% if stock_movements %}
-    <table>
+    <table class="tabla" style="margin-top:0">
       <tr><th>Material</th><th>Cantidad</th><th>Unidad</th></tr>
       {% for mov in stock_movements %}
       <tr>
@@ -272,50 +280,49 @@
   {% else %}
     <p class="no-data">No se registraron materiales utilizados.</p>
   {% endif %}
-</div>
 {% endif %}
 
 {% if n.firmas %}
-<!-- Firmas -->
-<div class="section">
-  <h2>{{ n.firmas }}. Firmas</h2>
-  {# Tres firmas, como en Fracttal: quien hizo, quien valido y quien recibio. #}
-  <table class="sig-table">
+<!-- Firmas, en el orden del acta de Fracttal -->
+<div class="firmas">
+  <table>
     <tr>
-      {% if op.firma_realizado %}
-      <td>
-        <div class="label">Realizado por</div>
-        {% with sig=technician_signature %}{% if sig %}
-          <br><img src="{{ sig.file_url }}" alt="Firma del técnico">
-          <br><strong>{{ sig.signer_name }}</strong>
-          {% if sig.signer_role %}<br><span class="label">{{ sig.signer_role }}</span>{% endif %}
-          <br><span class="label">{{ sig.signed_at|date:"d/m/Y H:i" }}</span>
-        {% else %}<br><span class="no-data">No registrada</span>{% endif %}{% endwith %}
+      {% if op.firma_aceptado %}
+      <td class="firma">
+        {% with sig=client_signature %}{% if sig %}
+          <img src="{{ sig.file_url }}" alt="Firma del cliente">
+          <strong>{{ sig.signer_name }}</strong>
+          {% if sig.signer_role %}<br>{{ sig.signer_role }}{% endif %}
+          <br>{{ sig.signed_at|date:"d/m/Y H:i" }}
+        {% else %}<span class="no-data">No registrada</span>{% endif %}{% endwith %}
       </td>
       {% endif %}
       {% if op.firma_validado %}
-      <td>
-        <div class="label">Validado por</div>
+      <td class="firma">
         {# La firma guardada de quien aprobo, copiada a la OT al aprobar. Las OT anteriores no la tienen: llevan solo el nombre. #}
         {% if validation %}
-          {% if validation_signature %}<br><img src="{{ validation_signature.file_url }}" alt="Firma de validación">{% else %}<br><div class="validated">Aprobado en TodoGas CMMS</div>{% endif %}
-          <br><strong>{{ validation.name }}</strong>
-          <br><span class="label">{{ validation.role }}</span>
-          <br><span class="label">{{ validation.at|date:"d/m/Y" }}</span>
-        {% else %}<br><span class="no-data">Pendiente de aprobación</span>{% endif %}
+          {% if validation_signature %}<img src="{{ validation_signature.file_url }}" alt="Firma de validación">{% else %}<div class="validated">Aprobado en TodoGas CMMS</div>{% endif %}
+          <strong>{{ validation.name }}</strong>
+          <br>{{ validation.role }}
+          <br>{{ validation.at|date:"d/m/Y" }}
+        {% else %}<span class="no-data">Pendiente de aprobación</span>{% endif %}
       </td>
       {% endif %}
-      {% if op.firma_aceptado %}
-      <td>
-        <div class="label">Aceptado por</div>
-        {% with sig=client_signature %}{% if sig %}
-          <br><img src="{{ sig.file_url }}" alt="Firma del cliente">
-          <br><strong>{{ sig.signer_name }}</strong>
-          {% if sig.signer_role %}<br><span class="label">{{ sig.signer_role }}</span>{% endif %}
-          <br><span class="label">{{ sig.signed_at|date:"d/m/Y H:i" }}</span>
-        {% else %}<br><span class="no-data">No registrada</span>{% endif %}{% endwith %}
+      {% if op.firma_realizado %}
+      <td class="firma">
+        {% with sig=technician_signature %}{% if sig %}
+          <img src="{{ sig.file_url }}" alt="Firma del técnico">
+          <strong>{{ sig.signer_name }}</strong>
+          {% if sig.signer_role %}<br>{{ sig.signer_role }}{% endif %}
+          <br>{{ sig.signed_at|date:"d/m/Y H:i" }}
+        {% else %}<span class="no-data">No registrada</span>{% endif %}{% endwith %}
       </td>
       {% endif %}
+    </tr>
+    <tr>
+      {% if op.firma_aceptado %}<td class="rotulo">Aceptado por</td>{% endif %}
+      {% if op.firma_validado %}<td class="rotulo">Validado por</td>{% endif %}
+      {% if op.firma_realizado %}<td class="rotulo">Realizado por</td>{% endif %}
     </tr>
   </table>
 </div>

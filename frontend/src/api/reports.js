@@ -96,8 +96,9 @@ export function useReportSettings() {
 export function useSaveReportSettings() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (options) =>
-      client.patch('/api/report-settings/', { options }).then((r) => r.data),
+    // `cambios` trae los interruptores cambiados ({ options }) y/o la razon social y el NIT.
+    mutationFn: (cambios) =>
+      client.patch('/api/report-settings/', cambios).then((r) => r.data),
     onSuccess: (data) => qc.setQueryData(['report-settings'], data),
   })
 }
@@ -105,9 +106,13 @@ export function useSaveReportSettings() {
 /** El acta de la última OT finalizada con estas opciones, sin guardarlas. */
 export function usePreviewReportSettings() {
   return useMutation({
-    mutationFn: (options) =>
+    mutationFn: ({ options, company_name, company_tax_id }) =>
       client
-        .post('/api/report-settings/preview/', { options }, { responseType: 'blob' })
+        .post(
+          '/api/report-settings/preview/',
+          { options, company_name, company_tax_id },
+          { responseType: 'blob' },
+        )
         .then((r) => ({ blob: r.data, workOrder: r.headers['x-work-order'] ?? '' })),
   })
 }

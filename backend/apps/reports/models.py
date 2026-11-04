@@ -61,6 +61,10 @@ class ReportSettings(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     options = models.JSONField(default=dict, blank=True)
+    # Razon social y NIT del encabezado del acta. No van en el codigo: cada
+    # despliegue pone los suyos. Vacios, el encabezado no los muestra.
+    company_name = models.CharField(max_length=200, blank=True, default="")
+    company_tax_id = models.CharField(max_length=50, blank=True, default="")
     updated_by = models.ForeignKey(
         "users.User", on_delete=models.PROTECT,
         null=True, blank=True,

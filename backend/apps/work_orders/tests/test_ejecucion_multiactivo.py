@@ -313,9 +313,11 @@ def test_el_acta_tiene_un_bloque_por_activo(ot, tec):
         generate_service_report_pdf(ot)
 
     texto = html["texto"]
-    assert "2.1 Alarma" in texto and "2.2 Caja" in texto
-    assert texto.index("2.1 Alarma") < texto.index("2.2 Caja"), "los bloques van en orden"
+    # Sin numeros de seccion (acta con estilo Fracttal): cada bloque abre con su recuadro ACTIVOS.
+    assert texto.count('<h2 class="sec">Activos</h2>') == 2
+    assert "Descripción:</span> Alarma" in texto and "Descripción:</span> Caja" in texto
+    assert texto.index("Descripción:</span> Alarma") < texto.index("Descripción:</span> Caja"), "los bloques van en orden"
     assert "valor-P3-1" in texto and "valor-P3-2" in texto
     assert "Tomas" not in texto, "la tarea que no esta en la OT no va en el acta"
-    assert texto.index("a.jpg") > texto.index("2.2 Caja"), "la foto va con su activo"
+    assert texto.index("a.jpg") > texto.index("Descripción:</span> Caja"), "la foto va con su activo"
     assert "Foto adjunta" in texto and "X-Amz-Signature" not in texto
