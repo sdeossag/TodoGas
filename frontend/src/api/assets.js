@@ -251,3 +251,30 @@ export function useImportFracttal() {
     },
   })
 }
+
+// Importación del JSON del extractor de Fracttal (sede completa con historial).
+function fracttalJsonForm(archivo) {
+  const fd = new FormData()
+  fd.append('archivo', archivo)
+  return fd
+}
+
+export function usePreviewFracttalJsonImport() {
+  return useMutation({
+    mutationFn: (archivo) =>
+      client.post('/api/assets/import/fracttal-json/preview/', fracttalJsonForm(archivo), SIN_JSON).then((r) => r.data),
+  })
+}
+
+export function useImportFracttalJson() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (archivo) =>
+      client.post('/api/assets/import/fracttal-json/apply/', fracttalJsonForm(archivo), SIN_JSON).then((r) => r.data),
+    onSuccess: () => {
+      for (const k of ['assets', 'assets-page', 'asset-tree', 'asset-nodes', 'hospitals', 'work-orders', 'plans']) {
+        qc.invalidateQueries({ queryKey: [k] })
+      }
+    },
+  })
+}

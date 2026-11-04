@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import Spinner from '../../components/ui/Spinner'
 import Modal from '../../components/ui/Modal'
 import Icon from '../../components/ui/Icon'
+import ImportFracttalJsonPanel from './ImportFracttalJsonPanel'
 import { usePreviewFracttalImport, useImportFracttal } from '../../api/assets'
 import { apiErrorMessage } from '../../utils/apiError'
 import {
@@ -23,6 +24,7 @@ export default function ImportFracttalPage() {
   const [confirmar, setConfirmar] = useState(false)
   const [filtro, setFiltro] = useState('todas')
   const [errorLocal, setErrorLocal] = useState('')
+  const [modo, setModo] = useState('excel')
 
   const preview = usePreviewFracttalImport()
   const importar = useImportFracttal()
@@ -75,12 +77,24 @@ export default function ImportFracttalPage() {
           <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tightest text-gray-900">
             Importar desde Fracttal
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Trae hospitales, ubicaciones y equipos desde las exportaciones a Excel</p>
+          <p className="text-sm text-gray-500 mt-0.5">Trae hospitales, ubicaciones y equipos desde Excel, o una sede completa con su historial desde el JSON del extractor</p>
         </div>
         <Link to="/activos" className="text-sm text-brand hover:underline whitespace-nowrap pt-2">Volver a Activos</Link>
       </div>
 
-      {resultado ? (
+      <div className="flex gap-2" role="tablist">
+        {[['excel', 'Excel de Fracttal'], ['json', 'JSON del extractor']].map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={modo === id} onClick={() => setModo(id)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${
+              modo === id ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {modo === 'json' ? (
+        <ImportFracttalJsonPanel />
+      ) : resultado ? (
         <Resultado resumen={resultado} onReiniciar={empezarDeNuevo} />
       ) : resumen ? (
         <Vista

@@ -8,7 +8,12 @@ from .views import (
     ClientPortalView,
     HospitalViewSet,
 )
-from .views_importacion import ImportacionFracttalPreviewView, ImportacionFracttalView
+from .views_importacion import (
+    ImportacionFracttalJsonPreviewView,
+    ImportacionFracttalJsonView,
+    ImportacionFracttalPreviewView,
+    ImportacionFracttalView,
+)
 from .views_contracts import ContractViewSet
 from .views_meters import MeterReadingViewSet, MeterUnitViewSet, MeterViewSet
 
@@ -26,6 +31,10 @@ urlpatterns = [
     path("assets/import/fracttal/preview/", ImportacionFracttalPreviewView.as_view(),
          name="import-fracttal-preview"),
     path("assets/import/fracttal/", ImportacionFracttalView.as_view(), name="import-fracttal"),
+    path("assets/import/fracttal-json/preview/", ImportacionFracttalJsonPreviewView.as_view(),
+         name="import-fracttal-json-preview"),
+    path("assets/import/fracttal-json/apply/", ImportacionFracttalJsonView.as_view(),
+         name="import-fracttal-json-apply"),
 ] + router.urls + [
     path("client-portal/summary/", ClientPortalView.as_view(), name="client-portal-summary"),
 ]

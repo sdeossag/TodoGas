@@ -43,9 +43,11 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        ots = WorkOrder.objects.filter(status=WorkOrder.Status.COMPLETED).order_by(
-            "wo_number"
-        )
+        # Las OT historicas importadas de Fracttal no tienen acta nuestra: no
+        # hay nada que verificar y no cuentan como "sin acta generada".
+        ots = WorkOrder.objects.filter(
+            status=WorkOrder.Status.COMPLETED, origin=""
+        ).order_by("wo_number")
         if options["hospital"]:
             ots = ots.filter(hospital__code=options["hospital"])
 

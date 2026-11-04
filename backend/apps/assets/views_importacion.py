@@ -9,6 +9,7 @@ from apps.audit.ip import client_ip
 from apps.users.permissions import IsAdmin
 
 from . import importacion_fracttal as imp
+from . import importacion_fracttal_json as imp_json
 
 MAX_BYTES = 10 * 1024 * 1024
 
@@ -62,6 +63,57 @@ class ImportacionFracttalView(_Base):
         resumen = plan.resumen(aplicado=True)
         imp.auditar(
             request.user, nombres, resumen, conteos,
+            ip=client_ip(request), user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+        resumen["applied_counts"] = conteos
+        return Response(resumen, status=status.HTTP_201_CREATED)
+
+
+MAX_BYTES_JSON = 100 * 1024 * 1024
+
+
+class _BaseJson(APIView):
+    permission_classes = [IsAdmin]
+    parser_classes = [MultiPartParser]
+
+    def _leer(self, request):
+        """Devuelve (datos, nombre) o lanza ImportacionError."""
+        archivo = request.FILES.get("archivo")
+        if archivo is None:
+            raise imp.ImportacionError("Sube el archivo JSON en el campo «archivo».")
+        if not archivo.name.lower().endswith(".json"):
+            raise imp.ImportacionError("El archivo debe ser un JSON (.json) del extractor de Fracttal.")
+        if archivo.size > MAX_BYTES_JSON:
+            raise imp.ImportacionError("El archivo supera los 100 MB.")
+        return imp_json.leer(archivo), archivo.name
+
+
+class ImportacionFracttalJsonPreviewView(_BaseJson):
+    """POST /api/assets/import/fracttal-json/preview/ — no escribe nada."""
+
+    def post(self, request):
+        try:
+            datos, _ = self._leer(request)
+        except imp.ImportacionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(imp_json.planificar(datos).resumen())
+
+
+class ImportacionFracttalJsonView(_BaseJson):
+    """POST /api/assets/import/fracttal-json/apply/ — rehace el plan y, sin errores, lo aplica."""
+
+    def post(self, request):
+        try:
+            datos, nombre = self._leer(request)
+            plan = imp_json.planificar(datos)
+            if plan.errores:
+                return Response(plan.resumen(), status=status.HTTP_400_BAD_REQUEST)
+            conteos = imp_json.aplicar(plan, request.user)
+        except imp.ImportacionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        resumen = plan.resumen(aplicado=True)
+        imp_json.auditar(
+            request.user, nombre, resumen, conteos,
             ip=client_ip(request), user_agent=request.META.get("HTTP_USER_AGENT", ""),
         )
         resumen["applied_counts"] = conteos

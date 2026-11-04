@@ -26,12 +26,22 @@ class Hospital(models.Model):
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True, default="")
+    # Id de la sede raiz en Fracttal (importador de JSON): reimportar la
+    # encuentra aunque le cambien el nombre.
+    fracttal_id = models.CharField(max_length=50, blank=True, default="", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "assets_hospital"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fracttal_id"],
+                condition=~models.Q(fracttal_id=""),
+                name="uq_hospital_fracttal_id",
+            ),
+        ]
         indexes = [
             # RF-AC-05 pide que la busqueda de activos alcance tambien el
             # nombre del hospital, que se resuelve por join contra esta tabla.

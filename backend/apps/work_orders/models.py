@@ -31,6 +31,9 @@ class WorkOrder(models.Model):
         MEDIUM = "MEDIUM", "Media"
         LOW = "LOW", "Baja"
 
+    class Origin(models.TextChoices):
+        FRACTTAL = "FRACTTAL", "Importada de Fracttal"
+
     class ProgressMeasure(models.TextChoices):
         SUBTASKS = "SUBTASKS", "Todas las subtareas"
         MANUAL = "MANUAL", "Manual"
@@ -116,6 +119,20 @@ class WorkOrder(models.Model):
     request_number = models.IntegerField(null=True, blank=True)
     synced_at = models.DateTimeField(null=True, blank=True)
     offline_uuid = models.UUIDField(null=True, blank=True, unique=True)
+    # OT historica traida de Fracttal (importador de JSON). Vacio = OT de
+    # TodoGas. Una importada nunca paso por las transiciones: no tiene acta
+    # automatica, no envio correos y el verificador de integridad la ignora.
+    origin = models.CharField(
+        max_length=10, choices=Origin.choices, blank=True, default="", db_index=True,
+    )
+    fracttal_id = models.CharField(max_length=50, blank=True, default="")
+    fracttal_folio = models.CharField(max_length=50, blank=True, default="")
+    # Nombre (texto) de quien la ejecuto en Fracttal. No es un usuario nuestro.
+    external_executor = models.CharField(max_length=200, blank=True, default="")
+    # Lo de Fracttal que no tiene campo propio: quien la creo, clasificaciones,
+    # datos por tarea (tecnico, notas, calificacion) y la lista de fotos con su
+    # ruta interna de Fracttal (pendientes de descargar).
+    fracttal_data = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -131,6 +148,13 @@ class WorkOrder(models.Model):
             # genera una migracion que los borra.
             models.Index(fields=["status", "scheduled_date"], name="idx_wo_status_scheduled"),
             models.Index(fields=["assigned_to", "status"], name="idx_wo_assignee_status"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fracttal_id"],
+                condition=~models.Q(fracttal_id=""),
+                name="uq_workorder_fracttal_id",
+            ),
         ]
 
     @property
