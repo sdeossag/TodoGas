@@ -1,4 +1,4 @@
-import { booleanLabel, booleanOptions, getFieldType } from '../../constants/checklistFields'
+import { booleanLabel, booleanOptions, getFieldType, passAlertFailLabel, passAlertFailOptions } from '../../constants/checklistFields'
 import Icon from '../ui/Icon'
 
 function groupFields(fields) {
@@ -109,6 +109,20 @@ function FieldPreview({ field }) {
               className="px-5 py-2 border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50"
             >
               {booleanLabel(v)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {field.field_type === 'PASS_ALERT_FAIL' && (
+        <div className="flex gap-2 flex-wrap">
+          {passAlertFailOptions(field).map((v) => (
+            <button
+              key={v}
+              disabled
+              className="px-5 py-2 min-h-[44px] border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50"
+            >
+              {passAlertFailLabel(v)}
             </button>
           ))}
         </div>

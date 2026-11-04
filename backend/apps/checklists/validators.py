@@ -4,6 +4,9 @@ from datetime import datetime
 from .models import ChecklistField
 
 
+RESPUESTAS_APROBO_ALERTA_FALLO = ("APROBO", "ALERTA", "FALLO")
+
+
 def validate_field_value(field, value):
     """
     Validates `value` against the field type rules.
@@ -19,6 +22,18 @@ def validate_field_value(field, value):
                 raise ValueError(f"El campo '{field.label}' no admite N/A.")
         elif value.lower() not in ("true", "false", "1", "0", "yes", "no", "si"):
             raise ValueError(f"El campo '{field.label}' debe ser verdadero o falso (true/false).")
+
+    elif ft == ChecklistField.FieldType.PASS_ALERT_FAIL:
+        # Valores exactos: la app y el acta dependen de ellos. "ALERTA" es una
+        # observacion que no bloquea; "FALLO" es el equivalente al "No" del Si/No.
+        if value == "NA":
+            if not field.allows_na:
+                raise ValueError(f"El campo '{field.label}' no admite N/A.")
+        elif value not in RESPUESTAS_APROBO_ALERTA_FALLO:
+            raise ValueError(
+                f"El campo '{field.label}' debe ser Aprobó, Alerta o Falló "
+                "(APROBO, ALERTA o FALLO)."
+            )
 
     elif ft in (ChecklistField.FieldType.NUMBER, ChecklistField.FieldType.METER):
         try:

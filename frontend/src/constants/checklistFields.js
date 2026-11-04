@@ -4,6 +4,7 @@ export const FIELD_TYPES = [
   { value: 'NUMBER',       label: 'Número',                icon: 'number', hasOptions: false, hasMinMax: true,  hasUnit: true  },
   { value: 'METER',        label: 'Lectura de medidor',    icon: 'gauge', hasOptions: false, hasMinMax: true,  hasUnit: true  },
   { value: 'BOOLEAN',      label: 'Sí / No',               icon: 'toggle', hasOptions: false, hasMinMax: false, hasUnit: false },
+  { value: 'PASS_ALERT_FAIL', label: 'Aprobó / Alerta / Falló', icon: 'toggle', hasOptions: false, hasMinMax: false, hasUnit: false },
   { value: 'SELECT',       label: 'Selección única',       icon: 'radio', hasOptions: true,  hasMinMax: false, hasUnit: false },
   { value: 'MULTI_SELECT', label: 'Selección múltiple',    icon: 'multiSelect',  hasOptions: true,  hasMinMax: false, hasUnit: false },
   { value: 'DATE',         label: 'Fecha',                 icon: 'calendar', hasOptions: false, hasMinMax: false, hasUnit: false },
@@ -29,9 +30,11 @@ export function withoutRetiredFields(fields) {
 
 // Sí/No/N/A (decisión del 2026-09-24): el N/A es una opción del Sí/No y el
 // campo guarda 'true', 'false' o 'na'.
+// El Aprobó/Alerta/Falló usa la misma casilla; guarda 'APROBO', 'ALERTA',
+// 'FALLO' o 'NA' en el mismo campo de texto.
 export function allowsNa(field) {
   const o = field?.options_json
-  return field?.field_type === 'BOOLEAN' && !!o && !Array.isArray(o) && !!o.allow_na
+  return (field?.field_type === 'BOOLEAN' || field?.field_type === 'PASS_ALERT_FAIL') && !!o && !Array.isArray(o) && !!o.allow_na
 }
 
 export function booleanOptions(field) {
@@ -40,6 +43,29 @@ export function booleanOptions(field) {
 
 export function booleanLabel(value) {
   return { true: 'Sí', false: 'No', na: 'N/A' }[value] ?? value
+}
+
+export function passAlertFailOptions(field) {
+  return allowsNa(field) ? ['APROBO', 'ALERTA', 'FALLO', 'NA'] : ['APROBO', 'ALERTA', 'FALLO']
+}
+
+export function passAlertFailLabel(value) {
+  return { APROBO: 'Aprobó', ALERTA: 'Alerta', FALLO: 'Falló', NA: 'N/A' }[value] ?? value
+}
+
+// Colores de cada botón cuando está elegido (verde, ámbar, rojo, gris).
+export const PASS_ALERT_FAIL_CLASSES = {
+  APROBO: 'bg-green-600 text-white border-green-600',
+  ALERTA: 'bg-amber-500 text-white border-amber-500',
+  FALLO: 'bg-red-600 text-white border-red-600',
+  NA: 'bg-gray-500 text-white border-gray-500',
+}
+
+/** Texto de una respuesta ya guardada según el tipo del campo. */
+export function answerLabel(field, value) {
+  if (field?.field_type === 'BOOLEAN') return booleanLabel(value)
+  if (field?.field_type === 'PASS_ALERT_FAIL') return passAlertFailLabel(value)
+  return value
 }
 
 export function getFieldType(value) {

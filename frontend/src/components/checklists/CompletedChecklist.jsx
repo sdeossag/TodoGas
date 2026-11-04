@@ -3,7 +3,7 @@ import { mediaUrl } from '../../api/client'
 import Icon from '../ui/Icon'
 import useNetworkStore from '../../store/networkStore'
 import { countFor, isRepeatable, slotKey } from '../../utils/checklistSlots'
-import { booleanLabel } from '../../constants/checklistFields'
+import { answerLabel } from '../../constants/checklistFields'
 import { UbicacionGps } from '../maps/GoogleMap'
 
 /**
@@ -149,8 +149,8 @@ export default function CompletedChecklistView({ response }) {
                     <UbicacionGps value={fr.value} address={fr.geo_address} answeredAt={fr.answered_at} />
                   ) : field.field_type === 'PHOTO' ? (
                     <FotoDelChecklist workOrderId={response.work_order} value={fr.value} />
-                  ) : field.field_type === 'BOOLEAN' ? (
-                    booleanLabel(fr.value)
+                  ) : field.field_type === 'BOOLEAN' || field.field_type === 'PASS_ALERT_FAIL' ? (
+                    answerLabel(field, fr.value)
                   ) : (
                     fr.value
                   )}

@@ -129,6 +129,10 @@ class ChecklistField(models.Model):
         DATE = "DATE", "Fecha"
         DATETIME = "DATETIME", "Fecha y hora"
         TEXTAREA = "TEXTAREA", "Texto largo"
+        # Como el de Fracttal: tres botones. Se guarda en `ChecklistFieldResponse.value`
+        # (la misma columna de texto del Si/No) con "APROBO", "ALERTA" o "FALLO",
+        # y "NA" solo si el campo permite N/A. (15 letras: cabe justo en max_length.)
+        PASS_ALERT_FAIL = "PASS_ALERT_FAIL", "Aprobó / Alerta / Falló"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     version = models.ForeignKey(
@@ -168,9 +172,14 @@ class ChecklistField(models.Model):
 
     @property
     def allows_na(self):
-        """Un Si/No con "Permite N/A" (decision del 2026-09-24): guarda "na"."""
+        """
+        Un Si/No (guarda "na") o un Aprobo/Alerta/Fallo (guarda "NA") con la
+        casilla "Permite N/A" marcada (decision del 2026-09-24).
+        """
         opciones = self.options_json if isinstance(self.options_json, dict) else {}
-        return self.field_type == self.FieldType.BOOLEAN and bool(opciones.get("allow_na"))
+        return self.field_type in (
+            self.FieldType.BOOLEAN, self.FieldType.PASS_ALERT_FAIL
+        ) and bool(opciones.get("allow_na"))
 
     def __str__(self):
         return f"{self.version} → {self.label[:60]}"
