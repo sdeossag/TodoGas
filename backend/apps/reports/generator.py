@@ -38,7 +38,10 @@ def _resolve_url(file_key):
         return ""
     if file_key.startswith("http"):
         return file_key
-    return default_storage.url(file_key)
+    # Se lee directo del storage al escribir el PDF (ver fetcher.py).
+    from .fetcher import url_de_almacenamiento
+
+    return url_de_almacenamiento(file_key)
 
 
 def _unidad(field, unidades):
@@ -732,7 +735,12 @@ def _render(work_order, opciones, empresa=None):
     }
 
     html_str = render_to_string("reports/service_report.html", context)
-    pdf_bytes = HTML(string=html_str, base_url=settings.BACKEND_URL).write_pdf()
+    from .fetcher import fetcher_de_almacenamiento
+
+    extra = {}
+    if (fetcher := fetcher_de_almacenamiento()) is not None:
+        extra["url_fetcher"] = fetcher
+    pdf_bytes = HTML(string=html_str, base_url=settings.BACKEND_URL, **extra).write_pdf()
     return pdf_bytes, report_hash, generated_at
 
 
