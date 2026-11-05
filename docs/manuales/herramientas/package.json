@@ -1,0 +1,12 @@
+{
+  "name": "todogas-herramientas-manuales",
+  "private": true,
+  "type": "module",
+  "description": "Script para tomar las capturas web de los manuales",
+  "scripts": {
+    "capturas": "node tomar-capturas.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1"
+  }
+}

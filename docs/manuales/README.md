@@ -2,7 +2,7 @@
 
 Esta carpeta guarda la fuente de los dos manuales que se entregan con el sistema (issues #151 y #152). Están escritos en Markdown, en español, tratando al lector de «usted», con los textos de botones tal como aparecen en la interfaz. Los ejemplos usan solo datos de la demostración («Clínica Demo Norte», «OT-2026-00009»): el repositorio es público y no lleva datos reales del cliente ni de sus hospitales.
 
-Versión 1.0 · 28 de octubre de 2026.
+Versión 1.1 · 5 de noviembre de 2026.
 
 ## Qué contiene
 
@@ -10,8 +10,10 @@ Versión 1.0 · 28 de octubre de 2026.
 |---|---|
 | `manual-completo.md` | Manual de uso completo y detallado (issue #151). Portada, índice, introducción, conceptos, una sección por perfil (Administrador y Supervisor, Técnico, Cuenta de hospital), trabajo sin conexión, problemas frecuentes y un anexo de permisos. |
 | `manual-rapido.md` | Manual de uso rápido (issue #152). Una sección por perfil, de 1 a 2 páginas, con las tareas del día a día en pasos cortos. Usa los mismos nombres que el manual completo. |
+| `glosario.md` | Glosario de términos en español sencillo, de la A a la Z, con los estados de una OT y de una tarea pendiente, los roles y una tabla de equivalencias con Fracttal. |
 | `capturas-pendientes.md` | Lista numerada de todas las capturas de pantalla marcadas en los dos manuales: archivo destino, rol con el que se toma, pantalla, datos de la demo y plataforma (web o app Android). |
 | `capturas/` | Carpeta donde irán las imágenes PNG (se crea cuando se tomen). |
+| `herramientas/` | Script con Playwright que toma las capturas web con datos de la demo, en una base aislada. Tiene su propio `README.md`. |
 
 ## Cómo está escrito
 

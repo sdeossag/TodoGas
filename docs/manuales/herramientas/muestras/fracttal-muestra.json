@@ -1,0 +1,403 @@
+{
+ "formato": "fracttal-json-v1",
+ "extraido": "2026-11-04T00:00:00Z",
+ "sede": "DEMO",
+ "ubicaciones": [
+  {
+   "id": 100,
+   "id_parent": null,
+   "code": null,
+   "nombre": "SEDE DEMO FRACTTAL",
+   "descripcion": "x",
+   "direccion": "Calle 1 # 2-3",
+   "ciudad": "CALI",
+   "latitud": 3.45,
+   "longitud": -76.53,
+   "ruta": "// ",
+   "path_node": "100",
+   "habilitado": true,
+   "reconstruida": true
+  },
+  {
+   "id": 101,
+   "id_parent": 100,
+   "code": "/DEMO/P1/",
+   "nombre": "PISO UNO",
+   "descripcion": "x",
+   "direccion": null,
+   "ciudad": "CALI",
+   "latitud": null,
+   "longitud": null,
+   "ruta": "// SEDE DEMO FRACTTAL/ ",
+   "path_node": "100.101",
+   "habilitado": true
+  },
+  {
+   "id": 102,
+   "id_parent": 101,
+   "code": null,
+   "nombre": "SALA DE GASES",
+   "descripcion": "x",
+   "direccion": null,
+   "ciudad": null,
+   "latitud": null,
+   "longitud": null,
+   "ruta": "// SEDE DEMO FRACTTAL/ PISO UNO/ ",
+   "path_node": "100.101.102",
+   "habilitado": true
+  }
+ ],
+ "activos": [
+  {
+   "id": 200,
+   "id_parent": 102,
+   "code": "DEMO-001",
+   "barcode": "B1",
+   "descripcion": "d",
+   "nombre": "BOMBA DEMO ALFA",
+   "fabricante": "ACME",
+   "modelo": "M-1",
+   "serie": "S-1",
+   "ubicacion_equipo": null,
+   "otro": null,
+   "path_node": "100.101.102.200",
+   "habilitado": true,
+   "disponible": true,
+   "id_plan": 10,
+   "plan": "PROTOCOLO DEMO",
+   "prioridad": "HIGH",
+   "centro_costo": "001",
+   "clasificacion_1": "CONTRATO",
+   "clasificacion_2": null,
+   "notas": null
+  },
+  {
+   "id": 201,
+   "id_parent": 101,
+   "code": null,
+   "barcode": null,
+   "descripcion": "d",
+   "nombre": "VALVULA DEMO BETA",
+   "fabricante": null,
+   "modelo": null,
+   "serie": null,
+   "ubicacion_equipo": null,
+   "otro": null,
+   "path_node": "100.101.201",
+   "habilitado": false,
+   "disponible": true,
+   "id_plan": null,
+   "plan": null,
+   "prioridad": null,
+   "centro_costo": null,
+   "clasificacion_1": null,
+   "clasificacion_2": null,
+   "notas": "vieja"
+  }
+ ],
+ "planes": [
+  {
+   "id": 10,
+   "nombre": "PROTOCOLO DEMO",
+   "tareas": [
+    {
+     "id": 500,
+     "descripcion": "REVISION SEMESTRAL",
+     "duracion_seg": 3600,
+     "activa": true,
+     "tipo": null,
+     "tipo_principal": "PREVENTIVO",
+     "tipo_2": null,
+     "prioridad": "HIGH",
+     "paro_activo": true,
+     "paro_seg": 1800,
+     "iteraciones": {
+      "num": null,
+      "nombre": {},
+      "ciclica": null
+     },
+     "subtareas": [
+      {
+       "id": 1,
+       "descripcion": "UBICACION",
+       "tipo": "GEOREFERENCE",
+       "grupo": null,
+       "orden": 1,
+       "requerida": false,
+       "unidad": null,
+       "opciones": [],
+       "iteraciones": {},
+       "adjuntos_requeridos": null
+      },
+      {
+       "id": 2,
+       "descripcion": "Observaciones",
+       "tipo": "TEXT",
+       "grupo": "GENERAL",
+       "orden": 2,
+       "requerida": false,
+       "unidad": null,
+       "opciones": [],
+       "iteraciones": {},
+       "adjuntos_requeridos": null
+      },
+      {
+       "id": 3,
+       "descripcion": "Estado bomba",
+       "tipo": "BOOLEAN",
+       "grupo": "GENERAL",
+       "orden": 3,
+       "requerida": true,
+       "unidad": null,
+       "opciones": [],
+       "iteraciones": {},
+       "adjuntos_requeridos": null
+      },
+      {
+       "id": 4,
+       "descripcion": "Presion",
+       "tipo": "READING_METER",
+       "grupo": "LECTURAS",
+       "orden": 4,
+       "requerida": false,
+       "unidad": "PSI",
+       "opciones": [],
+       "iteraciones": {},
+       "adjuntos_requeridos": null
+      },
+      {
+       "id": 8,
+       "descripcion": "Valvula",
+       "tipo": "VERIFICATION",
+       "grupo": "VERIFICAR",
+       "orden": 8,
+       "requerida": false,
+       "unidad": null,
+       "opciones": [],
+       "iteraciones": {},
+       "adjuntos_requeridos": null
+      }
+     ]
+    },
+    {
+     "id": 501,
+     "descripcion": "PRUEBA ESPECIAL",
+     "duracion_seg": 600,
+     "activa": true,
+     "tipo": "GARANTIA",
+     "tipo_principal": "CORRECTIVO",
+     "prioridad": null,
+     "paro_activo": false,
+     "paro_seg": null,
+     "iteraciones": {},
+     "subtareas": [
+      {
+       "id": 20,
+       "descripcion": "Resultado",
+       "tipo": "TEXT",
+       "grupo": null,
+       "orden": 20,
+       "requerida": false,
+       "unidad": null,
+       "opciones": [],
+       "iteraciones": {},
+       "adjuntos_requeridos": null
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "activadores": [
+  {
+   "id_activo": 200,
+   "id_tarea": 500,
+   "activador": "DATE$EVERY$6$MONTHS",
+   "proxima": "2027-03-18T15:00:00+00:00",
+   "ultima": "2026-09-18T15:00:00+00:00"
+  },
+  {
+   "id_activo": 200,
+   "id_tarea": 501,
+   "activador": "METER$EVERY$100$HOURS",
+   "proxima": null,
+   "ultima": null
+  }
+ ],
+ "ots": [
+  {
+   "id": 9001,
+   "folio": "7001",
+   "estado": 3,
+   "creada": "2026-09-18T13:00:00+00:00",
+   "creada_por": "PLANIFICADOR EJEMPLO",
+   "responsable": "TECNICO EJEMPLO UNO",
+   "nota": "Revisión sin novedades (dato de muestra).",
+   "calificacion": 5,
+   "clasificaciones": null,
+   "tareas": [
+    {
+     "id": 90010,
+     "id_tarea": 500,
+     "id_activo": 200,
+     "descripcion": "REVISION SEMESTRAL",
+     "activo": "BOMBA DEMO ALFA",
+     "inicio": "2026-09-18T13:00:00+00:00",
+     "fin": "2026-09-18T13:00:00+00:00",
+     "programada": "2026-09-18T13:00:00+00:00",
+     "duracion_seg": 3600,
+     "duracion_real_min": 55,
+     "paro_seg": 600,
+     "tecnico": "TECNICO EJEMPLO UNO",
+     "tipo": null,
+     "tipo_principal": "PREVENTIVO",
+     "activador": "DATE$EVERY$6$MONTHS",
+     "prioridad": "HIGH",
+     "nota": null,
+     "nota_tarea": "ok",
+     "calificacion": 5,
+     "firma": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+P//PwAF/gL+p9bKbwAAAABJRU5ErkJggg==",
+     "hecha": true,
+     "subtareas": [
+      {
+       "id_plan_subtarea": 2,
+       "descripcion": "Observaciones",
+       "tipo": "TEXT",
+       "grupo": "GENERAL",
+       "orden": 2,
+       "valor": "Sin novedades",
+       "unidad": null,
+       "hecha": true
+      },
+      {
+       "id_plan_subtarea": 3,
+       "descripcion": "Estado bomba",
+       "tipo": "BOOLEAN",
+       "grupo": "GENERAL",
+       "orden": 3,
+       "valor": "true",
+       "unidad": null,
+       "hecha": true
+      },
+      {
+       "id_plan_subtarea": 4,
+       "descripcion": "Presion",
+       "tipo": "READING_METER",
+       "grupo": "LECTURAS",
+       "orden": 4,
+       "valor": "58",
+       "unidad": null,
+       "hecha": true
+      },
+      {
+       "id_plan_subtarea": 8,
+       "descripcion": "Valvula",
+       "tipo": "VERIFICATION",
+       "grupo": "VERIFICAR",
+       "orden": 8,
+       "valor": "1",
+       "unidad": null,
+       "hecha": true
+      }
+     ],
+     "archivos": [
+      {
+       "ruta": ".ot/9001/a.jpeg",
+       "nombre": "a.jpeg",
+       "descripcion": null,
+       "fecha": "2026-09-18T13:00:00+00:00",
+       "id_subtarea": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 9002,
+   "folio": "7002",
+   "estado": 3,
+   "creada": "2026-03-20T13:00:00+00:00",
+   "creada_por": "PLANIFICADOR EJEMPLO",
+   "responsable": "TECNICO EJEMPLO DOS",
+   "nota": "Revisión sin novedades (dato de muestra).",
+   "calificacion": 5,
+   "clasificaciones": null,
+   "tareas": [
+    {
+     "id": 90020,
+     "id_tarea": 500,
+     "id_activo": 200,
+     "descripcion": "REVISION SEMESTRAL",
+     "activo": "BOMBA DEMO ALFA",
+     "inicio": "2026-03-20T13:00:00+00:00",
+     "fin": "2026-03-20T13:00:00+00:00",
+     "programada": "2026-03-20T13:00:00+00:00",
+     "duracion_seg": 3600,
+     "duracion_real_min": 55,
+     "paro_seg": 600,
+     "tecnico": "TECNICO EJEMPLO DOS",
+     "tipo": null,
+     "tipo_principal": "PREVENTIVO",
+     "activador": "DATE$EVERY$6$MONTHS",
+     "prioridad": "HIGH",
+     "nota": null,
+     "nota_tarea": "ok",
+     "calificacion": 5,
+     "firma": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+P//PwAF/gL+p9bKbwAAAABJRU5ErkJggg==",
+     "hecha": true,
+     "subtareas": [
+      {
+       "id_plan_subtarea": 2,
+       "descripcion": "Observaciones",
+       "tipo": "TEXT",
+       "grupo": "GENERAL",
+       "orden": 2,
+       "valor": "Sin novedades",
+       "unidad": null,
+       "hecha": true
+      },
+      {
+       "id_plan_subtarea": 3,
+       "descripcion": "Estado bomba",
+       "tipo": "BOOLEAN",
+       "grupo": "GENERAL",
+       "orden": 3,
+       "valor": "true",
+       "unidad": null,
+       "hecha": true
+      },
+      {
+       "id_plan_subtarea": 4,
+       "descripcion": "Presion",
+       "tipo": "READING_METER",
+       "grupo": "LECTURAS",
+       "orden": 4,
+       "valor": "61",
+       "unidad": null,
+       "hecha": true
+      },
+      {
+       "id_plan_subtarea": 8,
+       "descripcion": "Valvula",
+       "tipo": "VERIFICATION",
+       "grupo": "VERIFICAR",
+       "orden": 8,
+       "valor": "1",
+       "unidad": null,
+       "hecha": true
+      }
+     ],
+     "archivos": [
+      {
+       "ruta": ".ot/9002/a.jpeg",
+       "nombre": "a.jpeg",
+       "descripcion": null,
+       "fecha": "2026-03-20T13:00:00+00:00",
+       "id_subtarea": null
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

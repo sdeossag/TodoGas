@@ -2,11 +2,11 @@
 
 ## Manual de uso completo y detallado
 
-**Versión 1.0 · 28 de octubre de 2026**
+**Versión 1.1 · 5 de noviembre de 2026**
 
 Para administradores, supervisores, técnicos y cuentas de hospital.
 
-> [CAPTURA: Pantalla de inicio de sesión de TodoGas CMMS, con el logo, los campos «Correo electrónico» y «Contraseña» y el botón «Iniciar sesión», sin datos escritos — Sin sesión, Web]
+> [CAPTURA: Pantalla de inicio de sesión de TodoGas CMMS, con el logo, los campos «Correo electrónico» y «Contraseña» y el botón «Iniciar sesión» y, debajo, el enlace «¿Olvidaste tu contraseña?», sin datos escritos — Sin sesión, Web]
 
 ---
 
@@ -20,6 +20,7 @@ Para administradores, supervisores, técnicos y cuentas de hospital.
 6. [Trabajar sin conexión](#6-trabajar-sin-conexión)
 7. [Problemas frecuentes](#7-problemas-frecuentes)
 8. [Anexo: qué puede hacer cada persona](#8-anexo-qué-puede-hacer-cada-persona)
+9. [Glosario](#9-glosario)
 
 Cómo leer este manual:
 
@@ -28,6 +29,7 @@ Cómo leer este manual:
 - Los ejemplos usan datos de demostración («Clínica Demo Norte», «Hospital Demo Sur», la orden «OT-2026-00009»). No son datos reales.
 - Cuando vea un recuadro `[CAPTURA: …]`, ahí irá una imagen de la pantalla.
 - Para una consulta de dos páginas por perfil, use el **Manual de uso rápido**.
+- Para el significado de cada término, vea el Glosario (`glosario.md`).
 
 ---
 
@@ -89,7 +91,7 @@ Si prefiere ver lo que escribe en la contraseña, pulse el botón «Mostrar cont
 3. Escriba su correo y su contraseña, y pulse «Iniciar sesión».
 4. La primera vez, **entre con señal**. La app descarga sus órdenes, sus listas de revisión y su firma guardada para poder trabajar después sin conexión.
 
-> [CAPTURA: App Android abierta en la pantalla de inicio de sesión, con el teclado cerrado — Técnico, App Android]
+> [CAPTURA: App Android abierta en la pantalla de inicio de sesión, con el teclado cerrado y el enlace «¿Olvidaste tu contraseña?» — Técnico, App Android]
 
 **Errores comunes al entrar**
 
@@ -97,12 +99,12 @@ Si prefiere ver lo que escribe en la contraseña, pulse el botón «Mostrar cont
 |---|---|---|
 | «Ingresa tu correo electrónico.» / «El formato del correo no es válido.» | El correo está vacío o mal escrito. | Revíselo. |
 | «Ingresa tu contraseña.» | Falta la contraseña. | Escríbala. |
-| «Cuenta bloqueada temporalmente. Intenta de nuevo en 30 minutos.» | Se equivocó 5 veces con el mismo correo. | Espere 30 minutos. No sirve insistir. |
+| «Cuenta bloqueada temporalmente. Intenta de nuevo en 30 minutos.» | Se equivocó 5 veces con el mismo correo. | Espere 30 minutos, o pulse «¿Olvidaste tu contraseña?» y cambie la contraseña (ver 1.4): eso también la desbloquea. Insistir con la contraseña mala no sirve. |
 | «Tu cuenta está desactivada. Contacta al administrador.» | El Administrador desactivó la cuenta. | Pídale que la active. |
 | «Error de conexión. Verifica tu red e intenta de nuevo.» | No hay internet. | Revise el Wi-Fi o los datos. |
 | «Tu sesión ha expirado. Vuelve a iniciar sesión.» | La sesión duró demasiado. | Entre de nuevo. |
 
-Mientras se equivoca, la pantalla le dice cuántos intentos le quedan.
+Mientras se equivoca, la pantalla le dice cuántos intentos le quedan. Si no recuerda la contraseña, pulse «¿Olvidaste tu contraseña?», que está debajo del botón «Iniciar sesión» (ver 1.4).
 
 ### 1.4 Contraseña temporal y cómo recuperar la contraseña
 
@@ -120,11 +122,22 @@ La contraseña nueva debe tener **mínimo 8 caracteres, una mayúscula, un núme
 
 **Si olvidó su contraseña**
 
-El sistema no tiene un botón de «Olvidé mi contraseña». El Administrador la restablece:
+Puede recuperarla usted mismo, sin pedirle nada al Administrador:
 
-1. Pídale al Administrador que restablezca su contraseña (se explica en el apartado «Usuarios»).
-2. Le llegará al correo una contraseña temporal nueva.
-3. Entre con ella y cámbiela, como en los pasos anteriores.
+1. En la pantalla de inicio de sesión, pulse «¿Olvidaste tu contraseña?».
+2. Escriba su «Correo electrónico» y pulse «Enviar enlace».
+3. La pantalla responde «Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña.» Siempre dice lo mismo, exista o no la cuenta.
+4. Abra el correo «Restablecer tu contraseña – TodoGas» y pulse el enlace. **El enlace vale 1 hora** y sirve una sola vez.
+5. En «Elige tu nueva contraseña», escriba la «Nueva contraseña» y repítala en «Confirmar nueva contraseña» (mínimo 8 caracteres, una mayúscula, un número y un carácter especial). Pulse «Guardar nueva contraseña».
+6. Vuelve a la pantalla de inicio de sesión con el aviso «Contraseña actualizada. Ya puedes iniciar sesión.» Escriba su correo y la contraseña nueva.
+
+Si el enlace venció o ya se usó, la pantalla dice «El enlace no es válido o ya venció. Solicita uno nuevo.» y ofrece «Solicitar un enlace nuevo». Se aceptan hasta 5 solicitudes por hora: pasado ese límite la pantalla dice «Hiciste demasiadas solicitudes. Intenta de nuevo en una hora.» Si su cuenta estaba bloqueada por intentos fallidos, cambiar la contraseña por este camino también la desbloquea.
+
+Si el correo no llega (revise la carpeta de spam y que haya escrito bien la dirección), pídale al Administrador que restablezca su contraseña desde «Usuarios» (ver 3.18): le llegará una contraseña temporal nueva y deberá cambiarla al entrar, como en los pasos del principio de este apartado.
+
+> [CAPTURA: Pantalla «¿Olvidaste tu contraseña?» con el campo «Correo electrónico» lleno y el botón «Enviar enlace» — Sin sesión, Web]
+
+> [CAPTURA: Pantalla «Elige tu nueva contraseña» con «Nueva contraseña», «Confirmar nueva contraseña», el medidor de fortaleza y una contraseña de ejemplo (no una real) — Sin sesión (enlace del correo), Web]
 
 **Si quiere cambiar su contraseña por gusto**, vaya a «Mi perfil» → «Cambiar contrasena» (ver 1.6).
 
@@ -186,7 +199,7 @@ La supresión no alcanza las actas, firmas, fotos ni registros de auditoría ya 
 
 ### 1.7 Cómo se ve el sistema
 
-**Administrador y Supervisor (web).** Arriba hay una barra con el botón de menú (para plegar o abrir el menú lateral), el logo, su nombre y rol, y «Cerrar sesion». A la izquierda, el menú lateral con estos grupos (cada persona ve solo los que le corresponden):
+**Administrador y Supervisor (web).** Arriba hay una barra con el botón de menú (para plegar o abrir el menú lateral), el logo, el botón «Sincronizar ahora» (ver 6.1), su nombre y rol, y «Cerrar sesion». A la izquierda, el menú lateral con estos grupos (cada persona ve solo los que le corresponden):
 
 - «Dashboard»
 - **Activos:** «Hospitales», «Activos», «Contratos y garantías»
@@ -197,15 +210,19 @@ La supresión no alcanza las actas, firmas, fotos ni registros de auditoría ya 
 
 Tres entradas del menú muestran un **globo con número**: «Contratos y garantías» (los que vencen en 60 días), «Hallazgos» (los que esperan decisión) e «Inventario» (los repuestos con poco stock).
 
-**Técnico.** El menú tiene «Mis ordenes» y «Mi perfil». Si el Administrador le dio permisos adicionales, aparece también «Gestión».
+**Técnico.** El menú tiene «Mis ordenes» y «Mi perfil». Si el Administrador le dio permisos adicionales, aparece también «Gestión». Su barra de arriba tiene el botón de menú, el logo, «Sincronizar ahora», su nombre y «Cerrar sesión».
 
 **Cuenta de hospital.** Un menú superior con «Dashboard», «Mis activos», «Mis reportes» y «Mi perfil», y el botón «Salir».
 
+**Botón «Sincronizar ahora».** En la barra de arriba, entre el logo y su nombre, hay un botón con dos flechas en círculo. En pantallas pequeñas solo se ve el icono. Si hay algo guardado que aún no se envió, un globo ámbar muestra cuántos elementos son. Se explica en 6.1.
+
+> [CAPTURA: Cabecera de administración con el botón «Sincronizar ahora» entre el logo y el nombre — Administrador, Web]
+
 **Aviso de conexión.** Cuando se pierde la señal, arriba aparece una franja amarilla: «Sin conexion — Modo offline activo». Se explica en la sección 6.
 
-> [CAPTURA: Pantalla «Dashboard» del Administrador con el menú lateral desplegado y todos sus grupos visibles — Administrador, Web]
+> [CAPTURA: Pantalla «Dashboard» del Administrador con el menú lateral desplegado, todos sus grupos visibles y el botón «Sincronizar ahora» en la cabecera — Administrador, Web]
 
-**Cerrar sesión.** Pulse «Cerrar sesion» (administración y técnico) o «Salir» (cuenta de hospital). En un celular o un computador compartido, cierre siempre la sesión al terminar.
+**Cerrar sesión.** Pulse «Cerrar sesion» (administración), «Cerrar sesión» (técnico) o «Salir» (cuenta de hospital). En un celular o un computador compartido, cierre siempre la sesión al terminar.
 
 ---
 
@@ -270,7 +287,9 @@ Estados de la OT y quién los mueve:
 | **Finalizada** | Aprobada y cerrada. Se genera el acta. | Quien revisa, con «Completar». |
 | **Cancelada** | No se hizo. Las tareas vuelven a pendientes. | El Administrador (o quien tenga ese permiso), con «Cancelar OT». |
 
-Quien revisa también puede **«Rechazar»**: la OT vuelve a «En proceso» con un motivo. Una OT **Finalizada o Cancelada no se puede modificar**.
+Quien revisa también puede **«Rechazar»**: la OT vuelve a «En proceso» con un motivo, que el técnico ve en la app y recibe por correo. Una OT **Finalizada o Cancelada no se puede modificar**.
+
+Las órdenes que vienen del historial de Fracttal son **históricas**: solo se consultan y llevan la etiqueta «Fracttal» (ver 3.10).
 
 ### 2.8 Checklist (lista de revisión)
 
@@ -279,6 +298,7 @@ Es el formulario que el técnico llena en cada equipo. Tiene campos de varios ti
 - Texto corto, texto largo, número.
 - **Lectura de medidor** (un número con unidad: PSI, horas, voltaje…).
 - **Sí / No**, y si la casilla «Permite N/A (no aplica)» está marcada, también **N/A**.
+- **Aprobó / Alerta / Falló:** una verificación con tres resultados, en tres botones (verde, ámbar y rojo), y **N/A** si la casilla «Permite N/A (no aplica)» está marcada.
 - Selección única y selección múltiple.
 - Fecha, fecha y hora, y localización GPS.
 
@@ -298,7 +318,7 @@ Es una lectura de un equipo con su unidad (horas, amperios, voltaje, temperatura
 
 ### 2.11 Acta
 
-Es el **PDF del servicio**. Se genera cuando la OT se aprueba. Lleva los datos de la visita, los equipos, las respuestas del checklist, los hallazgos, las fotos, los materiales y las firmas (**Realizado por**, **Validado por** y **Aceptado por**). Tiene un **código de verificación** en el pie para comprobar que no se alteró, y el aviso de firma electrónica de la Ley 527 de 1999. Se envía por correo al contacto del hospital y queda disponible en el portal.
+Es el **PDF del servicio**. Se genera cuando la OT se aprueba. Lleva los datos de la visita, los equipos, las respuestas del checklist, los hallazgos, las fotos, los materiales y las firmas (**Aceptado por**, **Validado por** y **Realizado por**, en ese orden). Su formato se parece al acta de Fracttal: encabezado con la razón social y el NIT de la empresa, y las subtareas del checklist en una tabla. Tiene un **código de verificación** en el pie para comprobar que no se alteró, y el aviso de firma electrónica de la Ley 527 de 1999. Se envía por correo al contacto del hospital y queda disponible en el portal.
 
 ### 2.12 El ciclo completo
 
@@ -324,7 +344,7 @@ Esta sección explica cada pantalla de administración. Donde algo es solo del A
 | Ver «Dashboard», activos, tareas pendientes, hallazgos, órdenes y calendario | Sí | Sí (dentro de su alcance) |
 | Crear y editar hospitales | Sí | No |
 | Armar ubicaciones, crear y editar activos, dar de baja y reactivar | Sí | Sí |
-| Importar desde Fracttal | Sí | No |
+| Importar desde Fracttal (Excel o JSON) | Sí | No |
 | Contratos y garantías | Crear, editar y eliminar | Solo ver |
 | Protocolos | Crear, editar, pausar, asignar | Solo ver |
 | Checklists | Crear y publicar | Crear y publicar |
@@ -357,7 +377,7 @@ Si el Administrador le dio permisos adicionales a otro usuario, esa persona pued
 
 - **Requiere atención:** cuatro tarjetas que llevan a su lista con un clic: activos con mantenimiento vencido, hallazgos críticos abiertos, OTs vencidas y contratos por atender.
 - **Estado de activos:** vencido, por vencer (30 días), al día y sin protocolo. Cada porción lleva a «Activos» ya filtrado.
-- **Planificación de tareas:** las tareas abiertas de los próximos 6 meses y las vencidas aparte.
+- **Planificación de tareas:** las tareas abiertas de los próximos 6 meses y las vencidas aparte. Pulse una barra para abrir «Tareas pendientes» con las tareas de ese mes (o las vencidas). El enlace «Ver tareas» abre «Tareas pendientes» con las vencidas.
 - **Hallazgos abiertos:** por severidad, con el enlace «Ver bandeja».
 - **OTs por tipo:** preventivo, correctivo y otros.
 - **Cuatro indicadores:** «Cumplimiento de protocolos», «MTTR (tiempo medio de reparacion)», «OTs vencidas» y «OTs completadas este periodo».
@@ -386,7 +406,7 @@ La pantalla «Hospitales» muestra una tabla con «Nombre», «Código», «Ciud
 1. Entre a «Hospitales».
 2. Pulse «+ Nuevo hospital».
 3. Llene «Nombre» y «Código» (obligatorios). Opcionales: NIT, ciudad, departamento y dirección.
-4. En «Ubicación en el mapa», busque la dirección y marque el punto. El mapa aparece cuando TodoGas tiene configurada la clave de Google Maps.
+4. En «Ubicación en el mapa», busque la dirección y marque el punto. El mapa aparece cuando TodoGas tiene configurada la clave de Google Maps. Si el mapa no está disponible pero el hospital ya tiene un punto guardado, en su lugar se ve el enlace «Abrir en Google Maps».
 5. En «Contacto» escriba el nombre, teléfono y **correo**. Ese correo recibe el acta de cada visita y el aviso de hallazgos graves. **Sin correo, el acta se genera pero no se envía.**
 6. Pulse «Crear hospital».
 
@@ -412,7 +432,7 @@ El Supervisor solo ve su hospital, y no puede crear ni editar.
 2. Pulse «Nueva ubicación» para crear una de primer nivel.
 3. En la ventana, escriba «Nombre» (obligatorio) y elija el «Tipo»: «Edificio / Torre», «Piso», «Área / Servicio», «Habitación / Sala» u «Otro».
 4. Si es una sububicación, elija en «Ubicada dentro de» a su padre. También sirve para mover una ubicación a otro lugar del árbol.
-5. Opcionalmente, «Código», «Orden», «Dirección» y el punto en el mapa.
+5. Opcionalmente, «Código», «Orden», «Dirección» y el punto en el mapa (si el mapa no está disponible y ya hay un punto guardado, aparece «Abrir en Google Maps»).
 6. Pulse «Crear ubicación». Si va a crear varias seguidas, pulse «Guardar y crear otra».
 
 **Otras acciones**
@@ -470,7 +490,7 @@ Al abrir un activo ve su encabezado (estado, prioridad, nombre, código y ruta d
 - **«Información general»:** el «Estado de mantenimiento» (protocolo, próximo y último mantenimiento, y si está al día, próximo a vencer, vencido o sin protocolo), la cobertura (garantía y contrato vigentes), los datos de la ficha técnica y el **código QR**.
 - **«Tareas»:** «Próximas» (tarea, cuándo, fecha programada y estado) e «Historial» (tarea, calculada, programada, realización, estado y orden). Si la orden tiene acta, hay un botón «Acta». El historial se filtra con los botones «Todos», «Preventivo», «Correctivo» y «Otro», y cada fila muestra el tipo de tarea. El enlace «Ver todas sus OT» abre la lista de órdenes de ese equipo.
 - **«Medidores»:** las lecturas del equipo.
-- **«Campos personalizados»:** los datos extra del tipo de activo.
+- **«Campos personalizados»:** los datos extra definidos para el tipo de activo. En la web son solo de lectura: no hay una pantalla para crearlos o cambiarlos, así que si necesita un dato extra, pídaselo a TodoGas. Si el tipo no tiene campos, la pestaña dice «Este tipo de activo no tiene campos personalizados.»
 
 **Descargar la etiqueta QR**
 
@@ -515,7 +535,7 @@ Nada se borra: las tareas anuladas quedan en el historial. Para volver a ponerlo
 
 #### Importar desde Fracttal (solo Administrador)
 
-Sirve para traer hospitales, ubicaciones y equipos desde los archivos de Excel que exporta Fracttal.
+La pantalla «Importar desde Fracttal» tiene dos pestañas: «Excel de Fracttal» (la que se abre por defecto) y «JSON del extractor» (se explica más abajo). Con el Excel se traen hospitales, ubicaciones y equipos desde los archivos que exporta Fracttal.
 
 1. En Fracttal, entre a **Activos → Ubicaciones** (o **Equipos**), abra el menú **⋮** y elija **Exportar**. Se descarga un archivo de Excel (.xlsx). Puede subir uno solo o los dos.
 2. En TodoGas, entre a «Activos» y pulse «Importar desde Fracttal».
@@ -529,6 +549,26 @@ Sirve para traer hospitales, ubicaciones y equipos desde los archivos de Excel q
 10. La pantalla «Importación terminada» resume lo hecho y lista los avisos. Pulse «Ir a Activos».
 
 > [CAPTURA: Pantalla «Importar desde Fracttal» con el resumen de la revisión (hospitales, ubicaciones, equipos) y la tabla de filas con el filtro «Con avisos» — Administrador, Web]
+
+#### Importar una sede completa con su historial (JSON del extractor) (solo Administrador)
+
+Sirve para traer una sede completa de Fracttal de una sola vez: ubicaciones, equipos, protocolos con su checklist y el historial de órdenes finalizadas. El archivo `.json` lo prepara TodoGas con el «extractor de Fracttal», un script de solo lectura que se ejecuta en la sesión abierta de Fracttal. Usted solo sube ese archivo.
+
+1. Entre a «Activos» y pulse «Importar desde Fracttal». Pulse la pestaña «JSON del extractor».
+2. En «Archivo del extractor» elija el archivo `.json` (máximo 100 MB).
+3. Pulse «Revisar archivo». **Todavía no se guarda nada.**
+4. Lea el resumen por tarjetas: «Hospital y ubicaciones», «Equipos», «Protocolos» (con las tareas y los campos de checklist nuevos), «Historial de OT» (cuántas se crearán, cuántas ya estaban importadas, tareas y respuestas), «Evidencia» (OT con firma del técnico y fotos pendientes de descargar) y «Activadores».
+5. Lea los «Avisos»: son cosas que se importan con algún ajuste (por ejemplo, activadores distintos entre equipos de una misma tarea) y no impiden importar. Los errores, en rojo, sí lo impiden y el botón «Importar» queda deshabilitado; también queda deshabilitado si el archivo no trae nada por crear o actualizar.
+6. Pulse «Importar» y confirme en «¿Importar ahora?» con «Sí, importar». El historial de OT queda como histórico: sin actas ni correos.
+7. La pantalla «Importación terminada» resume lo creado: ubicaciones, equipos, protocolos con sus tareas, OT históricas con sus respuestas de checklist, tareas pendientes programadas y fotos que quedaron pendientes de traer de Fracttal. Pulse «Ir a Activos» o «Empezar de nuevo».
+
+Importar otra vez el mismo archivo actualiza lo que ya vino de Fracttal y no lo duplica; las OT históricas ya importadas se saltan. Las personas de Fracttal (por ejemplo, quien ejecutó una OT) no son usuarios de TodoGas: su nombre queda como texto. Las órdenes importadas se explican en 3.10.
+
+> [CAPTURA: «Importar desde Fracttal» con la pestaña «JSON del extractor» activa, el recuadro «Archivo del extractor» con un archivo de muestra elegido y el botón «Revisar archivo» — Administrador, Web]
+
+> [CAPTURA: Resumen de la revisión del JSON con las tarjetas «Hospital y ubicaciones», «Equipos», «Protocolos», «Historial de OT», «Evidencia» y «Activadores», el bloque «Avisos» y el botón «Importar» — Administrador, Web]
+
+> [CAPTURA: Pantalla «Importación terminada» del JSON con el resumen y los botones «Ir a Activos» y «Empezar de nuevo» — Administrador, Web]
 
 ### 3.5 Contratos y garantías
 
@@ -636,10 +676,11 @@ La pantalla «Checklists» lista las plantillas con «Nombre», «Versión actua
 **Armar los campos en el editor**
 
 1. El editor tiene tres pestañas: «Editor», «Vista previa» e «Historial de versiones».
-2. En la paleta de tipos de campo, pulse el que necesite: «Texto corto», «Texto largo», «Número», «Lectura de medidor», «Sí / No», «Selección única», «Selección múltiple», «Fecha», «Fecha y hora» o «Localización GPS». El campo se agrega a la lista.
+2. En la paleta de tipos de campo, pulse el que necesite: «Texto corto», «Texto largo», «Número», «Lectura de medidor», «Sí / No», «Aprobó / Alerta / Falló», «Selección única», «Selección múltiple», «Fecha», «Fecha y hora» o «Localización GPS». El campo se agrega a la lista.
+   - «Aprobó / Alerta / Falló» sirve para una verificación con tres resultados. El técnico toca uno de tres botones (verde, ámbar y rojo). Si la casilla «Permite N/A (no aplica)» está marcada, también hay «N/A».
 3. Para cada campo, escriba la etiqueta, y si hace falta el «Grupo / Sección», la «Ayuda» y marque «Obligatorio».
 4. En «Número» y «Lectura de medidor» puede poner mínimo, máximo y unidad. En «Lectura de medidor» elija además el **medidor**: lo que responda el técnico quedará como lectura del equipo y puede abrir tareas.
-5. En «Sí / No», la casilla «Permite N/A (no aplica)» viene **marcada**. Desmárquela si no quiere esa opción. El acta imprime solo la respuesta.
+5. En «Sí / No» y en «Aprobó / Alerta / Falló», la casilla «Permite N/A (no aplica)» viene **marcada**. Desmárquela si no quiere esa opción. El acta imprime las casillas («Sí / No» o «Aprobó / Alerta / Falló») con la elegida marcada, y el N/A como texto.
 6. Arrastre los campos para cambiar el orden.
 7. En «Vista previa» vea cómo quedará el formulario.
 
@@ -654,7 +695,9 @@ Publicar crea una versión nueva y archiva la anterior. Las órdenes que ya empe
 
 Nota: «Foto» y «Firma» ya no se ofrecen como campos, porque la orden ya tiene sus propias fotos y firmas. Si abre una versión antigua que los tenía, el editor los quita y avisa «Se quitaron N campos de Foto/Firma: ahora van en la OT».
 
-> [CAPTURA: Editor de una plantilla de checklist con la paleta de tipos de campo, un campo «Sí / No» con «Permite N/A (no aplica)» marcada y la sección «Grupos que se repiten» con «Toma» — Administrador, Web]
+> [CAPTURA: Editor de una plantilla de checklist con la paleta de tipos de campo (incluido «Aprobó / Alerta / Falló»), un campo «Sí / No» con «Permite N/A (no aplica)» marcada y la sección «Grupos que se repiten» con «Toma» — Administrador, Web]
+
+> [CAPTURA: Editor de una plantilla con un campo «Aprobó / Alerta / Falló» y la casilla «Permite N/A (no aplica)» marcada — Administrador, Web]
 
 > [CAPTURA: Pestaña «Historial de versiones» de la plantilla con al menos dos versiones — Administrador, Web]
 
@@ -732,9 +775,9 @@ La OT nace «Pendiente» y sus tareas ya quedan programadas.
 
 **La lista de órdenes**
 
-La pantalla «Ordenes de trabajo» muestra «N órdenes encontradas». Puede buscar por título, número o equipo y filtrar por estado, prioridad, tipo, «Solo vencidas», hospital, ubicación y activo («Quitar filtros de lugar» los limpia). La tabla muestra número, tipo, título, activo, hospital, prioridad, estado, técnico, fecha límite, PDF y «Ver». Las órdenes no se borran.
+La pantalla «Ordenes de trabajo» muestra «N órdenes encontradas». Puede buscar por título, número o equipo y filtrar por estado, prioridad, tipo, «Solo vencidas», hospital, ubicación y activo («Quitar filtros de lugar» los limpia). La tabla muestra número, tipo, título, activo, hospital, prioridad, estado, técnico, fecha límite, PDF y «Ver». Las órdenes que vienen de Fracttal llevan junto al número una etiqueta pequeña «Fracttal». Las órdenes no se borran.
 
-> [CAPTURA: Lista «Ordenes de trabajo» con el filtro de estado «En revisión» y la OT «OT-2026-00009» o una OT en revisión de demo — Administrador, Web]
+> [CAPTURA: Lista «Ordenes de trabajo» con el filtro de estado «En revisión» y una OT en revisión (la OT-2026-00009 después de que el técnico la envíe a revisión) — Administrador, Web]
 
 **El detalle de una OT**
 
@@ -792,6 +835,22 @@ Las tareas de la OT **vuelven a pendientes con la misma fecha**, listas para otr
 
 > [CAPTURA: Ventana «Reasignar OT» con la lista de personas desplegada — Administrador, Web]
 
+**OT históricas de Fracttal**
+
+Las órdenes que vienen del historial de Fracttal (ver 3.4) son **solo de consulta**.
+
+1. En «Ordenes de trabajo» llevan una etiqueta pequeña «Fracttal» junto al número. En el detalle aparece la misma etiqueta y un aviso: «OT histórica importada de Fracttal · folio N° …. Solo consulta.»
+2. En la tarjeta «Asignación», en lugar de «Asignado a» dice «Ejecutó (Fracttal)» y el nombre de quien hizo el trabajo allá. Puede no ser un usuario de TodoGas.
+3. No tienen botones de estado ni «Reasignar», «Editar», corregir respuestas, o agregar fotos, hallazgos o repuestos. Si alguien lo intenta por otro camino, el sistema responde «Esta OT es histórica (importada de Fracttal) y no se puede modificar».
+4. En la pestaña «Evidencia» puede aparecer un aviso como «N fotos quedaron en Fracttal y aún no se han traído».
+5. Las respuestas del checklist y las firmas del técnico sí se ven.
+
+No tienen acta generada por TodoGas ni se enviaron correos al importarlas, así que en «Reportes» no hay un PDF que descargar. Si la orden histórica está finalizada, la cuenta de hospital la ve en su historial como cualquier otra visita cerrada.
+
+> [CAPTURA: «Ordenes de trabajo» con una fila que lleva la etiqueta pequeña «Fracttal» junto al número — Administrador, Web]
+
+> [CAPTURA: Detalle de una OT histórica con la etiqueta «Fracttal», el aviso «OT histórica importada de Fracttal · folio N° … Solo consulta.», la tarjeta con «Ejecutó (Fracttal)» y sin botones de estado — Administrador, Web]
+
 ### 3.11 Revisar, corregir y aprobar
 
 Cuando el técnico envía la OT, queda «En revisión». Quien revisa (Administrador o Supervisor) hace lo siguiente.
@@ -818,7 +877,7 @@ La constancia de las correcciones queda en la OT y en la auditoría, **no** en e
 2. Escriba el «Motivo del rechazo...».
 3. Pulse «Confirmar rechazo».
 
-La OT vuelve a «En proceso» y el técnico debe corregir y enviarla otra vez. El motivo queda en el «Historial de estados», que el técnico no puede ver. Avísele por otro medio qué debe corregir.
+La OT vuelve a «En proceso» y el técnico debe corregir y enviarla otra vez. El técnico recibe un correo («OT devuelta para corrección») con el motivo, y al abrir la OT ve un recuadro rojo con el motivo, quién la devolvió y cuándo; en «Mis ordenes» la tarjeta lleva la etiqueta «Devuelta». Escriba el motivo con claridad: es lo único que él lee. Si usted es la misma persona asignada a la OT, no se envía aviso. El motivo también queda en el «Historial de estados», que el técnico no puede ver.
 
 **Aprobar (firma de validación)**
 
@@ -920,7 +979,7 @@ Genera un PDF con todas las órdenes de un periodo.
 
 ### 3.14 Formato del acta (solo Administrador)
 
-**Para qué sirve:** decidir qué imprime el acta, con interruptores. Es **un solo formato para todo el sistema** y se aplica a las actas **nuevas**; las ya generadas no cambian.
+**Para qué sirve:** decidir qué imprime el acta, con interruptores, y con qué razón social y NIT sale. Es **un solo formato para todo el sistema** y se aplica a las actas **nuevas**; las ya generadas no cambian. El acta sigue el formato de Fracttal: encabezado con la razón social y el NIT, subtareas en tabla y las tres firmas en una fila.
 
 **Qué siempre sale (no se puede apagar)**
 
@@ -931,28 +990,41 @@ Genera un PDF con todas las órdenes de un periodo.
 - El código de verificación en el pie.
 - El aviso de firma electrónica (Ley 527 de 1999).
 
+**Encabezado del acta (razón social y NIT)**
+
+Arriba de los interruptores está la tarjeta «Encabezado del acta». Escriba la «Razón social» y el «NIT» de su empresa (por ejemplo, «Gases Demo S.A.» y «900.000.000-0»): salen en el centro del encabezado, bajo el logo. Si los deja vacíos, el acta no los muestra. Se guardan con «Guardar cambios» y se ven en «Vista previa».
+
 **Qué se puede prender o apagar**
 
-- **Datos de la visita:** cuántos activos se intervinieron, quién hizo el trabajo, fecha programada, fecha y hora del trabajo (inicio y fin), tiempo que tomó, descripción y notas.
-- **Activos:** dónde está el equipo dentro de la ubicación, tipo, fabricante, modelo y serie.
-- **Checklist:** nombre de la lista, observaciones de cada resultado, cuándo y quién hizo la revisión, y el mapa de la ubicación tomada con el celular.
+Los interruptores están agrupados en tarjetas, como en la pantalla:
+
+- **Encabezado:** calificación de la orden.
+- **Datos de la visita:** quién generó la orden, responsable (quién hizo el trabajo), duración estimada de la orden, cuántos activos se intervinieron, descripción del trabajo y notas.
+- **Activos:** dónde está el equipo dentro de la ubicación, tipo, fabricante, modelo, número de serie, clasificaciones, prioridad y código de barras.
+- **Tareas:** nombre de la lista de revisión, tipo y prioridad de la tarea, activador del protocolo (por ejemplo, «Cada 6 meses»), fecha programada, fecha y hora de inicio y de fin del trabajo, duración estimada de la tarea, tiempo de ejecución y tiempo real de paro del activo.
+- **Subtareas:** observaciones de cada resultado, cuándo y quién hizo la revisión, y el mapa de la ubicación tomada con el celular.
 - **Hallazgos.**
-- **Fotos:** de cada activo, generales de la visita y coordenadas.
+- **Fotos:** adjuntos de cada tarea, fotos generales de la visita y coordenadas de las fotos.
 - **Materiales.**
-- **Firmas:** «Realizado por» (técnico), «Validado por» (aprobación del supervisor) y «Aceptado por» (firma de quien recibe en el hospital).
+- **Firmas:** «Aceptado por» (firma de quien recibe en el hospital), «Validado por» (aprobación del supervisor) y «Realizado por» (técnico), en ese orden.
+
+Las respuestas «Sí / No» y «Aprobó / Alerta / Falló» se imprimen con todas las opciones y la elegida marcada; el N/A sale como texto. Las subtareas salen en una tabla. Cuando el activo de la orden es una ubicación, la sección se titula «Ubicaciones» en lugar de «Activos».
 
 **Cómo cambiarlo**
 
 1. Entre a «Formato del acta».
-2. Prenda o apague los interruptores. Abajo se lee «N cambio(s) sin guardar» o «N campo(s) ocultos en el acta».
-3. Pulse «Vista previa» para ver un PDF de ejemplo, sin guardar. Necesita al menos una OT finalizada; si no, dice «Todavía no hay OTs finalizadas para mostrar un acta de ejemplo».
-4. Pulse «Guardar cambios». Para olvidar lo que cambió, «Descartar».
+2. Si quiere, escriba la «Razón social» y el «NIT» en la tarjeta «Encabezado del acta».
+3. Prenda o apague los interruptores. Abajo se lee «N cambio(s) sin guardar» (cuenta también la razón social y el NIT) o «N campo(s) ocultos en el acta».
+4. Pulse «Vista previa» para ver un PDF de ejemplo, sin guardar. Necesita al menos una OT finalizada; si no, dice «Todavía no hay OTs finalizadas para mostrar un acta de ejemplo».
+5. Pulse «Guardar cambios». Para olvidar lo que cambió, «Descartar».
 
 «Validado por» sale de quien aprobó la OT. «Aceptado por» es la firma de quien recibe en el hospital; si no se capturó, el acta dice «No registrada».
 
-> [CAPTURA: Pantalla «Formato del acta» con las secciones de interruptores y la barra inferior «Descartar / Vista previa / Guardar cambios» — Administrador, Web]
+> [CAPTURA: Pantalla «Formato del acta» con la tarjeta «Encabezado del acta», las tarjetas de interruptores y la barra inferior «Descartar / Vista previa / Guardar cambios» — Administrador, Web]
 
-> [CAPTURA: PDF de un acta de ejemplo abierto desde «Vista previa» con las firmas «Realizado por», «Validado por» y «Aceptado por» — Administrador, Web]
+> [CAPTURA: Parte alta de «Formato del acta» con la tarjeta «Encabezado del acta» (campos «Razón social» y «NIT» llenos con datos ficticios) y las tarjetas «Encabezado», «Datos de la visita», «Activos» y «Tareas» — Administrador, Web]
+
+> [CAPTURA: PDF de un acta de ejemplo abierto desde «Vista previa», con razón social y NIT ficticios, subtareas en tabla y las firmas «Aceptado por», «Validado por» y «Realizado por» — Administrador, Web]
 
 ### 3.15 Calendario
 
@@ -1133,7 +1205,7 @@ El técnico trabaja desde el celular con la app de TodoGas. Ve **solo las órden
 
 Si abre una orden sin señal y no la había descargado, la app avisa: «Esta OT no está descargada en el teléfono. Ábrela con conexión para poder trabajarla sin red.»
 
-Recuerde que la app **envía sola** lo que quedó guardado cuando vuelve la señal: no hay un botón de sincronizar. Lo hace al recuperar la conexión, al abrir la app y cada minuto mientras haya señal.
+Recuerde que la app **envía sola** lo que quedó guardado cuando vuelve la señal. Lo hace al recuperar la conexión, al abrir la app y cada minuto mientras haya señal. Si quiere adelantarlo, o traer una orden que le acaban de asignar, pulse «Sincronizar ahora» en la barra de arriba (ver 6.1).
 
 > [CAPTURA: Pantalla «Mi perfil» en la app Android mostrando la firma guardada, antes de salir a campo — Técnico, App Android]
 
@@ -1143,10 +1215,13 @@ Recuerde que la app **envía sola** lo que quedó guardado cuando vuelve la señ
 2. Arriba están las pestañas «Pendientes», «En proceso», «En revisión» y «Todas».
 3. Cada tarjeta muestra el número, el tipo, la prioridad, el título, el equipo (o «N activos»), el hospital y la ubicación, el estado y la fecha límite («Límite: …» o «Vencida —»). Abajo está el botón que le toca («Iniciar OT» o «Enviar a revision») y «Ver detalle».
 4. Si una tarjeta muestra el aviso «Datos pendientes de sincronizar», tiene cosas guardadas en el celular que aún no subieron.
+5. Si una tarjeta lleva la etiqueta roja «Devuelta» (deje el cursor encima, o toque, para leer el motivo), quien revisa le devolvió la orden para corregirla (ver 4.9).
 
 Si no hay órdenes en una pestaña, la pantalla dice «No hay órdenes en esta categoría».
 
 > [CAPTURA: Lista «Mis órdenes de trabajo» en la app, pestaña «Pendientes», con la tarjeta de «OT-2026-00009» de «Clínica Demo Norte» — Técnico, App Android]
+
+> [CAPTURA: «Mis órdenes de trabajo», pestaña «En proceso», con una tarjeta que lleva la etiqueta roja «Devuelta» — Técnico, App Android]
 
 ### 4.3 Iniciar la orden
 
@@ -1161,6 +1236,7 @@ Hasta que inicie la orden, el checklist y la evidencia no se pueden editar: la p
 2. Pulse «Iniciar checklist». Aparece el nombre de la plantilla y su versión.
 3. Responda cada campo. **Cada respuesta se guarda sola al salir del campo** y aparece «guardado».
    - **Sí / No / N/A:** toque el botón. Si el campo no permite N/A, solo hay «Sí» y «No».
+   - **Aprobó / Alerta / Falló:** toque «Aprobó» (verde), «Alerta» (ámbar) o «Falló» (rojo). Si el campo lo permite, también «N/A». Puede cambiar la respuesta mientras la orden esté «En proceso».
    - **Número o lectura de medidor:** escriba el valor con su unidad. Si queda fuera del rango permitido, la pantalla lo señala.
    - **Texto:** escriba la respuesta u observación.
    - **Selección:** elija una o varias opciones.
@@ -1187,6 +1263,8 @@ Hasta que inicie la orden, el checklist y la evidencia no se pueden editar: la p
 5. Cuando pueda revisarlo, **responda el campo**: el pendiente desaparece solo. O pulse «Quitar» para retirar la marca sin responder.
 
 > [CAPTURA: Checklist de una toma de oxígeno en la app, con un campo «Sí / No / N/A» respondido, una lectura en PSI y el aviso «guardado» — Técnico, App Android]
+
+> [CAPTURA: Campo «Aprobó / Alerta / Falló» con los tres botones y «N/A», con «Alerta» elegido (ámbar) — Técnico, App Android]
 
 > [CAPTURA: Bloque repetible «Toma» con los botones «Siguiente: Toma 2», «Agregar toma» y «Quitar toma N (vacía)» — Técnico, App Android]
 
@@ -1275,13 +1353,24 @@ Esto necesita **señal**. Hágalo cuando tenga conexión, mientras la orden est�
    - Al menos una foto que no esté oculta.
    - Al menos una firma.
 2. Pulse «Enviar a revision» (arriba, en el detalle de la orden, o en la tarjeta de «Mis ordenes»).
-3. La orden pasa a «En revisión». Ya no puede cambiar nada. Si el revisor la rechaza, vuelve a «En proceso» y usted la corrige.
+3. La orden pasa a «En revisión». Ya no puede cambiar nada. Si el revisor la rechaza, vuelve a «En proceso» y usted la corrige (ver «Si le devuelven la orden»).
 
 Sin señal, el botón funciona igual: la app guarda el cambio («Estado guardado. Se sincronizara al reconectar.») y lo envía al volver la señal, después de enviar las respuestas, fotos y firmas.
 
 > [CAPTURA: Detalle de una orden «En proceso» con el mensaje «Para enviar a revisión falta: …» y el botón «Enviar a revision» desactivado — Técnico, App Android]
 
 > [CAPTURA: Detalle de la orden con todos los requisitos cumplidos, el botón «Enviar a revision» activo y el diálogo «Todos los checklists están completos» — Técnico, App Android]
+
+**Si le devuelven la orden.** Si quien revisa rechaza la orden, vuelve a «En proceso» y:
+
+1. En «Mis ordenes» la tarjeta lleva la etiqueta «Devuelta» (deje el cursor encima para leer el motivo). También le llega un correo con el asunto «OT devuelta para corrección». Hoy el aviso llega solo por correo: la app no le envía una notificación al celular.
+2. Abra la orden. Arriba verá un recuadro rojo «La OT fue devuelta para corrección» con el motivo y «Devuelta por …» con el nombre de quien la devolvió.
+3. Corrija lo que pide el motivo (respuestas, fotos o firmas).
+4. Pulse «Enviar a revision» otra vez. El recuadro desaparece cuando la orden vuelve a revisión.
+
+Si usted mismo era quien revisaba y ejecutaba la orden, no recibe aviso. El «Historial de estados» sigue sin mostrarse al técnico («No disponible para tu rol»): el motivo está en el recuadro.
+
+> [CAPTURA: Detalle de una OT «En proceso» con el recuadro rojo «La OT fue devuelta para corrección», el motivo escrito y «Devuelta por …» con la fecha — Técnico, App Android]
 
 ### 4.10 Si le dieron permisos adicionales
 
@@ -1339,7 +1428,7 @@ Al abrir una orden finalizada ve:
 - Los hallazgos, con su estado.
 - Las fotos (sin las ocultas) y las firmas.
 
-No ve el historial de estados, los repuestos ni los costos.
+No ve el historial de estados, los repuestos ni los costos. Las visitas finalizadas que vienen del historial de Fracttal importado aparecen como cualquier otra visita cerrada.
 
 > [CAPTURA: Orden finalizada vista desde el hospital con «Equipos intervenidos» y un checklist desplegado con «Ver checklist» — Cuenta de hospital, Web]
 
@@ -1377,7 +1466,19 @@ Arriba de la pantalla aparece una franja:
 
 Cuando guarda algo sin señal, aparece una confirmación verde: «Foto guardada. Se sincronizara al reconectar.», «Firma guardada. Se sincronizara al reconectar.» o «Estado guardado. Se sincronizara al reconectar.»
 
-> [CAPTURA: App en modo avión con la franja «Sin conexion — Modo offline activo» y la confirmación «Foto guardada. Se sincronizara al reconectar.» — Técnico, App Android]
+> [CAPTURA: App en modo avión con la franja «Sin conexion — Modo offline activo», la confirmación «Foto guardada. Se sincronizara al reconectar.» y el botón «Sincronizar ahora» deshabilitado — Técnico, App Android]
+
+**Sincronizar a mano.** En la barra de arriba hay un botón con dos flechas en círculo: «Sincronizar ahora» (en el celular solo se ve el icono). Úselo cuando vuelva la señal y quiera enviar ya lo guardado, o cuando le hayan asignado una orden nueva y no la vea en «Mis ordenes».
+
+1. Con señal, pulse «Sincronizar ahora». El botón dice «Sincronizando…» y gira.
+2. Al terminar, aparece un mensaje corto bajo el botón durante unos segundos: «Todo al día», «Quedan N elementos por enviar» o «No se pudo sincronizar: …».
+3. Si le queda algo por enviar, un globo ámbar en el botón muestra cuántos elementos. Si el sistema rechazó alguno, siga el apartado 6.5.
+
+Sin señal, el botón dice «Sin conexión» y no se puede pulsar. Al dejar el cursor encima (o con un lector de pantalla) se lee «Última sincronización: hace N min». La app sigue enviando sola al recuperar la señal, al abrirla y cada minuto; el botón solo adelanta ese envío y además trae las órdenes nuevas. El mismo botón está en la barra de la web de administración.
+
+> [CAPTURA: Cabecera de la app con el botón «Sincronizar ahora» y el globo ámbar con elementos en cola (con señal) — Técnico, App Android]
+
+> [CAPTURA: El botón «Sincronizar ahora» con el mensaje «Todo al día» debajo, justo después de pulsarlo — Técnico, App Android]
 
 ### 6.2 Qué se puede hacer sin señal
 
@@ -1406,7 +1507,7 @@ La app descarga las órdenes que están «Pendientes» o «En proceso». Para un
 
 La app envía lo guardado **en orden**: primero las respuestas del checklist, las fotos, las firmas y los hallazgos, y al final el cambio de estado de la orden (por ejemplo, «Enviar a revision»). Así el sistema nunca recibe una orden «completa» sin su evidencia.
 
-Si el envío falla por la señal o por un problema temporal, la app **reintenta sola**, esperando cada vez más (hasta 30 minutos). Solo hay que mantener la app instalada y abrirla de vez en cuando con señal.
+Si el envío falla por la señal o por un problema temporal, la app **reintenta sola**, esperando cada vez más (hasta 30 minutos). Solo hay que mantener la app instalada y abrirla de vez en cuando con señal. Si no quiere esperar, pulse «Sincronizar ahora» (ver 6.1).
 
 ### 6.5 Aviso «Hay N elementos que no se pudieron enviar»
 
@@ -1428,8 +1529,10 @@ Si pulsa «Reintentar» sin señal, dice «Sin conexión. Se enviará cuando vue
 
 | Problema | Causa probable | Qué hacer |
 |---|---|---|
-| «Cuenta bloqueada temporalmente. Intenta de nuevo en 30 minutos.» | Cinco intentos fallidos con el mismo correo. | Espere 30 minutos y entre con la contraseña correcta. Si no la recuerda, pida al Administrador que la restablezca. |
-| No recuerdo mi contraseña | No hay recuperación automática. | Pídale al Administrador que la restablezca; llegará una temporal al correo. |
+| «Cuenta bloqueada temporalmente. Intenta de nuevo en 30 minutos.» | Cinco intentos fallidos con el mismo correo. | Espere 30 minutos y entre con la contraseña correcta. Si no la recuerda, use «¿Olvidaste tu contraseña?» en el inicio de sesión: cambiar la contraseña también levanta el bloqueo. |
+| No recuerdo mi contraseña | Olvidó la contraseña. | Pulse «¿Olvidaste tu contraseña?» en el inicio de sesión y siga el enlace que le llega al correo (vale 1 hora). Ver 1.4. |
+| No me llegó el enlace de «¿Olvidaste tu contraseña?» | La pantalla siempre responde «Si el correo está registrado, te enviamos un enlace…»: no avisa si el correo está mal escrito, si la cuenta está desactivada o si el correo cayó en spam. También hay un límite de 5 solicitudes por hora («Hiciste demasiadas solicitudes. Intenta de nuevo en una hora.»). | Revise la carpeta de spam y que el correo esté bien escrito. Si sigue sin llegar, pídale al Administrador que restablezca su contraseña desde «Usuarios». |
+| «El enlace no es válido o ya venció. Solicita uno nuevo.» | El enlace del correo vale 1 hora y sirve una sola vez. | Pulse «Solicitar un enlace nuevo». |
 | No me llegó el correo con la contraseña temporal | El correo falló o está en spam. | Revise la carpeta de spam. Pida al Administrador que restablezca la contraseña de nuevo y confirme que su correo esté bien escrito. |
 | «Tu cuenta está desactivada» | El Administrador la desactivó. | Pídale que la active. |
 | No veo el menú o la pantalla que necesito | Su perfil no tiene ese permiso o su alcance no incluye ese hospital. | Pídale al Administrador que revise su rol, su alcance y sus permisos adicionales. |
@@ -1444,10 +1547,16 @@ Si pulsa «Reintentar» sin señal, dice «Sin conexión. Se enviará cuando vue
 | No puedo cancelar una orden sin señal | Cancelar necesita conexión. | Hágalo cuando tenga señal. |
 | Cancelé una OT por error | La cancelación no se deshace. | Las tareas volvieron a pendientes con su misma fecha: cree una OT nueva desde «Tareas pendientes». |
 | El acta no aparece o dice «El reporte no se pudo generar» | Falló la generación del PDF. | El Administrador pulsa «Generar reporte de nuevo» en la pestaña «Reportes» de la OT. |
+| El técnico no sabe por qué le devolvieron una orden | La orden volvió a «En proceso» con un motivo. | Abra la orden: arriba está el recuadro rojo «La OT fue devuelta para corrección» con el motivo. También le llegó un correo. Ver 4.9. |
+| No me aparece en la app una orden que me asignaron | La app aún no ha traído la orden nueva. | Con señal, pulse «Sincronizar ahora» en la barra de arriba (ver 6.1). |
+| «Sincronizar ahora» dice «Sin conexión» y no se puede pulsar | No hay señal. | Recupere la señal. La app enviará sola lo guardado y luego puede pulsar el botón. |
 | El hospital dice que no recibió el acta | El hospital no tiene correo de contacto, o el correo es incorrecto. | Revise el correo en «Hospitales» → «Editar». Luego reenvíe el acta (ver 3.13). |
 | No puedo crear una OT con varias tareas | Hay tareas de más de un hospital. | Una OT es de un solo hospital. Marque solo las de uno. |
 | No puedo reprogramar ni anular una tarea | La tarea ya está dentro de una OT. | Saque la tarea de la OT primero (en la OT pendiente, pulse la «x» de su fila). |
 | La importación de Fracttal no deja importar | El archivo tiene errores. | Use el filtro «Con errores», corrija en Fracttal o en el archivo y vuelva a subirlo. |
+| En «JSON del extractor» el botón «Importar» está deshabilitado | El resumen trae errores en rojo, o el archivo no trae nada por crear o actualizar. El archivo también debe ser `.json` y pesar menos de 100 MB. | Lea los errores del resumen, pídale a TodoGas un archivo corregido y vuelva a subirlo con «Empezar de nuevo». |
+| No puedo editar, reasignar ni cambiar el estado de una OT con la etiqueta «Fracttal» | Es una OT histórica importada: solo consulta («Esta OT es histórica (importada de Fracttal) y no se puede modificar»). | No hay nada que hacer: no se modifica. Si falta una visita, créela como una OT nueva. |
+| Aparece «ERROR 404 — Esta dirección no existe.» | La dirección escrita o el enlace no es correcto. | Revise la dirección, o pulse «Volver al inicio» (o «Página anterior»). |
 | Un protocolo no genera tareas | No tiene tareas, o está pausado. | Agréguele tareas con «Agregar tarea», o pulse «Reanudar». |
 | El «Dashboard» no refleja un cambio reciente | Las cifras se guardan unos 5 minutos. | Espere un momento y pulse «Actualizar». |
 | No puedo anonimizar un usuario | La cuenta debe estar desactivada y con más de 2 años sin actividad. | Desactívela y espere a que se cumpla el plazo. |
@@ -1468,7 +1577,7 @@ Si pulsa «Reintentar» sin señal, dice «Sin conexión. Se enviará cuando vue
 | Crear y editar hospitales | Sí | No | No | No |
 | Armar ubicaciones | Sí | Sí | No | No |
 | Crear, editar y dar de baja activos | Sí | Sí | No | No |
-| Importar desde Fracttal | Sí | No | No | No |
+| Importar desde Fracttal (Excel o JSON del extractor) | Sí | No | No | No |
 | Crear y editar contratos y garantías | Sí | No | No | No |
 | Crear, editar y asignar protocolos | Sí | No | No | No |
 | Crear y publicar checklists | Sí | Sí | No | No |
@@ -1487,4 +1596,10 @@ Si pulsa «Reintentar» sin señal, dice «Sin conexión. Se enviará cuando vue
 | Inventario: crear artículos | Sí | No | No | No |
 | Inventario: registrar movimientos | Sí | Sí | Solo salidas, en su OT | No |
 | Firma guardada | Sí | Sí | Sí | No |
+
+---
+
+## 9. Glosario
+
+Para el significado de cada término vea el Glosario (`glosario.md`).
 

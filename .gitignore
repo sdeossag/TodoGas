@@ -61,3 +61,9 @@ docs/presentacion/qc/
 
 # Exportaciones de Fracttal con datos reales del cliente
 fracttal-export/
+
+# Manuales: herramientas de capturas
+docs/manuales/herramientas/node_modules/
+
+# Manuales: documentos generados (PDF y Word); se regeneran con generar_documentos.py
+docs/manuales/salida/

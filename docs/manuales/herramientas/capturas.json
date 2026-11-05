@@ -1,0 +1,1761 @@
+{
+    "_ayuda": "Cada captura: n, archivo (relativo a la raiz), rol (admin|supervisor|tecnico|biomedica|ninguno) o cuenta (nuevo|aviso|revisor: sesion efimera), ruta, viewport, fullPage, clip {x,y,width,height}, elemento (selector: recorta a ese elemento), como (hereda de otra entrada), omitir+motivo, pasos. Pasos: click, boton, enlace, pestana, fila, botonEnFila [fila, boton], marcar, marcarFila, rellenar [selector, valor], escribir [etiqueta, valor], seleccionar [selector, valor], esperar (ms), esperarTexto, ir (ruta, 'ENLACE' = enlace de restablecer), hover, tecla, scroll, scrollElemento, js, subir [selector, archivo], firma (selector del lienzo), despues (ms).",
+    "capturas": [
+        {
+            "n": 1,
+            "archivo": "docs/manuales/capturas/01-pantalla-de-inicio-de-sesion-de-todogas-cmms.png",
+            "rol": "ninguno",
+            "ruta": "/login",
+            "pasos": [
+                {
+                    "esperarTexto": "Iniciar sesi"
+                }
+            ]
+        },
+        {
+            "n": 2,
+            "archivo": "docs/manuales/capturas/02-app-android-abierta-en-la-pantalla-de-inicio.png",
+            "android": true
+        },
+        {
+            "n": 3,
+            "archivo": "docs/manuales/capturas/03-pantalla-cambia-tu-contrasena-con-el-medidor.png",
+            "cuenta": "nuevo",
+            "pasos": [
+                {
+                    "esperarTexto": "Cambia tu contraseña"
+                },
+                {
+                    "rellenar": [
+                        "input[type=password] >> nth=1",
+                        "Ejemplo-2026!"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input[type=password] >> nth=2",
+                        "Ejemplo-2026!"
+                    ]
+                }
+            ]
+        },
+        {
+            "n": 4,
+            "archivo": "docs/manuales/capturas/04-ventana-del-aviso-de-privacidad-al-primer-ing.png",
+            "cuenta": "aviso",
+            "sinAceptarAviso": true,
+            "pasos": [
+                {
+                    "esperarTexto": "Acepto"
+                }
+            ]
+        },
+        {
+            "n": 5,
+            "archivo": "docs/manuales/capturas/05-pantalla-mi-perfil-completa-con-las-secciones.png",
+            "rol": "tecnico",
+            "ruta": "/mi-perfil",
+            "viewport": {
+                "width": 1366,
+                "height": 1450
+            },
+            "pasos": [
+                {
+                    "esperarTexto": "Reemplazar"
+                }
+            ]
+        },
+        {
+            "n": 6,
+            "archivo": "docs/manuales/capturas/06-seccion-mi-firma-con-una-firma-ya-guardada-y.png",
+            "rol": "tecnico",
+            "ruta": "/mi-perfil",
+            "elemento": "section:has(h2:has-text(\"Mi firma\"))",
+            "pasos": [
+                {
+                    "esperarTexto": "Reemplazar"
+                }
+            ]
+        },
+        {
+            "n": 7,
+            "archivo": "docs/manuales/capturas/07-seccion-mis-datos-personales-con-los-datos-de.png",
+            "rol": "tecnico",
+            "ruta": "/mi-perfil",
+            "elemento": "section:has(h2:has-text(\"Mis datos personales\"))",
+            "pasos": [
+                {
+                    "esperarTexto": "Descargar mis datos"
+                }
+            ]
+        },
+        {
+            "n": 8,
+            "archivo": "docs/manuales/capturas/08-pantalla-dashboard-del-administrador-con-el-m.png",
+            "rol": "admin",
+            "ruta": "/dashboard",
+            "viewport": {
+                "width": 1366,
+                "height": 960
+            },
+            "pasos": [
+                {
+                    "esperar": 1500
+                }
+            ]
+        },
+        {
+            "n": 9,
+            "archivo": "docs/manuales/capturas/09-dashboard-completo-con-la-seccion-requiere-at.png",
+            "rol": "admin",
+            "ruta": "/dashboard",
+            "viewport": {
+                "width": 1366,
+                "height": 2150
+            },
+            "nota": "Se ocultan por JS las filas de los usuarios extra del script de datos en «OTs por técnico».",
+            "pasos": [
+                {
+                    "esperar": 1500
+                },
+                {
+                    "js": "[...document.querySelectorAll('main tbody tr')].forEach(r=>{if(/Aviso Demo|Nuevo Demo|Restablecer Demo|Revisor Demo|Inactivo Demo/.test(r.innerText)) r.remove()})"
+                }
+            ]
+        },
+        {
+            "n": 10,
+            "archivo": "docs/manuales/capturas/10-tabla-hospitales-con-clinica-demo-norte-y-hos.png",
+            "rol": "admin",
+            "ruta": "/hospitales",
+            "pasos": [
+                {
+                    "esperarTexto": "Clínica Demo Norte"
+                }
+            ]
+        },
+        {
+            "n": 11,
+            "archivo": "docs/manuales/capturas/11-ventana-nuevo-hospital-con-los-campos-llenos.png",
+            "rol": "admin",
+            "ruta": "/hospitales",
+            "pasos": [
+                {
+                    "boton": "+ Nuevo hospital"
+                },
+                {
+                    "rellenar": [
+                        "input[placeholder=\"Hospital San Juan\"]",
+                        "Hospital Demo Oriente"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input[placeholder=\"HSJ-01\"]",
+                        "DEMO-ORIENTE"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input[placeholder=\"900.123.456-7\"]",
+                        "900.000.003-3"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input[placeholder=\"Bogotá\"]",
+                        "Cali"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input[placeholder=\"Cundinamarca\"]",
+                        "Valle del Cauca"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input[placeholder=\"Calle 10 # 5-20\"]",
+                        "Av. Demo # 1-23"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input[type=email]",
+                        "contacto@demo.todogas.local"
+                    ]
+                }
+            ]
+        },
+        {
+            "n": 12,
+            "archivo": "docs/manuales/capturas/12-arbol-de-ubicaciones-de-clinica-demo-norte-co.png",
+            "rol": "admin",
+            "ruta": "/hospitales",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "Clínica Demo Norte",
+                        "Ubicaciones"
+                    ]
+                },
+                {
+                    "esperarTexto": "Piso 1 - Urgencias"
+                },
+                {
+                    "click": "Expandir todo"
+                },
+                {
+                    "hover": "Piso 1 - Urgencias"
+                }
+            ]
+        },
+        {
+            "n": 13,
+            "archivo": "docs/manuales/capturas/13-lista-activos-con-clinica-demo-norte-seleccio.png",
+            "rol": "admin",
+            "ruta": "/activos",
+            "pasos": [
+                {
+                    "esperarTexto": "N-URG-O2-01"
+                }
+            ]
+        },
+        {
+            "n": 14,
+            "archivo": "docs/manuales/capturas/14-formulario-registrar-activo-paso-identificaci.png",
+            "rol": "admin",
+            "ruta": "/activos/nuevo",
+            "viewport": {
+                "width": 1366,
+                "height": 900
+            },
+            "pasos": [
+                {
+                    "esperarTexto": "Identificación del activo"
+                },
+                {
+                    "seleccionar": [
+                        "select >> nth=0",
+                        {
+                            "label": "Clínica Demo Norte"
+                        }
+                    ]
+                },
+                {
+                    "esperar": 600
+                },
+                {
+                    "rellenar": [
+                        "input:not([type]) >> nth=0",
+                        "Toma de oxígeno Hospitalización 302"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input:not([type]) >> nth=1",
+                        "DISS-O2"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input:not([type]) >> nth=2",
+                        "DEMO-0099"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input:not([type]) >> nth=3",
+                        "N-HOS-O2-02"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input:not([type]) >> nth=4",
+                        "Toma de oxígeno"
+                    ]
+                },
+                {
+                    "seleccionar": [
+                        "select:has-text(\"Sin protocolo\")",
+                        {
+                            "label": "Mant. salidas de gases"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "n": 15,
+            "archivo": "docs/manuales/capturas/15-ficha-de-un-activo-de-demo-pestana-tareas-con.png",
+            "rol": "admin",
+            "ruta": "/activos",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "N-URG-O2-01",
+                        "Ver ficha"
+                    ]
+                },
+                {
+                    "boton": "Tareas"
+                },
+                {
+                    "esperarTexto": "Historial"
+                }
+            ]
+        },
+        {
+            "n": 16,
+            "archivo": "docs/manuales/capturas/16-ficha-de-un-activo-pestana-informacion-genera.png",
+            "rol": "admin",
+            "ruta": "/activos",
+            "viewport": {
+                "width": 1366,
+                "height": 1300
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "N-URG-O2-01",
+                        "Ver ficha"
+                    ]
+                },
+                {
+                    "esperarTexto": "Código QR"
+                }
+            ]
+        },
+        {
+            "n": 17,
+            "archivo": "docs/manuales/capturas/17-lista-activos-con-varias-filas-marcadas-y-la.png",
+            "rol": "admin",
+            "ruta": "/activos",
+            "pasos": [
+                {
+                    "esperarTexto": "N-URG-O2-01"
+                },
+                {
+                    "marcarFila": "N-HOS-ALM-01"
+                },
+                {
+                    "marcarFila": "N-URG-CV-01"
+                },
+                {
+                    "marcarFila": "N-SOT-CMP-01"
+                }
+            ]
+        },
+        {
+            "n": 18,
+            "archivo": "docs/manuales/capturas/18-ventana-de-reactivacion-masiva-con-el-resumen.png",
+            "como": 17,
+            "mas": [
+                {
+                    "boton": "Reactivar"
+                },
+                {
+                    "esperar": 600
+                }
+            ]
+        },
+        {
+            "n": 19,
+            "archivo": "docs/manuales/capturas/19-pantalla-importar-desde-fracttal-con-el-resum.png",
+            "rol": "admin",
+            "ruta": "/activos/importar-fracttal",
+            "pasos": [
+                {
+                    "subir": [
+                        "#fracttal-ubicaciones",
+                        "muestras/ubicaciones-muestra.xlsx"
+                    ]
+                },
+                {
+                    "subir": [
+                        "#fracttal-equipos",
+                        "muestras/equipos-muestra.xlsx"
+                    ]
+                },
+                {
+                    "boton": "Revisar archivos"
+                },
+                {
+                    "esperarTexto": "Con avisos"
+                },
+                {
+                    "click": "Con avisos"
+                }
+            ]
+        },
+        {
+            "n": 20,
+            "archivo": "docs/manuales/capturas/20-lista-contratos-y-garantias-con-la-vista-por.png",
+            "rol": "admin",
+            "ruta": "/contratos",
+            "pasos": [
+                {
+                    "esperarTexto": "Contrato de mantenimiento"
+                },
+                {
+                    "boton": "Por vencer"
+                }
+            ]
+        },
+        {
+            "n": 21,
+            "archivo": "docs/manuales/capturas/21-ventana-nueva-tarea-del-protocolo-con-cuando.png",
+            "rol": "admin",
+            "ruta": "/planes-pm",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "Mant. salidas de gases",
+                        "Ver"
+                    ]
+                },
+                {
+                    "boton": "Agregar tarea"
+                },
+                {
+                    "rellenar": [
+                        "[role=dialog] input:not([type]) >> nth=0",
+                        "Mantenimiento de salidas de gases (segunda revisión)"
+                    ]
+                },
+                {
+                    "seleccionar": [
+                        "[role=dialog] select:has-text(\"Sin checklist\")",
+                        {
+                            "label": "Mantenimiento de tomas (v1)"
+                        }
+                    ]
+                },
+                {
+                    "esperar": 800
+                }
+            ]
+        },
+        {
+            "n": 22,
+            "archivo": "docs/manuales/capturas/22-protocolo-mant-salidas-de-gases-pestana-activ.png",
+            "rol": "admin",
+            "ruta": "/planes-pm",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "Mant. salidas de gases",
+                        "Ver"
+                    ]
+                },
+                {
+                    "click": "Activos ("
+                },
+                {
+                    "esperarTexto": "Asignar ubicaciones"
+                }
+            ]
+        },
+        {
+            "n": 23,
+            "archivo": "docs/manuales/capturas/23-ventana-asignar-activos-con-el-hospital-elegi.png",
+            "rol": "admin",
+            "ruta": "/planes-pm",
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "Mant. salidas de gases",
+                        "Ver"
+                    ]
+                },
+                {
+                    "click": "Activos ("
+                },
+                {
+                    "boton": "Asignar activos"
+                },
+                {
+                    "seleccionar": [
+                        "[role=dialog] select >> nth=0",
+                        {
+                            "label": "Clínica Demo Norte"
+                        }
+                    ]
+                },
+                {
+                    "esperar": 800
+                },
+                {
+                    "js": "document.querySelectorAll('[role=dialog] input[type=checkbox]').forEach((c,i)=>{ if(i>0&&i<4&&!c.checked) c.click() })"
+                }
+            ]
+        },
+        {
+            "n": 24,
+            "archivo": "docs/manuales/capturas/24-editor-de-una-plantilla-de-checklist-con-la-p.png",
+            "rol": "admin",
+            "ruta": "/checklists",
+            "viewport": {
+                "width": 1366,
+                "height": 1100
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "Mantenimiento de tomas",
+                        "Editar"
+                    ]
+                },
+                {
+                    "esperarTexto": "Toma"
+                },
+                {
+                    "click": "css=[title=\"Configurar\"] >> nth=1"
+                },
+                {
+                    "esperar": 600
+                }
+            ]
+        },
+        {
+            "n": 25,
+            "archivo": "docs/manuales/capturas/25-pestana-historial-de-versiones-de-la-plantill.png",
+            "rol": "admin",
+            "ruta": "/checklists",
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "Reporte de intervención correctiva",
+                        "Editar"
+                    ]
+                },
+                {
+                    "click": "Historial de versiones"
+                }
+            ]
+        },
+        {
+            "n": 26,
+            "archivo": "docs/manuales/capturas/26-tareas-pendientes-con-dos-tareas-del-piso-1-u.png",
+            "rol": "admin",
+            "ruta": "/tareas-pendientes",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "seleccionar": [
+                        "select >> nth=0",
+                        {
+                            "label": "Clínica Demo Norte"
+                        }
+                    ]
+                },
+                {
+                    "esperar": 800
+                },
+                {
+                    "marcarFila": "N-URG-AIR-01"
+                },
+                {
+                    "marcarFila": "UBI-"
+                }
+            ]
+        },
+        {
+            "n": 27,
+            "archivo": "docs/manuales/capturas/27-ventana-crear-ot-con-el-tecnico-asignado-fech.png",
+            "como": 26,
+            "mas": [
+                {
+                    "boton": "Crear OT"
+                },
+                {
+                    "esperar": 600
+                },
+                {
+                    "seleccionar": [
+                        "[role=dialog] select >> nth=0",
+                        {
+                            "label": "Técnico Demo"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "n": 28,
+            "archivo": "docs/manuales/capturas/28-ventana-reprogramar-con-la-lista-causa-desple.png",
+            "como": 26,
+            "mas": [
+                {
+                    "boton": "Reprogramar"
+                },
+                {
+                    "esperar": 600
+                },
+                {
+                    "js": "const s=document.querySelector('[role=dialog] select'); if(s) s.size=Math.min(s.options.length,7)"
+                }
+            ]
+        },
+        {
+            "n": 29,
+            "archivo": "docs/manuales/capturas/29-formulario-nueva-orden-de-trabajo-con-un-hosp.png",
+            "rol": "admin",
+            "ruta": "/ordenes/nueva",
+            "viewport": {
+                "width": 1366,
+                "height": 1750
+            },
+            "pasos": [
+                {
+                    "seleccionar": [
+                        "select >> nth=0",
+                        {
+                            "label": "Clínica Demo Norte"
+                        }
+                    ]
+                },
+                {
+                    "esperar": 1000
+                },
+                {
+                    "js": "[...document.querySelectorAll('main input[type=checkbox]')].filter(c=>/N-URG-O2-0[12]/.test((c.closest('label')||c.parentElement).innerText)).forEach(c=>c.click())"
+                },
+                {
+                    "rellenar": [
+                        "input[placeholder^=\"Ej: Mantenimiento correctivo\"]",
+                        "Reparación de toma de oxígeno en Urgencias"
+                    ]
+                },
+                {
+                    "seleccionar": [
+                        "select:has-text(\"Sin asignar\")",
+                        {
+                            "label": "Técnico Demo"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "n": 30,
+            "archivo": "docs/manuales/capturas/30-lista-ordenes-de-trabajo-con-el-filtro-de-est.png",
+            "rol": "admin",
+            "ruta": "/ordenes",
+            "pasos": [
+                {
+                    "esperar": 800
+                },
+                {
+                    "seleccionar": [
+                        "select:has-text(\"Todos los estados\")",
+                        {
+                            "label": "En revisión"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "n": 31,
+            "archivo": "docs/manuales/capturas/31-detalle-de-una-ot-de-demo-con-las-tarjetas-ac.png",
+            "rol": "admin",
+            "ruta": "/ordenes",
+            "viewport": {
+                "width": 1366,
+                "height": 1400
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "OT-2026-00010",
+                        "Ver"
+                    ]
+                },
+                {
+                    "esperarTexto": "Asignación"
+                }
+            ]
+        },
+        {
+            "n": 32,
+            "archivo": "docs/manuales/capturas/32-ventana-reasignar-ot-con-la-lista-de-personas.png",
+            "como": 31,
+            "viewport": {
+                "width": 1366,
+                "height": 800
+            },
+            "mas": [
+                {
+                    "boton": "Reasignar"
+                },
+                {
+                    "esperar": 600
+                },
+                {
+                    "js": "(async()=>{let s;for(let i=0;i<30;i++){s=[...document.querySelectorAll('select')].reverse().find(x=>/Seleccionar/.test((x.options[0]||{}).text||''));if(s&&s.options.length>1)break;await new Promise(r=>setTimeout(r,200))}if(s){[...s.options].forEach(o=>{if(/Aviso Demo|Nuevo Demo|Restablecer Demo|Revisor Demo|Inactivo Demo/.test(o.text))o.remove()});s.size=Math.min(s.options.length,7)}})()"
+                }
+            ]
+        },
+        {
+            "n": 33,
+            "archivo": "docs/manuales/capturas/33-detalle-de-una-ot-en-revision-con-los-botones.png",
+            "rol": "supervisor",
+            "ruta": "/ordenes",
+            "viewport": {
+                "width": 1366,
+                "height": 1700
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "OT-2026-00010",
+                        "Ver"
+                    ]
+                },
+                {
+                    "esperarTexto": "Completar"
+                },
+                {
+                    "click": "css=button:text-is('Checklist')"
+                },
+                {
+                    "esperar": 800
+                }
+            ]
+        },
+        {
+            "n": 34,
+            "archivo": "docs/manuales/capturas/34-ventana-aprobar-orden-con-la-firma-guardada-d.png",
+            "como": 33,
+            "viewport": {
+                "width": 1366,
+                "height": 800
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "OT-2026-00010",
+                        "Ver"
+                    ]
+                },
+                {
+                    "esperarTexto": "Completar"
+                },
+                {
+                    "boton": "Completar"
+                },
+                {
+                    "esperar": 600
+                }
+            ]
+        },
+        {
+            "n": 35,
+            "archivo": "docs/manuales/capturas/35-ventana-aprobar-orden-cuando-no-hay-firma-gua.png",
+            "como": 34,
+            "cuenta": "revisor",
+            "rol": null,
+            "ruta": "/ordenes"
+        },
+        {
+            "n": 36,
+            "archivo": "docs/manuales/capturas/36-pestana-evidencia-en-revision-con-una-foto-ma.png",
+            "como": 33,
+            "viewport": {
+                "width": 1366,
+                "height": 2150
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "OT-2026-00010",
+                        "Ver"
+                    ]
+                },
+                {
+                    "esperarTexto": "Completar"
+                },
+                {
+                    "click": "css=button:text-is('Evidencia')"
+                },
+                {
+                    "esperar": 1500
+                }
+            ]
+        },
+        {
+            "n": 37,
+            "archivo": "docs/manuales/capturas/37-bandeja-hallazgos-en-la-pestana-por-decidir-c.png",
+            "rol": "supervisor",
+            "ruta": "/hallazgos",
+            "pasos": [
+                {
+                    "esperarTexto": "Convertir en correctivo"
+                }
+            ]
+        },
+        {
+            "n": 38,
+            "archivo": "docs/manuales/capturas/38-ventana-convertir-en-correctivo-con-la-fecha.png",
+            "como": 37,
+            "mas": [
+                {
+                    "boton": "Convertir en correctivo"
+                },
+                {
+                    "esperar": 600
+                }
+            ]
+        },
+        {
+            "n": 39,
+            "archivo": "docs/manuales/capturas/39-pantalla-reportes-con-el-cuadro-reporte-conso.png",
+            "rol": "admin",
+            "ruta": "/reportes",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "esperar": 800
+                },
+                {
+                    "seleccionar": [
+                        "select >> nth=2",
+                        {
+                            "label": "Clínica Demo Norte"
+                        }
+                    ]
+                },
+                {
+                    "boton": "Filtrar"
+                },
+                {
+                    "esperar": 800
+                }
+            ]
+        },
+        {
+            "n": 40,
+            "archivo": "docs/manuales/capturas/40-barra-inferior-n-actas-seleccionadas-con-reen.png",
+            "como": 39,
+            "mas": [
+                {
+                    "js": "document.querySelectorAll('main table input[type=checkbox]').forEach((c,i)=>{ if(i>0&&i<4&&!c.checked) c.click() })"
+                },
+                {
+                    "boton": "Reenviar por correo"
+                }
+            ]
+        },
+        {
+            "n": 41,
+            "archivo": "docs/manuales/capturas/41-pestana-reportes-de-una-ot-finalizada-con-des.png",
+            "rol": "admin",
+            "ruta": "/ordenes",
+            "viewport": {
+                "width": 1366,
+                "height": 1650
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "OT-2026-00008",
+                        "Ver"
+                    ]
+                },
+                {
+                    "esperarTexto": "Hallazgos"
+                },
+                {
+                    "click": "css=button:text-is('Reportes')"
+                },
+                {
+                    "esperar": 2500
+                }
+            ]
+        },
+        {
+            "n": 42,
+            "archivo": "docs/manuales/capturas/42-pantalla-formato-del-acta-con-las-secciones-d.png",
+            "rol": "admin",
+            "ruta": "/formato-acta",
+            "viewport": {
+                "width": 1366,
+                "height": 1400
+            },
+            "pasos": [
+                {
+                    "esperarTexto": "Siempre incluidos"
+                },
+                {
+                    "js": "document.querySelector('main input[type=checkbox]').click()"
+                },
+                {
+                    "esperar": 500
+                }
+            ]
+        },
+        {
+            "n": 43,
+            "archivo": "docs/manuales/capturas/43-pdf-de-un-acta-de-ejemplo-abierto-desde-vista.png",
+            "rol": "admin",
+            "ruta": "/formato-acta",
+            "viewport": {
+                "width": 1366,
+                "height": 1300
+            },
+            "pasos": [
+                {
+                    "esperarTexto": "Siempre incluidos"
+                },
+                {
+                    "pdfVista": {
+                        "paginas": [
+                            1,
+                            2
+                        ],
+                        "escala": 1.3
+                    }
+                },
+                {
+                    "esperar": 600
+                }
+            ]
+        },
+        {
+            "n": 44,
+            "archivo": "docs/manuales/capturas/44-calendario-del-mes-actual-con-el-panel-de-un.png",
+            "rol": "admin",
+            "ruta": "/calendario-pm",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "esperar": 800
+                },
+                {
+                    "js": "[...document.querySelectorAll('main button')].find(b=>/^5(\\s|$)/.test(b.innerText.trim()))?.click()"
+                },
+                {
+                    "esperar": 800
+                }
+            ]
+        },
+        {
+            "n": 45,
+            "archivo": "docs/manuales/capturas/45-pantalla-inventario-con-un-articulo-en-stock.png",
+            "rol": "admin",
+            "ruta": "/inventario",
+            "pasos": [
+                {
+                    "esperarTexto": "Manómetro"
+                }
+            ]
+        },
+        {
+            "n": 46,
+            "archivo": "docs/manuales/capturas/46-historial-de-movimientos-de-un-articulo-con-u.png",
+            "rol": "admin",
+            "ruta": "/inventario",
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "Manómetro",
+                        "Ver movimientos"
+                    ]
+                },
+                {
+                    "esperar": 800
+                }
+            ]
+        },
+        {
+            "n": 47,
+            "archivo": "docs/manuales/capturas/47-pantalla-tipos-de-tarea-con-la-lista-de-tipos.png",
+            "rol": "admin",
+            "ruta": "/tipos-de-tarea",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "esperar": 800
+                }
+            ]
+        },
+        {
+            "n": 48,
+            "archivo": "docs/manuales/capturas/48-pantalla-gestion-de-usuarios-con-la-tabla-de.png",
+            "rol": "admin",
+            "ruta": "/usuarios",
+            "nota": "Se ocultan por JS las filas de los usuarios extra del script de datos para mostrar los cuatro de la demo.",
+            "pasos": [
+                {
+                    "esperarTexto": "admin@demo"
+                },
+                {
+                    "js": "[...document.querySelectorAll('main table tbody tr')].forEach(r=>{if(/aviso@|nuevo@|restablecer@|revisor@|inactivo@/.test(r.innerText)) r.remove()});[...document.querySelectorAll('main p')].forEach(p=>{if(/de \\d+ usuarios/.test(p.innerText)) p.textContent='4 de 4 usuarios'})"
+                }
+            ]
+        },
+        {
+            "n": 49,
+            "archivo": "docs/manuales/capturas/49-ventana-nuevo-usuario-con-el-rol-tecnico-el-a.png",
+            "rol": "admin",
+            "ruta": "/usuarios",
+            "viewport": {
+                "width": 1366,
+                "height": 1350
+            },
+            "pasos": [
+                {
+                    "boton": "Nuevo usuario"
+                },
+                {
+                    "esperar": 600
+                },
+                {
+                    "rellenar": [
+                        "xpath=//label[starts-with(normalize-space(.),'Nombre')]/following-sibling::input[1]",
+                        "Pedro"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "xpath=//label[starts-with(normalize-space(.),'Apellido')]/following-sibling::input[1]",
+                        "Ejemplo"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "input[type=email]",
+                        "pedro.ejemplo@demo.todogas.local"
+                    ]
+                },
+                {
+                    "seleccionar": [
+                        "select:has(option:text-is(\"Todos los hospitales\"))",
+                        {
+                            "label": "Clínica Demo Norte"
+                        }
+                    ]
+                },
+                {
+                    "esperar": 500
+                },
+                {
+                    "js": "[...document.querySelectorAll('section[aria-labelledby=permisos-adicionales] input[type=checkbox]')].slice(0,3).forEach(c=>c.click())"
+                }
+            ]
+        },
+        {
+            "n": 50,
+            "archivo": "docs/manuales/capturas/50-pantalla-log-de-auditoria-con-una-fila-expand.png",
+            "rol": "admin",
+            "ruta": "/auditoria",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "esperar": 1000
+                },
+                {
+                    "click": "css=main tbody tr >> nth=1"
+                },
+                {
+                    "esperar": 600
+                }
+            ]
+        },
+        {
+            "n": 51,
+            "archivo": "docs/manuales/capturas/51-ventana-anonimizar-usuario-con-la-lista-de-lo.png",
+            "rol": "admin",
+            "ruta": "/usuarios",
+            "pasos": [
+                {
+                    "marcar": "Mostrar inactivos"
+                },
+                {
+                    "botonEnFila": [
+                        "Inactivo Demo",
+                        "Anonimizar"
+                    ]
+                },
+                {
+                    "esperar": 600
+                }
+            ]
+        },
+        {
+            "n": 52,
+            "archivo": "docs/manuales/capturas/52-pantalla-mi-perfil-en-la-app-android-mostrand.png",
+            "android": true
+        },
+        {
+            "n": 53,
+            "archivo": "docs/manuales/capturas/53-lista-mis-ordenes-de-trabajo-en-la-app-pestan.png",
+            "android": true
+        },
+        {
+            "n": 54,
+            "archivo": "docs/manuales/capturas/54-checklist-de-una-toma-de-oxigeno-en-la-app-co.png",
+            "android": true
+        },
+        {
+            "n": 55,
+            "archivo": "docs/manuales/capturas/55-bloque-repetible-toma-con-los-botones-siguien.png",
+            "android": true
+        },
+        {
+            "n": 56,
+            "archivo": "docs/manuales/capturas/56-un-punto-marcado-como-pendiente-con-la-franja.png",
+            "android": true
+        },
+        {
+            "n": 57,
+            "archivo": "docs/manuales/capturas/57-pestana-evidencia-en-la-app-seccion-agregar-f.png",
+            "android": true
+        },
+        {
+            "n": 58,
+            "archivo": "docs/manuales/capturas/58-galeria-de-fotos-de-la-ot-con-una-foto-antes.png",
+            "android": true
+        },
+        {
+            "n": 59,
+            "archivo": "docs/manuales/capturas/59-seccion-agregar-firma-con-los-dos-paneles-fir.png",
+            "android": true
+        },
+        {
+            "n": 60,
+            "archivo": "docs/manuales/capturas/60-ventana-reportar-hallazgo-con-la-descripcion.png",
+            "android": true
+        },
+        {
+            "n": 61,
+            "archivo": "docs/manuales/capturas/61-detalle-de-una-orden-en-proceso-con-el-mensaj.png",
+            "android": true
+        },
+        {
+            "n": 62,
+            "archivo": "docs/manuales/capturas/62-detalle-de-la-orden-con-todos-los-requisitos.png",
+            "android": true
+        },
+        {
+            "n": 63,
+            "archivo": "docs/manuales/capturas/63-dashboard-del-hospital-clinica-demo-norte-con.png",
+            "rol": "biomedica",
+            "ruta": "/mis-dashboard",
+            "pasos": [
+                {
+                    "esperar": 1000
+                }
+            ]
+        },
+        {
+            "n": 64,
+            "archivo": "docs/manuales/capturas/64-parte-baja-del-dashboard-del-hospital-con-hal.png",
+            "rol": "biomedica",
+            "ruta": "/mis-dashboard",
+            "viewport": {
+                "width": 1366,
+                "height": 1500
+            },
+            "pasos": [
+                {
+                    "esperar": 1000
+                }
+            ]
+        },
+        {
+            "n": 65,
+            "archivo": "docs/manuales/capturas/65-ficha-de-un-equipo-del-hospital-con-proximos.png",
+            "rol": "biomedica",
+            "ruta": "/mis-activos",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "click": "css=tr:has-text(\"N-URG-O2-01\") >> text=Ver historial"
+                },
+                {
+                    "esperarTexto": "Próximos mantenimientos"
+                }
+            ]
+        },
+        {
+            "n": 66,
+            "archivo": "docs/manuales/capturas/66-orden-finalizada-vista-desde-el-hospital-con.png",
+            "rol": "biomedica",
+            "ruta": "/mis-dashboard",
+            "viewport": {
+                "width": 1366,
+                "height": 1100
+            },
+            "pasos": [
+                {
+                    "click": "OT-2026-00008"
+                },
+                {
+                    "esperarTexto": "Equipos intervenidos"
+                },
+                {
+                    "click": "Ver checklist"
+                },
+                {
+                    "esperar": 800
+                }
+            ]
+        },
+        {
+            "n": 67,
+            "archivo": "docs/manuales/capturas/67-pantalla-mis-reportes-con-las-actas-de-clinic.png",
+            "rol": "biomedica",
+            "ruta": "/mis-reportes",
+            "pasos": [
+                {
+                    "esperar": 800
+                }
+            ]
+        },
+        {
+            "n": 68,
+            "archivo": "docs/manuales/capturas/68-app-en-modo-avion-con-la-franja-sin-conexion.png",
+            "android": true
+        },
+        {
+            "n": 69,
+            "archivo": "docs/manuales/capturas/69-aviso-hay-1-elemento-que-no-se-pudo-enviar-co.png",
+            "android": true
+        },
+        {
+            "n": 70,
+            "archivo": "docs/manuales/capturas/70-inicio-de-sesion-con-los-campos-correo-electr.png",
+            "como": 1,
+            "elemento": "xpath=//form/.."
+        },
+        {
+            "n": 71,
+            "archivo": "docs/manuales/capturas/71-seccion-mi-firma-de-mi-perfil-con-el-recuadro.png",
+            "cuenta": "revisor",
+            "rol": null,
+            "ruta": "/mi-perfil",
+            "elemento": "section:has(h2:has-text(\"Mi firma\"))",
+            "pasos": [
+                {
+                    "esperarTexto": "Guardar mi firma"
+                }
+            ]
+        },
+        {
+            "n": 72,
+            "archivo": "docs/manuales/capturas/72-arbol-de-ubicaciones-de-clinica-demo-norte-ve.png",
+            "como": 12,
+            "clip": {
+                "x": 240,
+                "y": 90,
+                "width": 1126,
+                "height": 330
+            }
+        },
+        {
+            "n": 73,
+            "archivo": "docs/manuales/capturas/73-formulario-registrar-activo-paso-identificaci.png",
+            "como": 14,
+            "clip": {
+                "x": 240,
+                "y": 80,
+                "width": 1126,
+                "height": 560
+            }
+        },
+        {
+            "n": 74,
+            "archivo": "docs/manuales/capturas/74-protocolo-mant-salidas-de-gases-con-la-pestan.png",
+            "rol": "admin",
+            "ruta": "/planes-pm",
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "Mant. salidas de gases",
+                        "Ver"
+                    ]
+                },
+                {
+                    "esperarTexto": "Tareas (1)"
+                }
+            ],
+            "clip": {
+                "x": 240,
+                "y": 90,
+                "width": 1126,
+                "height": 520
+            }
+        },
+        {
+            "n": 75,
+            "archivo": "docs/manuales/capturas/75-ventana-crear-ot-con-tecnico-y-fecha-version.png",
+            "como": 27,
+            "elemento": "[role=dialog]"
+        },
+        {
+            "n": 76,
+            "archivo": "docs/manuales/capturas/76-ot-en-revision-con-completar-y-rechazar-versi.png",
+            "como": 33,
+            "clip": {
+                "x": 240,
+                "y": 90,
+                "width": 1126,
+                "height": 500
+            }
+        },
+        {
+            "n": 77,
+            "archivo": "docs/manuales/capturas/77-bandeja-hallazgos-con-por-decidir-version-peq.png",
+            "como": 37
+        },
+        {
+            "n": 78,
+            "archivo": "docs/manuales/capturas/78-ventana-nuevo-usuario-version-pequena.png",
+            "como": 49,
+            "elemento": "div.fixed:has(h2:text-is(\"Nuevo usuario\")) > div"
+        },
+        {
+            "n": 79,
+            "archivo": "docs/manuales/capturas/79-pantalla-reportes-con-la-tabla-de-actas-versi.png",
+            "como": 39,
+            "clip": {
+                "x": 240,
+                "y": 90,
+                "width": 1126,
+                "height": 560
+            }
+        },
+        {
+            "n": 80,
+            "archivo": "docs/manuales/capturas/80-dashboard-con-requiere-atencion-version-peque.png",
+            "rol": "supervisor",
+            "ruta": "/dashboard",
+            "pasos": [
+                {
+                    "esperar": 1500
+                }
+            ],
+            "clip": {
+                "x": 240,
+                "y": 90,
+                "width": 1126,
+                "height": 460
+            }
+        },
+        {
+            "n": 81,
+            "archivo": "docs/manuales/capturas/81-tareas-pendientes-con-tareas-marcadas-y-el-bo.png",
+            "como": 26,
+            "rol": "supervisor",
+            "mas": []
+        },
+        {
+            "n": 82,
+            "archivo": "docs/manuales/capturas/82-ventana-reprogramar-con-la-causa-version-pequ.png",
+            "como": 28,
+            "rol": "supervisor",
+            "elemento": "[role=dialog]"
+        },
+        {
+            "n": 83,
+            "archivo": "docs/manuales/capturas/83-ventana-aprobar-orden-con-la-firma-guardada-v.png",
+            "como": 34,
+            "elemento": "[role=dialog]"
+        },
+        {
+            "n": 84,
+            "archivo": "docs/manuales/capturas/84-hallazgo-en-por-decidir-con-sus-dos-botones-v.png",
+            "como": 37,
+            "clip": {
+                "x": 240,
+                "y": 90,
+                "width": 1126,
+                "height": 330
+            }
+        },
+        {
+            "n": 85,
+            "archivo": "docs/manuales/capturas/85-barra-n-activos-seleccionados-con-dar-de-baja.png",
+            "como": 17,
+            "rol": "supervisor",
+            "clip": {
+                "x": 240,
+                "y": 400,
+                "width": 1126,
+                "height": 368
+            }
+        },
+        {
+            "n": 86,
+            "archivo": "docs/manuales/capturas/86-mis-ordenes-de-trabajo-con-la-tarjeta-de-ot-2.png",
+            "android": true
+        },
+        {
+            "n": 87,
+            "archivo": "docs/manuales/capturas/87-checklist-en-la-app-con-campos-respondidos-ve.png",
+            "android": true
+        },
+        {
+            "n": 88,
+            "archivo": "docs/manuales/capturas/88-punto-con-la-franja-pendiente-no-se-pudo-revi.png",
+            "android": true
+        },
+        {
+            "n": 89,
+            "archivo": "docs/manuales/capturas/89-agregar-foto-con-antes-despues-y-subir-foto-v.png",
+            "android": true
+        },
+        {
+            "n": 90,
+            "archivo": "docs/manuales/capturas/90-los-dos-paneles-de-firma-version-pequena.png",
+            "android": true
+        },
+        {
+            "n": 91,
+            "archivo": "docs/manuales/capturas/91-ventana-reportar-hallazgo-version-pequena.png",
+            "android": true
+        },
+        {
+            "n": 92,
+            "archivo": "docs/manuales/capturas/92-boton-enviar-a-revision-con-el-aviso-de-lo-qu.png",
+            "android": true
+        },
+        {
+            "n": 93,
+            "archivo": "docs/manuales/capturas/93-franja-sin-conexion-modo-offline-activo-versi.png",
+            "android": true
+        },
+        {
+            "n": 94,
+            "archivo": "docs/manuales/capturas/94-dashboard-del-hospital-version-pequena.png",
+            "como": 63,
+            "clip": {
+                "x": 240,
+                "y": 90,
+                "width": 1126,
+                "height": 560
+            }
+        },
+        {
+            "n": 95,
+            "archivo": "docs/manuales/capturas/95-ficha-de-equipo-con-el-historial-y-los-filtro.png",
+            "como": 65,
+            "clip": {
+                "x": 240,
+                "y": 90,
+                "width": 1126,
+                "height": 760
+            }
+        },
+        {
+            "n": 96,
+            "archivo": "docs/manuales/capturas/96-mis-reportes-con-descargar-pdf-version-pequen.png",
+            "como": 67,
+            "clip": {
+                "x": 240,
+                "y": 90,
+                "width": 1126,
+                "height": 460
+            }
+        },
+        {
+            "n": 97,
+            "archivo": "docs/manuales/capturas/97-olvidaste-tu-contrasena.png",
+            "rol": "ninguno",
+            "ruta": "/olvide-contrasena",
+            "pasos": [
+                {
+                    "rellenar": [
+                        "#email",
+                        "biomedica@demo.todogas.local"
+                    ]
+                },
+                {
+                    "boton": "Enviar enlace"
+                },
+                {
+                    "esperarTexto": "Si el correo está registrado"
+                }
+            ]
+        },
+        {
+            "n": 98,
+            "archivo": "docs/manuales/capturas/98-elige-tu-nueva-contrasena.png",
+            "rol": "ninguno",
+            "ruta": "/login",
+            "pasos": [
+                {
+                    "ir": "ENLACE"
+                },
+                {
+                    "rellenar": [
+                        "#new-password",
+                        "Ejemplo-2026!"
+                    ]
+                },
+                {
+                    "rellenar": [
+                        "#confirm-password",
+                        "Ejemplo-2026!"
+                    ]
+                }
+            ]
+        },
+        {
+            "n": 99,
+            "archivo": "docs/manuales/capturas/99-boton-sincronizar-ahora-en-la-app.png",
+            "android": true
+        },
+        {
+            "n": 100,
+            "archivo": "docs/manuales/capturas/100-sincronizar-ahora-todo-al-dia.png",
+            "android": true
+        },
+        {
+            "n": 101,
+            "archivo": "docs/manuales/capturas/101-ot-devuelta-motivo-en-la-app.png",
+            "android": true
+        },
+        {
+            "n": 102,
+            "archivo": "docs/manuales/capturas/102-mis-ordenes-etiqueta-devuelta.png",
+            "android": true
+        },
+        {
+            "n": 103,
+            "archivo": "docs/manuales/capturas/103-checklist-aprobo-alerta-fallo-app.png",
+            "android": true
+        },
+        {
+            "n": 104,
+            "archivo": "docs/manuales/capturas/104-editor-checklist-aprobo-alerta-fallo.png",
+            "rol": "admin",
+            "ruta": "/checklists",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "Verificación del manifold",
+                        "Editar"
+                    ]
+                },
+                {
+                    "esperarTexto": "Estado del regulador"
+                },
+                {
+                    "click": "css=[title=\"Configurar\"] >> nth=0"
+                },
+                {
+                    "esperar": 600
+                }
+            ]
+        },
+        {
+            "n": 105,
+            "archivo": "docs/manuales/capturas/105-formato-del-acta-encabezado.png",
+            "rol": "admin",
+            "ruta": "/formato-acta",
+            "viewport": {
+                "width": 1366,
+                "height": 1300
+            },
+            "pasos": [
+                {
+                    "esperarTexto": "Encabezado del acta"
+                },
+                {
+                    "esperar": 600
+                }
+            ]
+        },
+        {
+            "n": 106,
+            "archivo": "docs/manuales/capturas/106-importar-pestana-json-del-extractor.png",
+            "rol": "admin",
+            "ruta": "/activos/importar-fracttal",
+            "pasos": [
+                {
+                    "pestana": "JSON del extractor"
+                },
+                {
+                    "esperar": 600
+                },
+                {
+                    "subir": [
+                        "input[type=file]",
+                        "muestras/fracttal-muestra.json"
+                    ]
+                }
+            ]
+        },
+        {
+            "n": 107,
+            "archivo": "docs/manuales/capturas/107-importar-json-resumen-de-la-revision.png",
+            "como": 106,
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "mas": [
+                {
+                    "boton": "Revisar archivo"
+                },
+                {
+                    "esperarTexto": "Avisos"
+                }
+            ]
+        },
+        {
+            "n": 108,
+            "archivo": "docs/manuales/capturas/108-importar-json-importacion-terminada.png",
+            "rol": "admin",
+            "ruta": "/activos/importar-fracttal",
+            "viewport": {
+                "width": 1366,
+                "height": 900
+            },
+            "soloEnCopia": true,
+            "nota": "ESCRIBE en la base: se toma solo sobre una COPIA (CREATE DATABASE todogas_manual_demo_import TEMPLATE todogas_manual_demo; backend 8004 y web 5200): node tomar-capturas.mjs --base http://localhost:5200 --db todogas_manual_demo_import --solo 108",
+            "pasos": [
+                {
+                    "pestana": "JSON del extractor"
+                },
+                {
+                    "esperar": 600
+                },
+                {
+                    "subir": [
+                        "input[type=file]",
+                        "muestras/fracttal-muestra.json"
+                    ]
+                },
+                {
+                    "boton": "Revisar archivo"
+                },
+                {
+                    "esperarTexto": "Avisos"
+                },
+                {
+                    "boton": "Importar"
+                },
+                {
+                    "esperar": 600
+                },
+                {
+                    "boton": "Sí, importar"
+                },
+                {
+                    "esperarTexto": "Importación terminada"
+                },
+                {
+                    "esperar": 800
+                }
+            ]
+        },
+        {
+            "n": 109,
+            "archivo": "docs/manuales/capturas/109-lista-ot-etiqueta-fracttal.png",
+            "rol": "admin",
+            "ruta": "/ordenes",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "esperar": 600
+                },
+                {
+                    "scrollElemento": "tr:has-text(\"OT-2026-00013\")"
+                }
+            ]
+        },
+        {
+            "n": 110,
+            "archivo": "docs/manuales/capturas/110-detalle-ot-historica-fracttal.png",
+            "rol": "admin",
+            "ruta": "/ordenes",
+            "viewport": {
+                "width": 1366,
+                "height": 1000
+            },
+            "pasos": [
+                {
+                    "botonEnFila": [
+                        "OT-2026-00013",
+                        "Ver"
+                    ]
+                },
+                {
+                    "esperarTexto": "Solo consulta"
+                }
+            ]
+        },
+        {
+            "n": 111,
+            "archivo": "docs/manuales/capturas/111-boton-sincronizar-ahora-web.png",
+            "como": 8,
+            "clip": {
+                "x": 0,
+                "y": 0,
+                "width": 1366,
+                "height": 80
+            }
+        },
+        {
+            "n": 112,
+            "archivo": "docs/manuales/capturas/112-rapido-olvidaste-tu-contrasena-pequena.png",
+            "como": 1,
+            "elemento": "xpath=//form/.."
+        },
+        {
+            "n": 113,
+            "archivo": "docs/manuales/capturas/113-rapido-sincronizar-ahora-pequena.png",
+            "android": true
+        },
+        {
+            "n": 114,
+            "archivo": "docs/manuales/capturas/114-rapido-ot-devuelta-pequena.png",
+            "android": true
+        }
+    ]
+}

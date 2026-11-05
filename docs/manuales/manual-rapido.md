@@ -2,7 +2,7 @@
 
 ## Manual de uso rápido
 
-**Versión 1.0 · 28 de octubre de 2026**
+**Versión 1.1 · 5 de noviembre de 2026**
 
 Una consulta corta por perfil. Para el detalle de cada pantalla, vea el **Manual de uso completo y detallado**.
 
@@ -30,7 +30,17 @@ Los botones y pestañas van entre comillas «así», tal como aparecen en pantal
 
 > [CAPTURA: Inicio de sesión con los campos «Correo electrónico» y «Contraseña» y el botón «Iniciar sesión» (versión pequeña) — Sin sesión, Web]
 
-Con 5 intentos fallidos la cuenta se bloquea **30 minutos**. Si olvidó la contraseña, pídale al Administrador que la restablezca.
+Con 5 intentos fallidos la cuenta se bloquea **30 minutos**.
+
+**Si olvidó la contraseña:**
+
+1. En el inicio de sesión pulse «¿Olvidaste tu contraseña?».
+2. Escriba su «Correo electrónico» y pulse «Enviar enlace».
+3. Abra el enlace que le llega por correo (**vale 1 hora** y sirve una vez), escriba la nueva contraseña y pulse «Guardar nueva contraseña».
+
+Si no llega el correo, revise el spam o pídale al Administrador que la restablezca.
+
+> [CAPTURA: Inicio de sesión con el enlace «¿Olvidaste tu contraseña?» resaltado (versión pequeña) — Sin sesión, Web] (captura 112)
 
 ### Guardar su firma (Administrador, Supervisor y Técnico)
 
@@ -62,7 +72,9 @@ Hágalo **con señal** y antes de salir a campo. Sin firma guardada, el Supervis
 4. Elija el «Protocolo» y pulse «Siguiente».
 5. Llene la ficha técnica y pulse «Crear activo».
 
-Para traer muchos equipos de Fracttal: «Activos» → «Importar desde Fracttal» → suba el Excel → «Revisar archivos» → «Importar…» → «Sí, importar».
+Para traer muchos equipos de Fracttal: «Activos» → «Importar desde Fracttal» → pestaña «Excel de Fracttal» → suba el Excel → «Revisar archivos» → «Importar…» → «Sí, importar».
+
+Para traer una sede completa con su historial: misma pantalla, pestaña «JSON del extractor» → elija el archivo → «Revisar archivo» → lea el resumen y los «Avisos» → «Importar» → «Sí, importar». Las OT del historial quedan como **históricas de Fracttal: solo de consulta** (llevan la etiqueta «Fracttal», sin acta ni correos y sin botones para cambiarlas).
 
 > [CAPTURA: Formulario «Registrar activo» paso «Identificación» (versión pequeña) — Administrador, Web]
 
@@ -112,14 +124,14 @@ El acta se genera y llega al hospital por correo.
 3. Si quiere limitar su alcance o darle «Permisos adicionales», márquelos.
 4. Pulse «Crear usuario». La contraseña temporal le llega por correo.
 
-Para recuperar una contraseña: en la fila, el botón de la llave («Restablecer contrasena») → «Restablecer».
+Para recuperar una contraseña (si el usuario no pudo usar «¿Olvidaste tu contraseña?»): en la fila, el botón de la llave («Restablecer contrasena») → «Restablecer».
 
 > [CAPTURA: Ventana «Nuevo usuario» (versión pequeña) — Administrador, Web]
 
 ### 2.8 Actas, formato y auditoría
 
 1. «Reportes»: filtre y pulse «Descargar». Marque varias y pulse «Reenviar por correo» (hasta 50).
-2. «Formato del acta»: prenda o apague campos y pulse «Guardar cambios».
+2. «Formato del acta»: en «Encabezado del acta» escriba la «Razón social» y el «NIT» (salen bajo el logo; vacíos, no se muestran), prenda o apague campos y pulse «Guardar cambios».
 3. «Auditoria»: filtre y pulse «Exportar CSV».
 
 > [CAPTURA: Pantalla «Reportes» con la tabla de actas (versión pequeña) — Administrador, Web]
@@ -157,9 +169,9 @@ El Supervisor planifica, revisa y aprueba. No ve «Usuarios», «Formato del act
 ### 3.4 Revisar y aprobar
 
 1. En «Ordenes de trabajo», filtre por «En revisión» y abra la OT.
-2. Revise el checklist y las fotos. Con «Corregir respuestas» cambia lo que haga falta; con «Ocultar del acta» oculta una foto mala.
+2. Revise el checklist y las fotos. Con «Corregir respuestas» cambia lo que haga falta; con «Ocultar del acta» oculta una foto mala. Las OT históricas de Fracttal no se pueden corregir.
 3. Pulse «Completar» → «Aprobar y firmar» (necesita su firma guardada).
-4. Si hay que repetir, pulse «Rechazar», escriba el motivo y avise al técnico: él no ve el motivo.
+4. Si hay que repetir, pulse «Rechazar», escriba el motivo con claridad. El técnico lo ve en la app (recuadro rojo «La OT fue devuelta para corrección») y le llega por correo.
 
 > [CAPTURA: Ventana «Aprobar orden» con la firma guardada (versión pequeña) — Supervisor, Web]
 
@@ -201,7 +213,7 @@ El Supervisor planifica, revisa y aprueba. No ve «Usuarios», «Formato del act
 
 1. Pulse «Iniciar OT».
 2. En la pestaña «Checklist» pulse «Iniciar checklist».
-3. Responda cada campo («Sí», «No» o «N/A»). Se guarda solo al salir del campo.
+3. Responda cada campo: «Sí», «No» o «N/A»; o, en los de verificación, «Aprobó» (verde), «Alerta» (ámbar) o «Falló» (rojo). Se guarda solo al salir del campo.
 4. Si hay tomas, pulse «Siguiente: Toma 2». Si hay más tomas, «Agregar toma».
 5. Pulse «Finalizar checklist».
 
@@ -248,6 +260,9 @@ Hace falta al menos una foto. Sin GPS, sube igual.
 
 1. Pulse «Enviar a revision».
 2. Si está desactivado, lea «Para enviar a revisión falta: …» y complete lo que diga (checklists, una foto, una firma).
+3. Si le devuelven la orden, en «Mis ordenes» la tarjeta dice «Devuelta» y le llega un correo. Abra la orden, lea el recuadro rojo con el motivo, corrija y pulse «Enviar a revision» otra vez.
+
+> [CAPTURA: Recuadro «La OT fue devuelta para corrección» con el motivo (versión pequeña) — Técnico, App Android] (captura 114)
 
 > [CAPTURA: Botón «Enviar a revision» con el aviso de lo que falta (versión pequeña) — Técnico, App Android]
 
@@ -255,8 +270,11 @@ Hace falta al menos una foto. Sin GPS, sube igual.
 
 - Con la franja «Sin conexion — Modo offline activo» **puede seguir**: checklist, fotos, firmas, hallazgos y «Enviar a revision».
 - Todo se envía **solo** cuando vuelve la señal.
+- Con señal puede pulsar «Sincronizar ahora» (arriba, junto al logo) para enviar ya lo guardado y traer órdenes nuevas. Sin señal dice «Sin conexión» y no se pulsa.
 - Si aparece «Hay N elementos que no se pudieron enviar», pulse «Reintentar».
 - Sin señal **no** puede: registrar repuestos, cancelar, ni registrar su firma guardada.
+
+> [CAPTURA: Botón «Sincronizar ahora» en la cabecera de la app (versión pequeña) — Técnico, App Android] (captura 113)
 
 > [CAPTURA: Franja «Sin conexion — Modo offline activo» (versión pequeña) — Técnico, App Android]
 
@@ -307,10 +325,11 @@ Hace falta al menos una foto. Sin GPS, sube igual.
 
 | Problema | Qué hacer |
 |---|---|
-| «Cuenta bloqueada temporalmente» | Espere 30 minutos. |
-| Olvidé la contraseña | Pida al Administrador que la restablezca. |
+| «Cuenta bloqueada temporalmente» | Espere 30 minutos o cambie la contraseña con «¿Olvidaste tu contraseña?». |
+| Olvidé la contraseña | Pulse «¿Olvidaste tu contraseña?» (el enlace del correo dura 1 hora). |
 | «Para aprobar necesitas registrar tu firma» | «Ir a Mi perfil» y guarde su firma (con señal). |
 | «Enviar a revision» desactivado | Lea «Para enviar a revisión falta: …». |
 | «Esta OT no está descargada en el teléfono» | Abra «Mis ordenes» con señal. |
 | «Hay N elementos que no se pudieron enviar» | Pulse «Reintentar». |
+| No veo una orden nueva | Con señal, pulse «Sincronizar ahora». |
 | El hospital no recibe el acta | Revise el correo de contacto en «Hospitales» y reenvíe el acta. |
