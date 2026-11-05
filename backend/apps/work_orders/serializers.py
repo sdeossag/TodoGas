@@ -157,6 +157,9 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
 
     def get_has_report(self, obj):
         if obj.status == WorkOrder.Status.COMPLETED:
+            if obj.origin and not obj.reports.exists():
+                # Historica de Fracttal: nunca tendra acta, no esta "generandose".
+                return None
             return obj.reports.exists()
         return None
 
@@ -255,6 +258,9 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
             return "not_applicable"
         if obj.reports.exists():
             return "ok"
+        if obj.origin:
+            # Importada de Fracttal: no pasa por el generador, no hay que esperarla.
+            return "historical"
         if has_report_failure(obj.id):
             return "failed"
         return "missing"

@@ -158,3 +158,17 @@ def test_report_status_recovers_to_ok_after_a_successful_retry(completed_wo, adm
 def test_open_work_order_reports_not_applicable(asset, admin_user):
     wo = make_work_order(asset, admin_user, title='OT abierta')
     assert report_status_of(auth_client(admin_user), wo) == 'not_applicable'
+
+
+def test_historical_fracttal_wo_is_not_waiting_for_an_acta(completed_wo, admin_user):
+    """Una OT importada de Fracttal no tiene acta: no debe quedar 'generandose'."""
+    completed_wo.origin = WorkOrder.Origin.FRACTTAL
+    completed_wo.save(update_fields=['origin'])
+
+    resp = auth_client(admin_user).get(f'/api/work-orders/{completed_wo.id}/')
+    assert resp.json()['report_status'] == 'historical'
+
+    lista = auth_client(admin_user).get('/api/work-orders/').json()
+    filas = lista['results'] if isinstance(lista, dict) else lista
+    fila = next(f for f in filas if f['id'] == str(completed_wo.id))
+    assert fila['has_report'] is None

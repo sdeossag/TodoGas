@@ -2481,7 +2481,7 @@ function ReportsTab({ workOrderId, woStatus, reportStatus, role }) {
   // valor se refresca en cada sondeo, asi que el umbral no se alcanzaba nunca y
   // la pestaña se quedaba girando para siempre.
   useEffect(() => {
-    if (woStatus !== 'COMPLETED' || hasReport) {
+    if (woStatus !== 'COMPLETED' || hasReport || reportStatus === 'historical') {
       setGaveUp(false)
       return undefined
     }
@@ -2491,12 +2491,22 @@ function ReportsTab({ workOrderId, woStatus, reportStatus, role }) {
     }
     const timer = setTimeout(() => setGaveUp(true), REPORT_POLL_TIMEOUT_MS)
     return () => clearTimeout(timer)
-  }, [woStatus, hasReport, knownFailure])
+  }, [woStatus, hasReport, knownFailure, reportStatus])
 
   if (woStatus !== 'COMPLETED') {
     return (
       <p className="text-gray-500 text-sm text-center py-8">
         Los reportes se generan automaticamente al completar la OT.
+      </p>
+    )
+  }
+
+  // OT historica de Fracttal: no tiene acta nuestra y nunca la tendra.
+  if (reportStatus === 'historical' && !hasReport) {
+    return (
+      <p className="text-gray-500 text-sm text-center py-8 max-w-md mx-auto">
+        OT histórica importada de Fracttal: no tiene acta en TodoGas. El acta
+        original quedó en Fracttal.
       </p>
     )
   }
